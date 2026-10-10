@@ -1021,6 +1021,8 @@ void Frontend::paintAttractPrompts(std::span<std::uint32_t> target,int width,int
 }
 const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
     constexpr int width=640,height=480;
+    const bool localized=unityUiLocalizationEnabled();
+    if(localized!=previousLocalized){previousKey.clear();previousMotionKey.clear();previousLocalized=localized;}
     if(make<0 || make>=7 || car<0 || car>=35 || course<0 || (course>=9 && (!isImportedCourse(course) || !importedArtwork(course).size()))) throw std::out_of_range("Invalid native menu selection");
     if(stage==FrontendStage::Car)synchronizeCarousel();
     if(stage==FrontendStage::Course)synchronizeCourseCarousel();
@@ -1049,10 +1051,10 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
         const auto frame=[&](int x,int y,int w,int h,std::uint32_t argb){
             fill(x,y,w,1,argb);fill(x,y+h-1,w,1,argb);fill(x,y,1,h,argb);fill(x+w-1,y,1,h,argb);
         };
-        const auto text=[&](std::string_view value,float x,float y,float size,std::uint32_t color,float maxWidth=1000.f){
+        const auto text=[&](std::string_view value,float x,float y,float size,std::uint32_t color,float maxWidth=1000.f,bool localize=true){
             const float measured=menuFont.width(value,size);
             if(measured>maxWidth)size*=maxWidth/measured;
-            menuFont.paint(pixels,width,height,value,x,y,size,color);
+            menuFont.paint(pixels,width,height,value,x,y,size,color,0,0,localize);
         };
         const auto number=[](unsigned value){return (value<10?std::string("0"):std::string())+std::to_string(value);};
         const auto& chosen=saveFiles[std::size_t(std::clamp(saveSelected,0,int(saveFiles.size())-1))];
@@ -1075,15 +1077,15 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
             text(number(i+1),listX+13,float(y+13),20,selected?white:muted);
             if(file.used&&paintSaveName&&std::any_of(file.name.begin(),file.name.end(),[](unsigned char c){return c>=128;}))
                 paintSaveName(pixels,width,height,file.name,listX+50,float(y+9),20,listW-64);
-            else text(file.used?file.name:"NEW DRIVER",listX+50,float(y+5),20,file.used?white:muted,listW-64);
-            text(file.used?file.car:"EMPTY SLOT",listX+51,float(y+30),11,muted,listW-65);
+            else text(file.used?file.name:"NEW DRIVER",listX+50,float(y+5),20,file.used?white:muted,listW-64,!file.used);
+            text(file.used?file.car:"EMPTY SLOT",listX+51,float(y+30),11,muted,listW-65,!file.used);
         }
 
         fill(310,110,288,316,panel);fill(310,110,3,43,red);
         text(chosen.used?"LAST USED CAR":"FILE "+number(unsigned(saveSelected+1)),326,119,10,muted);
         if(chosen.used){
-            text(chosen.car,326,135,21,white,256);
-            text(chosen.grade,326,163,11,muted,256);
+            text(chosen.car,326,135,21,white,256,false);
+            text(chosen.grade,326,163,11,muted,256,false);
             const auto& box=saveCarViewport;
             fill(box[0]-1,box[1]-1,box[2]+2,box[3]+2,ink);
             frame(box[0]-1,box[1]-1,box[2]+2,box[3]+2,edge);

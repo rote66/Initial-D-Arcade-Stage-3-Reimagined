@@ -26,8 +26,8 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
     private readonly List<float> verifiedSteeringSmoothing=new List<float>();
     private readonly List<CameraObservation> cameraObservations=new List<CameraObservation>();
     private string lastCameraCaptureHash;
-    private bool NaturalCameraCheck=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-natural-camera-check")>=0;
-    private bool SceneOnlyCapture=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pause-scene-only-capture")>=0;
+    private bool NaturalCameraCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-natural-camera-check")>=0;
+    private bool SceneOnlyCapture=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pause-scene-only-capture")>=0;
     [Serializable] private class CameraObservation {
         public string name,imageSha256;public uint view,playerRanges;public ulong simulationTicks;
         public Vector3 eye,target,up;public float verticalFov;
@@ -37,8 +37,8 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
         public uint nativeFlags;public double elapsed;public bool menuOpen,applicationFocused;
     }
     [Serializable] private class Report {
-        public bool screenshotsSkipped=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pause-no-capture")>=0;
-        public bool optionsScreenshotsSkipped=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pause-no-capture")>=0||Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pause-scene-only-capture")>=0;
+        public bool screenshotsSkipped=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pause-no-capture")>=0;
+        public bool optionsScreenshotsSkipped=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pause-no-capture")>=0||Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pause-scene-only-capture")>=0;
         public string schema="idas3-pause-options-smoke-v1",applicationVersion=Application.version,error,scope;
         public bool passed,online,shutdownComplete;public int checks;public double seconds;
         public Observation[] observations;public string[] captures;public Idas3GameOptions.Values options;
@@ -55,10 +55,10 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
         public uint size,version;public float masterGain,musicGain,engineGain,effectsGain;
         public uint cameraView,paused,managedPauseOverlay,reserved;
     }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetOptions(ref NativeOptions value);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetPreRaceStatus(ref Idas3PreRaceSmoke.PreRaceStatus value);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetOptions(ref NativeOptions value);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetPreRaceStatus(ref Idas3PreRaceSmoke.PreRaceStatus value);
     public static bool Configure(ref string saves){
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-pause-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-pause-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Pause diagnostic needs a new output directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a new pause diagnostic directory.");
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
@@ -178,7 +178,7 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
         Check((File.Exists(options.FilePath)?File.ReadAllText(options.FilePath):null)==savedBefore,"Cancelling Natural camera wrote the options file");
         menu.SelectTab(2);menu.NavigateHorizontal(1);Check(options.Draft.defaultCamera==1,"Chase moved from its existing option index");menu.NavigateHorizontal(1);
         Check(options.Draft.defaultCamera==2&&CameraOptions().cameraView==0,"Natural draft applied before the menu APPLY action");
-        for(int row=0;row<11;++row)menu.Navigate(1);menu.Activate();yield return Frames(4);
+        for(int row=menu.DiagnosticSelection;row<menu.DiagnosticRows+2;++row)menu.Navigate(1);menu.Activate();yield return Frames(4);
         Check(options.LastError==null&&!options.HasUnsavedChanges&&options.Current.defaultCamera==2,"Gameplay APPLY did not save Natural camera");CheckCamera(2);
         Check(host.Status.simulationTicks==frozen&&host.Status.speedMetresPerSecond==pausedSpeed&&host.Status.rpm==pausedRpm,"Applying Natural advanced or modified paused driving state");
         var persisted=JsonUtility.FromJson<Idas3GameOptions.Values>(File.ReadAllText(options.FilePath));
@@ -228,9 +228,18 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
         yield return SteeringSmoothingChecks(session);
         yield return WheelOptionsChecks();
         options.BeginEdit();var draft=options.Draft;draft.masterVolume=.55f;draft.musicVolume=.35f;draft.engineVolume=.75f;draft.effectsVolume=.45f;draft.tireVolume=.2f;
-        draft.vSync=false;draft.frameRateLimit=90;draft.antiAliasing=2;draft.defaultCamera=1;draft.showFps=true;draft.muteWhenUnfocused=false;
+        int requestedCap=Application.platform==RuntimePlatform.IPhonePlayer?60:90;
+        draft.vSync=false;draft.frameRateLimit=requestedCap;draft.antiAliasing=2;draft.defaultCamera=1;draft.showFps=true;draft.muteWhenUnfocused=false;
         Check(options.ApplyDraft(),"Options Apply failed: "+options.LastError);yield return Frames(3);
-        Check(QualitySettings.antiAliasing==2&&QualitySettings.vSyncCount==0&&Application.targetFrameRate==-1&&Idas3FramePacing.ActiveLimit==90,"Actual Unity quality settings did not change");
+        bool pacingApplied=Application.platform==RuntimePlatform.WindowsPlayer
+            ?Application.targetFrameRate==-1&&Idas3FramePacing.ActiveLimit==requestedCap
+            :Application.targetFrameRate==requestedCap&&Idas3FramePacing.ActiveLimit==0;
+        // iOS ignores desktop VSync settings and uses targetFrameRate.
+        bool syncApplied=Application.platform==RuntimePlatform.IPhonePlayer||QualitySettings.vSyncCount==0;
+        Check(QualitySettings.antiAliasing==2&&syncApplied&&pacingApplied,
+            "Actual Unity quality settings did not change: AA="+QualitySettings.antiAliasing+
+            ", VSync="+QualitySettings.vSyncCount+", target="+Application.targetFrameRate+
+            ", Windows limiter="+Idas3FramePacing.ActiveLimit);
         var native=new NativeOptions{size=(uint)Marshal.SizeOf<NativeOptions>()};Check(native.size==40&&Idas3SceneGetOptions(ref native)==1,"Options native ABI");
         Check(native.masterGain==draft.masterVolume&&native.musicGain==draft.musicVolume&&native.engineGain==draft.engineVolume&&native.effectsGain==draft.effectsVolume,"Native category gains differ from applied values");
         Check(Idas3Native.Idas3SceneGetTireVolume()==draft.tireVolume,"Native tire gain differs from saved value");
@@ -303,8 +312,8 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
             Check(Mathf.Abs(options.Draft.SteeringDeadzone-expectedDeadzone)<.000001f,"Gameplay deadzone row did not adjust by one percent");
             Check(Idas3Native.Idas3SceneGetSteeringDeadzone()==nativeBefore,"Draft steering deadzone applied before APPLY");
             yield return Frames(2);yield return Capture("gameplay-response-"+expected);
-            // Ten Gameplay rows: advance from deadzone (5) to APPLY (12).
-            for(int row=5;row<12;++row)menu.Navigate(1);menu.Activate();yield return Frames(3);
+            // Gameplay rows change when mobile gravity controls are visible.
+            for(int row=menu.DiagnosticSelection;row<menu.DiagnosticRows+2;++row)menu.Navigate(1);menu.Activate();yield return Frames(3);
             Check(options.LastError==null&&options.Current.controllerResponse==expected&&!options.HasUnsavedChanges,"Menu APPLY failed for controller response "+expected);
             Check(Idas3Native.Idas3SceneGetControllerResponse()==expected,"Native response did not change through menu APPLY: "+expected);
             Check(Mathf.Abs(Idas3Native.Idas3SceneGetSteeringDeadzone()-expectedDeadzone)<.000001f,"Native deadzone did not change through menu APPLY");
@@ -383,7 +392,7 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
             if(expected==1){menu.NavigateHorizontal(1);Check(options.Draft.steeringSmoothing==1,"Smoothing slider escaped its upper bound");}
             Check(options.HasUnsavedChanges&&options.Current.steeringSmoothing==previous&&Idas3Native.Idas3SceneGetSteeringSmoothing()==previous,"Smoothing draft changed native/current values before APPLY");
             if(expected==.37f||expected==0){yield return Frames(2);yield return Capture(expected==0?"gameplay-smoothing-off":"gameplay-smoothing");}
-            for(int row=6;row<12;++row)menu.Navigate(1);menu.Activate();yield return Frames(3);
+            for(int row=menu.DiagnosticSelection;row<menu.DiagnosticRows+2;++row)menu.Navigate(1);menu.Activate();yield return Frames(3);
             Check(options.LastError==null&&!options.HasUnsavedChanges&&Mathf.Abs(options.Current.steeringSmoothing-expected)<.000001f,"Smoothing menu APPLY failed");
             Check(Mathf.Abs(Idas3Native.Idas3SceneGetSteeringSmoothing()-expected)<.000001f,"Smoothing menu APPLY did not update native value");
             var saved=JsonUtility.FromJson<Idas3GameOptions.Values>(File.ReadAllText(options.FilePath));
@@ -462,7 +471,7 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
     }
     private IEnumerator CaptureCamera(string name){
         lastCameraCaptureHash=null;
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pause-no-capture")>=0){RecordCamera(name);yield break;}
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pause-no-capture")>=0){RecordCamera(name);yield break;}
         // Manual Camera.Render and synchronous ReadPixels work without a
         // visible window; no IMGUI or window-present callback is needed.
         yield return Frames(1);
@@ -488,7 +497,7 @@ public sealed class Idas3PauseSmoke : MonoBehaviour
         // Hidden standalone players do not receive the normal IMGUI Repaint.
         // The explicit scene-only mode still takes CaptureCamera's real scene
         // images and reports that menu appearance was not captured.
-        if(SceneOnlyCapture||Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pause-no-capture")>=0)yield break;
+        if(SceneOnlyCapture||Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pause-no-capture")>=0)yield break;
         bool displayConfirmation=options.DisplayConfirmationPending;
         var camera=host.GetComponent<Camera>();var scene=host.GetComponent<Idas3SceneRenderer>();var ui=host.GetComponent<Idas3UnityUi>();var previous=camera.targetTexture;
         var target=new RenderTexture(Screen.width,Screen.height,24,RenderTextureFormat.ARGB32){name="Actual pause OnGUI capture",antiAliasing=1};

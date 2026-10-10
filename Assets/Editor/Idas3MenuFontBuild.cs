@@ -15,6 +15,12 @@ public sealed class Idas3MenuFontBuild : IPreprocessBuildWithReport
         var importer=AssetImporter.GetAtPath(path) as TrueTypeFontImporter;
         if(importer==null||!importer.includeFontData||AssetDatabase.LoadAssetAtPath<Font>(path)==null)
             throw new BuildFailedException("Sound Room requires its bundled Noto font with Include Font Data enabled.");
+        foreach(string name in new[]{"NotoSansCJKsc-Regular","NotoSansCJKtc-Regular"}){
+            string chinese="Assets/Resources/Fonts/"+name+".otf";
+            var cjk=AssetImporter.GetAtPath(chinese) as TrueTypeFontImporter;
+            if(cjk==null||!cjk.includeFontData||AssetDatabase.LoadAssetAtPath<Font>(chinese)==null)
+                throw new BuildFailedException("Chinese UI requires its bundled Noto CJK font with Include Font Data enabled: "+name);
+        }
     }
 
     // Isolated real-menu renderer. No ROM, native game initialization, personal

@@ -20,7 +20,7 @@ public:
     // source's own captions are outlined.
     void paint(std::span<std::uint32_t> target, int targetWidth, int targetHeight,
                std::string_view text, float x, float y, float pixelHeight,
-               std::uint32_t argb, std::uint32_t outline = 0, float outlineWidth = 0) const;
+               std::uint32_t argb, std::uint32_t outline = 0, float outlineWidth = 0,bool localize = true) const;
 
 private:
     struct Glyph { float x = 0, y = 0, w = 0, h = 0, advance = 0; bool present = false; };

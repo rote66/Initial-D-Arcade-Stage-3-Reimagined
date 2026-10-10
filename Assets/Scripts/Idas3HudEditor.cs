@@ -11,8 +11,8 @@ public sealed class Idas3HudEditor : MonoBehaviour
     [StructLayout(LayoutKind.Sequential)] struct CarFrame { public uint size,vertices,ranges,textures; public IntPtr vertexData,rangeData,textureData; }
     [StructLayout(LayoutKind.Sequential)] struct CarVertex { public Vector3 position,normal; public Color color; public Vector2 uv; public Color offset; }
     [StructLayout(LayoutKind.Sequential)] struct CarTexture { public uint width,height; public ulong pixels; public IntPtr data; }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneHudPreview(int mode,int width,int height,int mapSize,int mapZoom,float seconds,int messages);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneHudCar(ref CarFrame frame);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneHudPreview(int mode,int width,int height,int mapSize,int mapZoom,float seconds,int messages);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneHudCar(ref CarFrame frame);
     static readonly int[] Groups={1,2,3,6,7,4,5,8,9,10};
     static readonly string[] Names={"Time / sections","Meter / gear","Time Attack records","Legend opponent","Online opponent","Rear-view mirror","Minimap","Accepting challengers","Time Extended","Keychain"};
     const int Layer=28;
@@ -219,12 +219,12 @@ public sealed class Idas3HudEditor : MonoBehaviour
     void DrawToolbar()
     {
         GUILayout.BeginArea(new Rect(12,7,906,150));
-        GUILayout.BeginHorizontal();GUILayout.Label("HUD EDITOR",heading,GUILayout.Width(125));
-        if(GUILayout.Toggle(!thirdPerson,"Bumper",GUI.skin.button,GUILayout.Width(90)))SetThirdPerson(false);
-        if(GUILayout.Toggle(thirdPerson,"Third person",GUI.skin.button,GUILayout.Width(105)))SetThirdPerson(true);
-        GUILayout.FlexibleSpace();if(GUILayout.Button("Time Attack"))mode=0;if(GUILayout.Button("Legend"))mode=1;if(GUILayout.Button("Online"))mode=2;GUILayout.EndHorizontal();
+        GUILayout.BeginHorizontal();Idas3Localization.LayoutLabel("HUD EDITOR",heading,GUILayout.Width(125));
+        if(Idas3Localization.LayoutToggle(!thirdPerson,"Bumper",GUI.skin.button,GUILayout.Width(90)))SetThirdPerson(false);
+        if(Idas3Localization.LayoutToggle(thirdPerson,"Third person",GUI.skin.button,GUILayout.Width(105)))SetThirdPerson(true);
+        GUILayout.FlexibleSpace();if(Idas3Localization.LayoutButton("Time Attack"))mode=0;if(Idas3Localization.LayoutButton("Legend"))mode=1;if(Idas3Localization.LayoutButton("Online"))mode=2;GUILayout.EndHorizontal();
         GUILayout.BeginHorizontal();if(ToolButton("<",0,28)){control=0;SelectGroup((selected+Groups.Length-1)%Groups.Length);}
-        GUILayout.Label(Names[selected],label,GUILayout.Width(180));if(ToolButton(">",0,28)){control=0;SelectGroup((selected+1)%Groups.Length);}
+        Idas3Localization.LayoutLabel(Names[selected],label,GUILayout.Width(180));if(ToolButton(">",0,28)){control=0;SelectGroup((selected+1)%Groups.Length);}
         if(ToolButton("Move X",1,90)){adjusting=control!=1||!adjusting;control=1;}
         if(ToolButton("Move Y",2,90)){adjusting=control!=2||!adjusting;control=2;}
         GUILayout.FlexibleSpace();GUILayout.EndHorizontal();
@@ -236,12 +236,12 @@ public sealed class Idas3HudEditor : MonoBehaviour
         GUILayout.EndHorizontal();
         string help=Groups[selected]==10&&working.hudOrnamentId==0?"Choose an ornament in Customize HUD to position it.":adjusting?"← → / ↑ ↓  ADJUST    ENTER / A  DONE    ESC / B  BACK":
             "Drag to move • Slider / wheel / + / − for size • ↑ ↓ SELECT   ← → CHANGE   ENTER / A EDIT   ESC / B CANCEL";
-        GUILayout.Label(string.IsNullOrEmpty(error)?help:error,label);GUILayout.EndArea();
+        Idas3Localization.LayoutLabel(string.IsNullOrEmpty(error)?help:error,label);GUILayout.EndArea();
     }
     void DrawSizeSlider()
     {
         GUILayout.BeginHorizontal();
-        GUILayout.Label("SIZE",label,GUILayout.Width(55));
+        Idas3Localization.LayoutLabel("SIZE",label,GUILayout.Width(55));
         if(ToolButton("−",3,28)){control=3;ResizeSelected(-1);}
         int size=working.HudSizePercent(Groups[selected]),minimum=Groups[selected]==5?100:50;
         var sliderRect=GUILayoutUtility.GetRect(80,24,GUILayout.ExpandWidth(true));
@@ -262,7 +262,7 @@ public sealed class Idas3HudEditor : MonoBehaviour
         // Repaint and layout pass through the existing value. Only an actual
         // slider change writes the draft; group selection and position stay put.
         if(next!=size)SetSelectedSizePercent(next);
-        GUILayout.Label(working.HudSizePercent(Groups[selected])+"%",label,GUILayout.Width(52));
+        Idas3Localization.LayoutLabel(working.HudSizePercent(Groups[selected])+"%",label,GUILayout.Width(52));
         if(ToolButton("+",3,28)){control=3;ResizeSelected(1);}
         GUILayout.EndHorizontal();
     }
@@ -273,7 +273,7 @@ public sealed class Idas3HudEditor : MonoBehaviour
     bool ToolButton(string text,int target,float width)
     {
         var before=GUI.backgroundColor;if(control==target)GUI.backgroundColor=adjusting?new Color(.25f,.8f,1):new Color(.5f,.7f,1);
-        try{return GUILayout.Button(text,GUILayout.Width(width));}finally{GUI.backgroundColor=before;}
+        try{return Idas3Localization.LayoutButton(text,GUILayout.Width(width));}finally{GUI.backgroundColor=before;}
     }
     internal IEnumerator Capture(string path)
     {

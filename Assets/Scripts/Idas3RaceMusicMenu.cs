@@ -219,9 +219,11 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
         Fill(new Rect(rect.x,rect.y,rect.width,1),color);Fill(new Rect(rect.x,rect.yMax-1,rect.width,1),color);
         Fill(new Rect(rect.x,rect.y,1,rect.height),color);Fill(new Rect(rect.xMax-1,rect.y,1,rect.height),color);
     }
-    private void Text(Rect rect,string text,GUIStyle style,Color? color=null)
+    private void Text(Rect rect,string text,GUIStyle style,Color? color=null,bool localize=true)
     {
-        var before=GUI.contentColor;GUI.contentColor=color??White;GUI.Label(rect,text??"",style);GUI.contentColor=before;
+        var before=GUI.contentColor;GUI.contentColor=color??White;
+        if(localize)Idas3Localization.Label(rect,text??"",style);else Idas3Localization.LabelRaw(rect,text??"",style);
+        GUI.contentColor=before;
     }
     private bool Button(Rect rect,string text,bool active=false,GUIStyle style=null)
     {
@@ -337,8 +339,8 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
             Text(new Rect(870,157,176,76),e.id==-1?"AUTOMATIC":e.id==Idas3CustomRaceMusic.AddId?"ADD MUSIC":e.stage==9?"CUSTOM\nMUSIC":e.stage==10?"SPECIAL\nSTAGE":"ARCADE\nSTAGE "+e.stage,confirmationStyle);
             Text(new Rect(870,288,176,24),"INITIAL D",small,Muted);
         }
-        Text(new Rect(822,339,270,46),e.title,songStyle);
-        Text(new Rect(822,387,270,20),e.artist,artistStyle,Muted);
+        Text(new Rect(822,339,270,46),e.title,songStyle,localize:e.id<0||e.id==Idas3CustomRaceMusic.AddId);
+        Text(new Rect(822,387,270,20),e.artist,artistStyle,Muted,localize:false);
         bool own=preview!=null&&preview.TrackId==e.id;
         float duration=own?preview.Duration:0,position=own?preview.Position:0;
         var waveform=own&&preview.Waveform!=null?preview.Waveform:e.waveform;
@@ -364,7 +366,7 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
         const float x=318,y=220,width=484,height=220;
         Fill(new Rect(x,y,width,height),Ink);Frame(new Rect(x,y,width,height),Edge);Fill(new Rect(x,y,width,3),Red);
         Text(new Rect(x+22,y+20,width-44,36),"Delete song?",confirmationStyle);
-        Text(new Rect(x+22,y+69,width-44,50),deleteTitle,songStyle,Muted);
+        Text(new Rect(x+22,y+69,width-44,50),deleteTitle,songStyle,Muted,localize:false);
         bool beforeEnabled=GUI.enabled;GUI.enabled=beforeEnabled&&!Busy;
         if(Button(new Rect(x+126,y+156,104,40),"NO",!deleteYes)){deleteYes=false;Activate();}
         if(Button(new Rect(x+244,y+156,104,40),"YES",deleteYes)){deleteYes=true;Activate();}
@@ -379,8 +381,8 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
         bool enabled=GUI.enabled;GUI.enabled=enabled&&Previewable(e);
         if(Button(new Rect(238,rect.y+9,30,30),preview!=null&&preview.TrackId==e.id&&preview.Playing?"Ⅱ":"▶")){selection=index;TogglePreview();BlurSearch();}
         GUI.enabled=enabled;
-        Text(new Rect(278,rect.y+3,388,25),e.title,label);
-        Text(new Rect(279,rect.y+28,342,19),e.artist,small,Muted);
+        Text(new Rect(278,rect.y+3,388,25),e.title,label,localize:e.id<0||e.id==Idas3CustomRaceMusic.AddId);
+        Text(new Rect(279,rect.y+28,342,19),e.artist,small,Muted,localize:false);
         Text(new Rect(650,rect.y+28,74,19),current?"SELECTED":DurationText(e.duration),small,current?Yellow:Muted);
         if(e.id>=0&&!string.IsNullOrEmpty(e.key)&&Button(new Rect(727,rect.y+9,30,30),favorites.Contains(e.key)?"★":"☆")){if(selection!=index)StopPreview();selection=index;ToggleFavorite();BlurSearch();}
     }

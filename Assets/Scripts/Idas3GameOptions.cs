@@ -20,10 +20,12 @@ public sealed class Idas3GameOptions
         public int aiDifficulty;
         public float steeringDeadzoneGamepad=.1f,steeringDeadzonePrevious=.13f,steeringDeadzoneWheel;
         public float steeringSmoothing;
+        public bool gravitySteering;
+        public float gravityDeadzone=.05f,gravitySensitivity=1;
         public bool wheelForceFeedback,wheelFeedbackInvert;
         public float wheelFeedbackStrength=.35f;
         public string wheelFeedbackDevice="";
-        public bool showFps,muteWhenUnfocused;
+        public bool showFps,showOsd,muteWhenUnfocused;
         public bool discordPresence=true;
         public bool communityTimes=true;
         public bool replayTimeAttack=true,replayOnline,replayLegend;
@@ -149,8 +151,10 @@ public sealed class Idas3GameOptions
     public ResolutionChoice[] AvailableResolutions=>platform.Resolutions;
     public Idas3GameOptions(IPlatform environment=null){platform=environment??new UnityPlatform();}
     public Values Defaults(){
-        return new Values{width=Math.Max(640,platform.Width),height=Math.Max(360,platform.Height),
+        var defaults=new Values{width=Math.Max(640,platform.Width),height=Math.Max(360,platform.Height),
             displayMode=Math.Max(0,Math.Min(2,platform.DisplayMode))};
+        if(platform is UnityPlatform&&Application.platform==RuntimePlatform.IPhonePlayer){defaults.antiAliasing=2;defaults.discordPresence=false;}
+        return defaults;
     }
     public void Initialize(string saveRoot){
         if(string.IsNullOrWhiteSpace(saveRoot))throw new ArgumentException("An options save directory is required.",nameof(saveRoot));
@@ -187,6 +191,34 @@ public sealed class Idas3GameOptions
         draft=current.Clone();
     }
     public void ResetDraft(){EnsureInitialized();draft=Defaults();}
+    // A live mobile switch commits only itself, preserving unrelated draft edits.
+    public bool SetGravitySteering(bool enabled){
+        EnsureInitialized();LastError=null;bool previous=current.gravitySteering;
+        current.gravitySteering=enabled;
+        // The touch owner reads Current each frame. Do not reapply unrelated
+        // native options here: doing so would reset the player's current view.
+        try{SaveCurrent();draft.gravitySteering=enabled;if(rollback!=null)rollback.gravitySteering=enabled;return true;}
+        catch(Exception error){current.gravitySteering=previous;LastError="Could not save gravity steering. "+error.Message;return false;}
+    }
+    public bool SetPerformanceOsd(bool enabled){
+        EnsureInitialized();LastError=null;bool previous=current.showOsd;current.showOsd=enabled;
+        try{SaveCurrent();draft.showOsd=enabled;if(rollback!=null)rollback.showOsd=enabled;return true;}
+        catch(Exception error){current.showOsd=previous;LastError="Could not save OSD. "+error.Message;return false;}
+    }
+    public bool SetGravityResponse(float deadzone,float sensitivity){
+        EnsureInitialized();LastError=null;
+        float previousDeadzone=current.gravityDeadzone,previousSensitivity=current.gravitySensitivity;
+        current.gravityDeadzone=Idas3GravitySteering.Deadzone(deadzone);
+        current.gravitySensitivity=Idas3GravitySteering.Sensitivity(sensitivity);
+        try{
+            SaveCurrent();draft.gravityDeadzone=current.gravityDeadzone;draft.gravitySensitivity=current.gravitySensitivity;
+            if(rollback!=null){rollback.gravityDeadzone=current.gravityDeadzone;rollback.gravitySensitivity=current.gravitySensitivity;}
+            return true;
+        }catch(Exception error){
+            current.gravityDeadzone=previousDeadzone;current.gravitySensitivity=previousSensitivity;
+            LastError="Could not save gravity steering. "+error.Message;return false;
+        }
+    }
     // Presets edit the draft: Apply and the existing display rollback still own
     // activation. Race physics, audio, controls and save progression are untouched.
     public void SetPerformancePreset(int preset){
@@ -280,6 +312,8 @@ public sealed class Idas3GameOptions
         if(value.frameRateLimit!=0)value.frameRateLimit=Math.Max(30,Math.Min(360,value.frameRateLimit));
         if(value.defaultCamera<0||value.defaultCamera>2)value.defaultCamera=0;
         value.aiDifficulty=Math.Max(0,Math.Min(2,value.aiDifficulty));
+        value.gravityDeadzone=Idas3GravitySteering.Deadzone(value.gravityDeadzone);
+        value.gravitySensitivity=Idas3GravitySteering.Sensitivity(value.gravitySensitivity);
         if(!Idas3ArcadeMeterCatalog.IsValidStyle(value.hudMeterStyle))value.hudMeterStyle=0;
         if(value.hudMeterLayout==-1)value.hudMeterLayout=value.HudOffset(2)==Vector2.zero&&value.HudSizePercent(2)==100?1:0;
         else if(value.hudMeterLayout!=0&&value.hudMeterLayout!=1)value.hudMeterLayout=1;
@@ -334,10 +368,11 @@ public sealed class Idas3GameOptions
         a.aiDifficulty==b.aiDifficulty&&a.defaultCamera==b.defaultCamera&&a.controllerResponse==b.controllerResponse&&a.timeAttackGhost==b.timeAttackGhost&&
         a.steeringSettingsVersion==b.steeringSettingsVersion&&a.steeringDeadzoneGamepad==b.steeringDeadzoneGamepad&&
         a.steeringDeadzonePrevious==b.steeringDeadzonePrevious&&a.steeringDeadzoneWheel==b.steeringDeadzoneWheel&&
-        a.steeringSmoothing==b.steeringSmoothing&&
+        a.steeringSmoothing==b.steeringSmoothing&&a.gravitySteering==b.gravitySteering&&
+        a.gravityDeadzone==b.gravityDeadzone&&a.gravitySensitivity==b.gravitySensitivity&&
         a.wheelForceFeedback==b.wheelForceFeedback&&a.wheelFeedbackStrength==b.wheelFeedbackStrength&&
         a.wheelFeedbackInvert==b.wheelFeedbackInvert&&a.wheelFeedbackDevice==b.wheelFeedbackDevice&&
-        a.showFps==b.showFps&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
+        a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
         a.discordPresence==b.discordPresence&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
         a.hudMeterStyle==b.hudMeterStyle&&a.hudMeterLayout==b.hudMeterLayout&&a.hudOrnamentId==b.hudOrnamentId&&a.hudShiftLights==b.hudShiftLights&&a.hudPedalIndicators==b.hudPedalIndicators&&a.hudNameplateStyle==b.hudNameplateStyle&&
         SameHudPositions(a,b)&&SameHudSizes(a,b)&&a.hudOrnamentSize==b.hudOrnamentSize&&a.hudTimeExtensionSize==b.hudTimeExtensionSize&&a.hudTimerSize==b.hudTimerSize&&a.hudSpeedometerSize==b.hudSpeedometerSize&&a.hudRecordsSize==b.hudRecordsSize&&a.hudLegendSize==b.hudLegendSize&&a.hudOnlineSize==b.hudOnlineSize&&a.hudMirrorSize==b.hudMirrorSize&&a.hudMessagesSize==b.hudMessagesSize&&a.hudChallengersSize==b.hudChallengersSize&&

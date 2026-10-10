@@ -184,6 +184,7 @@ private:
     std::vector<int> rivalCacheKey;
     std::vector<int> previousKey;
     std::vector<int> previousMotionKey;
+    bool previousLocalized=false;
     int carouselMake=-1, carouselCar=-1, carouselSlot=0, carouselScroll=0;
     int displayedScroll=0, carConfirmationFrame=-1;
     // Time Attack owner+440 during phase3: AA0 at1, Stop after exceeding15.

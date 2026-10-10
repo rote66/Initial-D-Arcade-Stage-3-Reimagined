@@ -123,8 +123,9 @@ void MenuFont::blit(std::span<std::uint32_t> target, int targetWidth, int target
 
 void MenuFont::paint(std::span<std::uint32_t> target, int targetWidth, int targetHeight,
                      std::string_view text, float x, float y, float pixelHeight,
-                     std::uint32_t argb, std::uint32_t outline, float outlineWidth) const {
+                     std::uint32_t argb, std::uint32_t outline, float outlineWidth,bool localize) const {
     if (!ready() || targetWidth <= 0 || targetHeight <= 0) return;
+    if(localize&&unityUiLocalizedLabel(target.data(),targetWidth,targetHeight,text,x,y,width(text,pixelHeight),pixelHeight,argb))return;
     const float scale = pixelHeight / baked_;
     float pen = x;
     for (const unsigned char c : text) {

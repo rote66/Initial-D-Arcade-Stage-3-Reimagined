@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -21,11 +22,14 @@ public sealed class Idas3UnityUi : MonoBehaviour
         public float x, y, u, v; public uint argb, offsetArgb;
     }
     [StructLayout(LayoutKind.Sequential, Pack = 8)] struct TextureInfo { public uint size, width, height, bytes; }
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiGetFrame(ref Frame frame);
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyDraws([Out] Draw[] draws, int capacity);
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyVertices([Out] Vertex[] vertices, int capacity);
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiGetTextureInfo(uint id, ref TextureInfo info);
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyTextureRGBA(uint id, [Out] byte[] rgba, int capacity);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiGetFrame(ref Frame frame);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyDraws([Out] Draw[] draws, int capacity);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyVertices([Out] Vertex[] vertices, int capacity);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiGetTextureInfo(uint id, ref TextureInfo info);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyTextureRGBA(uint id, [Out] byte[] rgba, int capacity);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern void Idas3UiEnableLocalization(int enabled);
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyLabel(uint id,[Out] byte[] utf8,int capacity);
+    internal static void ConfigureLocalization()=>Idas3UiEnableLocalization(Idas3Localization.Chinese?1:0);
 
     Camera source, backgroundCamera, foregroundCamera;
     CommandBuffer background, foreground;
@@ -42,6 +46,41 @@ public sealed class Idas3UnityUi : MonoBehaviour
     readonly List<int[]> indexBuffers = new List<int[]>();
     readonly List<Draw> reusableBatches = new List<Draw>();
     readonly List<MaterialPropertyBlock> drawProperties = new List<MaterialPropertyBlock>();
+    readonly Dictionary<uint,string> localizedLabels=new Dictionary<uint,string>();
+    Font localizedFont;
+    internal int LocalizedLabelCount {get;private set;}
+    internal IEnumerable<string> CapturedLabelSources=>localizedLabels.Values;
+    string LabelSource(uint id){
+        if(localizedLabels.TryGetValue(id,out var value))return value;
+        int size=Idas3UiCopyLabel(id,null,0);if(size<=0||size>65536)throw new InvalidOperationException("Invalid native UI label");
+        var bytes=new byte[size];if(Idas3UiCopyLabel(id,bytes,size)!=size)throw new InvalidOperationException("Native UI label transfer failed");
+        value=Encoding.UTF8.GetString(bytes);localizedLabels.Add(id,value);return value;
+    }
+    void ExpandLocalizedLabels(uint count){
+        LocalizedLabelCount=0;for(int i=0;i<count;++i)if((draws[i].flags&16)!=0)++LocalizedLabelCount;if(LocalizedLabelCount==0)return;
+        // A cloned dynamic Font can retain the source material/atlas while its
+        // glyph cache changes. Use the imported font's matched atlas and UVs.
+        localizedFont=Idas3Localization.ChineseFont;
+        // Request the entire frame first; atlas repacking must precede UV reads.
+        for(int i=0;i<count;++i)if((draws[i].flags&16)!=0){var d=draws[i];float h=positions[(int)d.first+2].y-positions[(int)d.first].y;
+            localizedFont.RequestCharactersInTexture(Idas3Localization.Text(LabelSource(d.reserved)),Mathf.Clamp(Mathf.CeilToInt(h),8,256),FontStyle.Normal);}
+        for(int i=0;i<count;++i){
+            var d=draws[i];if((d.flags&16)==0)continue;
+            var origin=positions[(int)d.first];float w=positions[(int)d.first+1].x-origin.x,h=positions[(int)d.first+2].y-origin.y;
+            int size=Mathf.Clamp(Mathf.CeilToInt(h),8,256);string value=Idas3Localization.Text(LabelSource(d.reserved));float measured=0;
+            foreach(char c in value)if(localizedFont.GetCharacterInfo(c,out var glyph,size,FontStyle.Normal))measured+=glyph.advance;
+            float fit=Mathf.Min(1,w/Mathf.Max(1,measured)),pen=origin.x,baseline=origin.y+h*.88f;
+            var color=colors[(int)d.first];d.first=(uint)positions.Count;d.count=0;
+            foreach(char c in value){
+                if(!localizedFont.GetCharacterInfo(c,out var glyph,size,FontStyle.Normal))continue;
+                float x0=pen+glyph.minX*fit,x1=pen+glyph.maxX*fit,y0=baseline-glyph.maxY*fit,y1=baseline-glyph.minY*fit;
+                var a=new Vector3(x0,y0,0);var b=new Vector3(x1,y0,0);var cc=new Vector3(x0,y1,0);var dd=new Vector3(x1,y1,0);
+                positions.AddRange(new[]{a,b,cc,cc,b,dd});uv.AddRange(new[]{glyph.uvTopLeft,glyph.uvTopRight,glyph.uvBottomLeft,glyph.uvBottomLeft,glyph.uvTopRight,glyph.uvBottomRight});
+                for(int n=0;n<6;++n){colors.Add(color);offsets.Add(Vector4.zero);}d.count+=6;pen+=glyph.advance*fit;
+            }
+            draws[i]=d;
+        }
+    }
     MaterialPropertyBlock fadeProperties;
     Idas3SceneRenderer sceneRenderer;
     Idas3ArcadeHud arcadeHud;
@@ -73,7 +112,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
         // Unity native objects cannot be constructed in MonoBehaviour field
         // initializers during editor deserialization/component creation.
         fadeProperties = new MaterialPropertyBlock();
-        performanceBaseline = Array.IndexOf(Environment.GetCommandLineArgs(), "-idas3-scene-perf-baseline") >= 0;
+        performanceBaseline = Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-scene-perf-baseline") >= 0;
         sceneRenderer = GetComponent<Idas3SceneRenderer>();
         if (Marshal.SizeOf<Frame>() != 40 || Marshal.SizeOf<Draw>() != 48 || Marshal.SizeOf<Vertex>() != 24)
             throw new InvalidOperationException("Native UI ABI size mismatch");
@@ -116,13 +155,14 @@ public sealed class Idas3UnityUi : MonoBehaviour
     }
     Material GetMaterial(Draw draw)
     {
-        ulong key = draw.tsp | ((ulong)(draw.pcw & 12) << 32) | ((ulong)(draw.flags & 5) << 40);
+        ulong key = draw.tsp | ((ulong)(draw.pcw & 12) << 32) | ((ulong)(draw.flags & 21) << 40);
         if (materials.TryGetValue(key, out var material)) return material;
         material = new Material(shader) { name = "Original UI material " + key.ToString("X"), hideFlags = HideFlags.DontSave };
         bool original = (draw.flags & 1) != 0;
         uint src = original ? draw.tsp >> 29 : 4, dst = original ? (draw.tsp >> 26) & 7 : 5;
         if ((draw.flags & 4) != 0) dst = 1;
         material.SetInteger("_Tsp", unchecked((int)draw.tsp)); material.SetInteger("_Pcw", (int)draw.pcw);
+        material.SetInteger("_FontAtlas", (draw.flags & 16) != 0 ? 1 : 0);
         material.SetInteger("_Original", original ? 1 : 0); material.SetInteger("_SourceIsOne", src == 1 ? 1 : 0);
         material.SetInt("_SrcBlend", (int)Blend(src, true)); material.SetInt("_DstBlend", (int)Blend(dst, false));
         materials.Add(key, material); return material;
@@ -181,6 +221,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
             d.clip=new Vector4(d.clip.x*hudScale+hudX,d.clip.y*hudScale+hudY,d.clip.z*hudScale+hudX,d.clip.w*hudScale+hudY);
             draws[i]=d;
         }
+        ExpandLocalizedLabels(frame.drawCount);
         mesh.Clear(); mesh.SetVertices(positions); mesh.SetUVs(0, uv); mesh.SetColors(colors); mesh.SetUVs(1, offsets);
         ArcadeMeterVisible=false;
         ReleaseOriginalMeter(layout);
@@ -222,7 +263,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
         batches.Clear();
         for (int i = 0; i < frame.drawCount; ++i) {
             var d = draws[i];
-            if (d.first + d.count > frame.vertexCount || d.texture >= frame.textureCount) throw new InvalidOperationException("UI draw outside source frame");
+            if (d.first + d.count > positions.Count || d.texture >= frame.textureCount) throw new InvalidOperationException("UI draw outside source frame");
             if(ArcadeMeterVisible&&(d.flags&8)!=0&&((d.flags>>8)&15)==2)continue;
             if (batches.Count != 0 && SameBatch(batches[batches.Count - 1], d)) { var merged = batches[batches.Count - 1]; merged.count += d.count; batches[batches.Count - 1] = merged; }
             else batches.Add(d);
@@ -242,7 +283,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
                 while (drawProperties.Count <= i) drawProperties.Add(new MaterialPropertyBlock());
                 properties = drawProperties[i];
             }
-            properties.SetTexture("_MainTex", textures[(int)d.texture]); properties.SetVector("_Canvas", size); properties.SetVector("_Clip", d.clip);
+            properties.SetTexture("_MainTex", (d.flags&16)!=0?localizedFont.material.mainTexture:textures[(int)d.texture]); properties.SetVector("_Canvas", size); properties.SetVector("_Clip", d.clip);
             properties.SetFloat("_Opacity", d.opacity); properties.SetColor("_Tint", UnityEngine.Color.white);
             var command = (d.flags & 2) != 0 ? background : foreground;
             command.DrawMesh(mesh, Matrix4x4.identity, GetMaterial(d), i, 0, properties);
@@ -301,6 +342,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
         background?.Release(); foreground?.Release(); background = foreground = null;
         if (backgroundCamera) Destroy(backgroundCamera.gameObject); if (foregroundCamera) Destroy(foregroundCamera.gameObject);
         if (mesh) Destroy(mesh); if (fadeMesh) Destroy(fadeMesh); if (fadeMaterial) Destroy(fadeMaterial);
+        localizedFont=null;localizedLabels.Clear();
         arcadeHud?.Dispose();arcadeHud=null;meterClock.Reset();meterWasPreview=false;
         ornament?.Dispose();ornament=null;OrnamentVisible=false;
         foreach (var material in materials.Values) Destroy(material); materials.Clear();
@@ -311,4 +353,3 @@ public sealed class Idas3UnityUi : MonoBehaviour
         if(layout!=null&&layout.hudMeterStyle==0){arcadeHud?.Dispose();arcadeHud=null;ArcadeMeterVisible=false;}
     }
 }
-
