@@ -11,6 +11,7 @@ import zipfile
 
 from ios_packaging import (ROOT, MODES, VERSION, MUSIC_ROOT, PACKS, content_files, data_path,
                            ipa_path, original_tracks, variant_for_mode)
+from ios_native_storage import native_storage_records, native_storage_summary
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--mode', choices=MODES, default='core-small')
@@ -22,6 +23,7 @@ data_path = data_path(variant)
 data_info = json.loads(data_path.with_suffix('.json').read_text())
 source_files, _ = content_files(variant)
 sources = {name: path for path, name in source_files}
+native_records = native_storage_records()
 checks = []
 def check(value, description):
     if not value:
@@ -30,8 +32,18 @@ def check(value, description):
 with ipa_path.open('rb') as stream:
     check(hashlib.file_digest(stream, 'sha256').hexdigest() == manifest['sha256'], 'SHA256 matches manifest')
 with zipfile.ZipFile(ipa_path) as ipa:
+    installed_app_bytes = sum(p.file_size for p in ipa.infolist())
     check(ipa.testzip() is None, 'ZIP resource CRCs')
     prefix = 'Payload/InitialDiOS.app/'
+    if manifest.get('unityDataCompression'):
+        check(manifest['unityDataCompression'] == 'LZ4HC', 'Lossless Unity resource compression')
+        with ipa.open(prefix + 'Data/data.unity3d') as stream:
+            check(stream.read(8) == b'UnityFS\0', 'Compressed UnityFS player data')
+        for loose in ['resources.assets', 'resources.assets.resS']:
+            name = prefix + 'Data/' + loose
+            check(name not in ipa.namelist() or ipa.getinfo(name).file_size == 0,
+                  'No duplicate loose Unity resources: ' + loose)
+        check(installed_app_bytes == manifest['installedAppBytes'], 'Installed app size')
     info = plistlib.loads(ipa.read(prefix + 'Info.plist'))
     check(info['MinimumOSVersion'] == '15.0', 'Info.plist minimum iOS 15.0')
     check(info['CFBundleVersion'] == manifest['buildNumber'], 'Build number matches manifest')
@@ -103,6 +115,10 @@ with zipfile.ZipFile(ipa_path if args.mode == 'full' else data_path) as archive:
     raw = archive.read(content_prefix + 'game-data.json')
     check(hashlib.sha256(raw).hexdigest() == data_info['manifestSHA256'], 'Data manifest SHA256')
     data = json.loads(raw)
+    check(data.get('nativeStorage') == data_info.get('nativeStorage') == native_storage_summary(),
+          'Upstream lossless native packing enabled and inventory matches')
+    check(data['nativeStorage']['packedFiles'] > 0 and data['nativeStorage']['savedBytes'] > 0,
+          'Native banks retain compression after ZIP extraction')
     check(data['version'] == data_version and data['schema'] == 'idas3-game-data', 'Data schema/version')
     names = [name for name in archive.namelist() if name.startswith(content_prefix)]
     name_set = set(names)
@@ -136,6 +152,12 @@ with zipfile.ZipFile(ipa_path if args.mode == 'full' else data_path) as archive:
             pack = file['path'].split('/')[0]; packs[pack] = packs.get(pack, 0) + 1
         source = sources[file['path']]
         check(source.is_file() and source.stat().st_size == file['bytes'], 'source data: ' + file['path'])
+        if file['path'] in native_records:
+            bank = native_records[file['path']]
+            check(file.get('sourceSha256') == bank['sourceSha256'] and file.get('sourceBytes') == bank['sourceBytes'],
+                  'Original native bank provenance: ' + file['path'])
+            with archive.open(name) as stream:
+                check((stream.read(8) == b'IDASLZ41') == bank['packed'], 'Native storage header: ' + file['path'])
 report = {'passed': True, 'sha256': manifest['sha256'], 'checks': len(checks), 'nativeFiles': native_count,
           'signatures': signatures, 'fileSharing': True, 'languages': manifest['languages'],
           'packs': packs, 'soundRoomFiles': sound_count, 'binaries': binaries, 'zipCRC': 'passed', 'romValidation': manifest['romValidation'], 'updates': 'disabled',
@@ -144,6 +166,9 @@ report['packageMode'] = manifest['packageMode']
 report['testedDataVariant'] = variant
 report['buildNumber'] = info['CFBundleVersion']
 report['supportedDataVariants'] = ['full', 'small']
+report['nativeStorage'] = native_storage_summary()
+report['unityDataCompression'] = manifest.get('unityDataCompression', 'legacy loose')
+report['installedAppBytes'] = installed_app_bytes
 if music:
     report['mp3Music'] = {'tracks': 117, 'bitrateKbps': 192, 'bytes': music['mp3Bytes'], 'originalFullSongsExcluded': True, 'loopSidecarsIncluded': True}
 ipa_path.with_suffix('.validation.json').write_text(json.dumps(report, indent=2) + '\n')

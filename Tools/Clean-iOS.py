@@ -23,7 +23,7 @@ if args.keep_simulator_app:
 else:
     paths += [base / 'DerivedData']
 if args.target == 'all':
-    paths = [ROOT / p for p in ('Xcode', 'Xcode_Data', 'DerivedData', 'Music-MP3',
+    paths = [ROOT / p for p in ('Xcode', 'Xcode_Data', 'DerivedData', 'Music-MP3', 'Native-LZ4',
         'Simulator/Xcode', 'Simulator/Xcode_Data', 'Simulator/DerivedData', 'LanPeer')]
     paths += [PROJECT / p for p in ('Native/build-ios', 'Native/build-ios-simulator',
         'Native/build-ios-lan-peer', 'Library/Bee', 'Library/PlayerDataCache', 'Library/BuildHistory',

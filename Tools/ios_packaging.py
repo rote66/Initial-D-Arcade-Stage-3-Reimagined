@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import importlib.util
+from ios_native_storage import CACHE as NATIVE_STORAGE_ROOT, native_storage_records
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'Builds/iOS'
@@ -45,6 +46,7 @@ def content_files(variant):
                 {t['source'] for t in music['tracks']} != {path for _, _, path in tracks}):
             raise SystemExit('MP3 cache does not match the complete native music catalog')
     replaced = {t['source'] for t in music['tracks']} if music else set()
+    native_banks = native_storage_records()
     files = []
     found = set()
     for directory, destination in sources:
@@ -55,7 +57,9 @@ def content_files(variant):
                 path = destination + '/' + file.relative_to(directory).as_posix()
                 found.add(path)
                 if path not in replaced:
-                    files.append((file, path))
+                    stored = (NATIVE_STORAGE_ROOT / 'data' / native_banks[path]['path']
+                              if path in native_banks else file)
+                    files.append((stored, path))
     if not {path for _, _, path in tracks}.issubset(found):
         raise SystemExit('Original runtime content is missing a full music track')
     if music:

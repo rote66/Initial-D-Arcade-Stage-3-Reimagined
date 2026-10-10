@@ -6,6 +6,7 @@ import json
 import zipfile
 
 from ios_packaging import ROOT, PACKS, VERSION, content_files, data_path
+from ios_native_storage import native_storage_records, native_storage_summary
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--variant', choices=['full', 'small'], default='small',
@@ -21,13 +22,21 @@ if not args.force and OUTPUT.exists() and sidecar.exists():
     if old.get('sourceFingerprint') == fingerprint and old.get('version') == VERSION and old['bytes'] == OUTPUT.stat().st_size:
         print(f'Game data unchanged: {OUTPUT.name} ({old["bytes"]} bytes)', flush=True)
         raise SystemExit(0)
-manifest = {'schema': 'idas3-game-data', 'version': VERSION, 'unpackedBytes': 0, 'files': []}
+storage = native_storage_summary()
+native_records = native_storage_records()
+manifest = {'schema': 'idas3-game-data', 'version': VERSION, 'nativeStorage': storage,
+            'unpackedBytes': 0, 'files': []}
 for file, path in files:
     with file.open('rb') as stream:
         sha = hashlib.file_digest(stream, 'sha256').hexdigest()
     size = file.stat().st_size
     manifest['unpackedBytes'] += size
-    manifest['files'].append({'path': path, 'bytes': size, 'sha256': sha})
+    record = {'path': path, 'bytes': size, 'sha256': sha}
+    if path in native_records:
+        source = native_records[path]
+        record.update(sourceBytes=source['sourceBytes'], sourceSha256=source['sourceSha256'],
+                      storage='IDASLZ41' if source['packed'] else 'original')
+    manifest['files'].append(record)
 raw = (json.dumps(manifest, indent=2) + '\n').encode()
 if not args.force and OUTPUT.exists() and sidecar.exists():
     old = json.loads(sidecar.read_text())
@@ -54,6 +63,7 @@ with OUTPUT.open('rb') as stream:
 metadata = {'file': OUTPUT.name, 'sha256': sha, 'bytes': OUTPUT.stat().st_size,
             'schema': manifest['schema'], 'version': manifest['version'], 'files': len(files),
             'variant': args.variant, 'music': music_info,
+            'nativeStorage': storage,
             'unpackedBytes': manifest['unpackedBytes'], 'manifestSHA256': hashlib.sha256(raw).hexdigest(),
             'destination': 'Documents/IDAS3GameData', 'courses': list(PACKS), 'soundRoom': True,
             'sourceFingerprint': fingerprint}

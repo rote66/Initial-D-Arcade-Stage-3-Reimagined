@@ -31,7 +31,7 @@ public static class Idas3IosBuild
         PlayerSettings.productName="Initial D iOS";
         PlayerSettings.bundleVersion="0.3.95";
         PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,"org.idas3.reimagined.ios");
-        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"13";
+        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"14";
         if(!int.TryParse(buildNumber,out int number)||number<1)throw new ArgumentException("IDAS3_BUILD_NUMBER must be a positive integer.");
         PlayerSettings.iOS.buildNumber=buildNumber;
         PlayerSettings.enableFrameTimingStats=true;
@@ -71,7 +71,8 @@ public static class Idas3IosBuild
         try {
             var report=BuildPipeline.BuildPlayer(new BuildPlayerOptions{
                 scenes=new[]{"Assets/Scenes/InitialDUnityScene.unity"},locationPathName=output,
-                target=BuildTarget.iOS,options=simulator?BuildOptions.Development:BuildOptions.None});
+                target=BuildTarget.iOS,options=BuildOptions.CompressWithLz4HC |
+                    (simulator?BuildOptions.Development:BuildOptions.None)});
             if(report.summary.result!=BuildResult.Succeeded)throw new InvalidOperationException("iOS export failed: "+report.summary.result);
             Debug.Log("iOS Xcode export ready: "+output);
         } finally {

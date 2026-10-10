@@ -31,6 +31,12 @@ if info.get("MinimumOSVersion") != "15.0":
     raise SystemExit("Device app must declare iOS 15.0")
 if info.get("UIFileSharingEnabled") is not True or info.get("LSSupportsOpeningDocumentsInPlace") is not True:
     raise SystemExit("Device app must expose Documents through Files and file sharing")
+unity_archive = app / 'Data/data.unity3d'
+if not unity_archive.is_file():
+    raise SystemExit('Missing compressed Unity player data; rebuild with CompressWithLz4HC')
+with unity_archive.open('rb') as stream:
+    if stream.read(8) != b'UnityFS\0':
+        raise SystemExit('Invalid compressed Unity player data header')
 embedded = app / 'Data/Raw/IDAS3GameData'
 if embedded.is_symlink():
     raise SystemExit(f'Refusing symlink: {embedded}')
@@ -96,6 +102,9 @@ manifest = {"file": output.name, "sha256": digest, "bytes": output.stat().st_siz
             "signing": "adhoc/fakesigned; TrollStore or AppSync; re-sign for standard sideloading",
             "signingIdentifier": info["CFBundleIdentifier"], "signedBundles": signed,
             "fileSharing": True,
+            "unityDataCompression": "LZ4HC",
+            "installedAppBytes": sum(p.stat().st_size for p in app.rglob('*') if p.is_file()),
+            "nativeStorage": data['nativeStorage'],
             "romValidation": "enabled" if info.get("IDAS3RomValidationEnabled", True) else "disabled", "steamMultiplayer": "disabled",
             "lanMultiplayer": "enabled", "discord": "disabled",
             "updates": "disabled" if not info.get("IDAS3UpdatesEnabled", True) else "enabled",
