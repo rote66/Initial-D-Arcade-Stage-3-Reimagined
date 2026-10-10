@@ -1,5 +1,7 @@
+#if !defined(IDAS3_PORTABLE_SCENE)
 #include <windows.h>
 #include <mmsystem.h>
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>

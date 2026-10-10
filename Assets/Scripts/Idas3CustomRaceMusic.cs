@@ -25,11 +25,11 @@ public sealed class Idas3CustomRaceMusic : MonoBehaviour
     internal string FolderPath {get;private set;}
     internal int SelectedId {get {var t=Idas3SoundRoomCatalog.Find(library.selectedPackaged);if(catalog.State.selectedIndex==-2&&t!=null)return t.id;int i=library.songs.FindIndex(s=>s.file==library.selected);return catalog.State.selectedIndex==-2&&i>=0?FirstId+i:catalog.State.selectedIndex;}}
     internal string SelectedTitle {get {var t=Idas3SoundRoomCatalog.Find(library.selectedPackaged);if(catalog.State.selectedIndex==-2&&t!=null)return t.title;int i=library.songs.FindIndex(s=>s.file==library.selected);return catalog.State.selectedIndex==-2&&i>=0?library.songs[i].title:catalog.SelectedTitle;}}
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneSetCustomRaceMusic([In] short[] samples,int count,int rate,int channels,int context);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneSetCustomRaceMusicLoop([In] short[] samples,int count,int rate,int channels,int context,int loopStart,int loopEnd);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneSetCustomRaceMusic([In] short[] samples,int count,int rate,int channels,int context);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneSetCustomRaceMusicLoop([In] short[] samples,int count,int rate,int channels,int context,int loopStart,int loopEnd);
     internal void Initialize(string saveRoot,Idas3RaceMusicMenu view,Idas3RaceMusicCatalog original,string musicFolder=null){
         folder=Path.Combine(saveRoot,"custom-music");menu=view;catalog=original;
-        FolderPath=Path.GetFullPath(musicFolder??Path.Combine(Path.GetDirectoryName(Application.dataPath),FolderName));
+        FolderPath=Path.GetFullPath(musicFolder??Path.Combine(Application.platform==RuntimePlatform.IPhonePlayer?Application.persistentDataPath:Path.GetDirectoryName(Application.dataPath),FolderName));
         try{
             Directory.CreateDirectory(folder);string path=Path.Combine(folder,"library.json");
             if(File.Exists(path)&&new FileInfo(path).Length<128*1024)library=JsonUtility.FromJson<Library>(File.ReadAllText(path))??new Library();
@@ -182,6 +182,7 @@ public sealed class Idas3CustomRaceMusic : MonoBehaviour
     }
     internal void AddMusic(){if(!Busy)StartCoroutine(PickAndImport());}
     IEnumerator PickAndImport(){
+        if(Application.platform==RuntimePlatform.IPhonePlayer){menu.SetNotice("Put music in Documents/Custom Music, then reopen this menu.");yield break;}
         SetBusy(true);menu.SetNotice("Choose an MP3, OGG or WAV file…");
         string path=null;Exception error=null;int complete=0;
         var thread=new Thread(()=>{try{path=ChooseFile(FolderPath);}catch(Exception e){error=e;}finally{Volatile.Write(ref complete,1);}}){IsBackground=true};

@@ -5,8 +5,24 @@
 #include <fstream>
 #include <numbers>
 #include <stdexcept>
+#define DR_MP3_NO_STDIO
+#define DR_MP3_IMPLEMENTATION
+#include "../third_party/dr_libs/dr_mp3.h"
 
 namespace idas3 {
+OriginalAudioClip decodeMp3(std::span<const std::uint8_t> data){
+    drmp3 decoder{};
+    if(!drmp3_init_memory(&decoder,data.data(),data.size(),nullptr))throw std::runtime_error("Invalid MP3 audio stream");
+    struct Cleanup{drmp3* decoder;~Cleanup(){drmp3_uninit(decoder);}} cleanup{&decoder};
+    const auto frames=drmp3_get_pcm_frame_count(&decoder);
+    if((decoder.channels!=1&&decoder.channels!=2)||decoder.sampleRate<8000||decoder.sampleRate>48000||
+       !frames||frames>64*1024*1024/(sizeof(std::int16_t)*decoder.channels))
+        throw std::runtime_error("Invalid or oversized MP3 audio metadata");
+    OriginalAudioClip out;out.channels=decoder.channels;out.sampleRate=decoder.sampleRate;out.loopEnd=std::size_t(frames);
+    out.samples.resize(std::size_t(frames)*out.channels);
+    if(drmp3_read_pcm_frames_s16(&decoder,frames,out.samples.data())!=frames)throw std::runtime_error("Truncated MP3 audio stream");
+    return out;
+}
 OriginalAudioClip decodeOriginalAdx(std::span<const std::uint8_t> data){
     // Format/codec references: vgmstream src/meta/adx.c and
     // src/coding/adx_decoder.c. Supports unencrypted encoding3 v3 (PS2
@@ -154,6 +170,8 @@ OriginalAudioClip decodeOriginalMsAdpcmWave(std::span<const std::uint8_t> data){
     return out;
 }
 OriginalAudioClip decodeOriginalSpsd(std::span<const std::uint8_t> data){
+    if((data.size()>=3&&data[0]=='I'&&data[1]=='D'&&data[2]=='3')||
+       (data.size()>=2&&data[0]==0xff&&(data[1]&0xe0)==0xe0))return decodeMp3(data);
     if(data.size()>=2&&data[0]==0x80&&data[1]==0)return decodeOriginalAdx(data);
     if(data.size()>=4&&data[0]=='R'&&data[1]=='I'&&data[2]=='F'&&data[3]=='F')return decodeOriginalMsAdpcmWave(data);
     // SPSD header/layout and Yamaha expansion are documented by vgmstream:
@@ -198,10 +216,32 @@ OriginalAudioClip decodeOriginalSpsd(std::span<const std::uint8_t> data){
     return out;
 }
 OriginalAudioClip loadOriginalSpsd(const std::filesystem::path& path){
-    std::ifstream input(path,std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Missing original audio stream: "+path.string());
+    auto resolved=path;auto mp3=path;mp3.replace_extension(".mp3");
+    if(std::filesystem::is_regular_file(mp3))resolved=mp3;
+    std::ifstream input(resolved,std::ios::binary|std::ios::ate);if(!input)throw std::runtime_error("Missing original audio stream: "+path.string());
     const auto length=input.tellg();if(length<38||length>64*1024*1024+64)throw std::runtime_error("Invalid original audio file length");
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(length));input.seekg(0);
     if(!input.read(reinterpret_cast<char*>(bytes.data()),length))throw std::runtime_error("Truncated original audio file");
-    return decodeOriginalSpsd(bytes);
+    auto out=decodeOriginalSpsd(bytes);
+    // The encoder's gapless metadata trims MP3 delay/padding. This small sidecar
+    // preserves the original music loop after resampling to the MP3 rate.
+    auto metadata=resolved;metadata += ".idasaudio";
+    if(resolved.extension()==".mp3"&&std::filesystem::exists(metadata)){
+        std::ifstream sidecar(metadata,std::ios::binary|std::ios::ate);
+        if(!sidecar||sidecar.tellg()!=48)throw std::runtime_error("Invalid compressed music metadata size");
+        std::array<std::uint8_t,48> raw{};sidecar.seekg(0);sidecar.read(reinterpret_cast<char*>(raw.data()),raw.size());
+        const auto u32=[&](unsigned at){std::uint32_t v=0;for(unsigned i=0;i<4;++i)v|=std::uint32_t(raw[at+i])<<(8*i);return v;};
+        const auto u64=[&](unsigned at){return std::uint64_t(u32(at))|(std::uint64_t(u32(at+4))<<32);};
+        const auto frames=u64(20),start=u64(28),end=u64(36);const auto flags=u32(44);
+        if(!sidecar||!std::equal(raw.begin(),raw.begin()+8,"IDASMP3\0")||u32(8)!=1||
+           u32(12)!=out.sampleRate||u32(16)!=out.channels||!frames||frames>out.frames()||out.frames()-frames>529||flags>1||
+           end>frames||!end||start>=end)
+            throw std::runtime_error("Compressed music length or loop metadata does not match MP3");
+        // Very short LAME end padding can leave up to one decoder-delay tail
+        // (529 frames). The exported source extent is authoritative for it.
+        out.samples.resize(std::size_t(frames)*out.channels);
+        out.looping=flags!=0;out.loopStart=std::size_t(start);out.loopEnd=std::size_t(end);
+    }
+    return out;
 }
 }

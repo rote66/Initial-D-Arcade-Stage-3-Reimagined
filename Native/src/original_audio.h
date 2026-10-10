@@ -16,11 +16,14 @@ struct OriginalAudioClip {
     std::size_t frames()const{return channels?samples.size()/channels:0;}
 };
 // Decode identified source streams directly; no sound-CPU/device emulation.
-// Established SPSD entry points also dispatch ADX and MS ADPCM WAVE by signature.
+// Established entry points dispatch SPSD, ADX, MS ADPCM WAVE and MP3 by signature.
+// A same-stem MP3 takes precedence over a catalog's legacy source filename.
 OriginalAudioClip decodeOriginalSpsd(std::span<const std::uint8_t> bytes);
 OriginalAudioClip loadOriginalSpsd(const std::filesystem::path& path);
 // CRI ADX encoding3/version4, unencrypted, mono or stereo.
 OriginalAudioClip decodeOriginalAdx(std::span<const std::uint8_t> bytes);
 // Microsoft ADPCM in RIFF/WAVE; preserves source fact length and smpl loop.
 OriginalAudioClip decodeOriginalMsAdpcmWave(std::span<const std::uint8_t> bytes);
+// Gapless MP3 decode (LAME/Xing delay and padding are removed).
+OriginalAudioClip decodeMp3(std::span<const std::uint8_t> bytes);
 }
