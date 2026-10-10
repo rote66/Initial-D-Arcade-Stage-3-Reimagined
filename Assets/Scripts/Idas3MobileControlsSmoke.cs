@@ -83,7 +83,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(Key(Packet(),81)&&Key(Packet(),69)&&(Packet().padButtons&0x300)==0x300,"Shoulders map to both shift actions");controls.ResetInput();
         // Touch actually opens Options through the normal host owner.
         Touch(20,TouchPhase.Began,controls.ButtonRect("MENU").center);yield return Frames(3);Touch(20,TouchPhase.Ended,Vector2.zero);yield return Frames(2);
-        Check(host.PauseMenu.IsOpen,"MENU touch opens title options");host.PauseMenu.SelectTab(2);for(int i=0;i<7;++i)host.PauseMenu.Navigate(1);
+        Check(host.PauseMenu.IsOpen,"MENU touch opens title options");host.PauseMenu.SelectTab(2);for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);
         host.GameOptions.Draft.musicVolume=.7f;host.PauseMenu.Activate();
         Check(host.GameOptions.Current.gravitySteering&&host.GameOptions.Draft.gravitySteering,"Live gravity toggle on");
         Check(host.GameOptions.Current.musicVolume==1&&host.GameOptions.Draft.musicVolume==.7f,"Live switch preserves unrelated draft");
@@ -131,7 +131,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(host.GameOptions.SetGravitySteering(false)&&Packet().thumbLX==0,"Turning off neutralizes gravity immediately");
         controls.ResetInput();Check(Packet().padButtons==0&&Packet().rightTrigger==0&&Packet().thumbLX==0,"Lifecycle reset clears contacts and motion");
         Touch(40,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(3);Touch(40,TouchPhase.Ended,Vector2.zero);yield return Frames(3);
-        Check(host.PauseMenu.IsOpen,"START touch routes actual race pause");host.PauseMenu.SelectTab(2);for(int i=0;i<7;++i)host.PauseMenu.Navigate(1);host.PauseMenu.Activate();
+        Check(host.PauseMenu.IsOpen,"START touch routes actual race pause");host.PauseMenu.SelectTab(2);for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);host.PauseMenu.Activate();
         Check(host.GameOptions.Current.gravitySteering,"Switch usable while race paused");controls.InjectGravity(0,.35,3);Check(Packet().thumbLX==0,"Tilt cannot navigate pause options");
         host.PauseMenu.Activate();controls.ResetInput();host.DiagnosticFocusOverride=false;Touch(41,TouchPhase.Began,controls.ButtonRect("R2").center);Check(Packet().rightTrigger==0,"Focus gate blocks input");
         controls.ResetInput();host.DiagnosticFocusOverride=true;reload.Initialize(Path.Combine(root,"userdata"));Check(!reload.Current.gravitySteering,"Final off state saved");
@@ -166,37 +166,23 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         controls.ResetInput();Check(Idas3SceneModeFlowFixture(207)==1,"Return to isolated course screen");yield return Frames(3);
     }
     private IEnumerator LocalizationChecks(){
-        var previous=Idas3Localization.Current;var menu=host.PauseMenu;
+        int previous=Idas3MenuLocalization.Language;var menu=host.PauseMenu;
         try{
-            foreach(string code in new[]{"zh","zh-CN","zh-SG","zh-Hans-CN"})Check(Idas3Localization.Resolve(code)==Idas3Localization.Language.SimplifiedChinese,"Simplified language tag: "+code);
-            foreach(string code in new[]{"zh-TW","zh-HK","zh-MO","zh-Hant-TW"})Check(Idas3Localization.Resolve(code)==Idas3Localization.Language.TraditionalChinese,"Traditional language tag: "+code);
-            foreach(string code in new[]{"en-US","ja-JP","fr-FR",""})Check(Idas3Localization.Resolve(code)==Idas3Localization.Language.English,"English fallback: "+code);
-            var font=Idas3Localization.ChineseFont;Check(font!=null,"Bundled CJK font");
-            var characters=new System.Collections.Generic.HashSet<char>();
-            foreach(string text in Idas3Localization.ChineseCopy())foreach(char c in text)if(c>=0x3000)characters.Add(c);
-            var missing=new System.Text.StringBuilder();foreach(char c in characters)if(!font.HasCharacter(c))missing.Append(c);
-            File.WriteAllText(Path.Combine(root,"localization-glyphs.txt"),"Chinese catalog characters: "+characters.Count+"\nMissing: "+missing+"\n");
-            Check(missing.Length==0,"Bundled font lacks reviewed Chinese characters: "+missing);
-            foreach(var language in new[]{Idas3Localization.Language.English,Idas3Localization.Language.SimplifiedChinese,Idas3Localization.Language.TraditionalChinese}){
-                Idas3Localization.UseDiagnosticLanguage(language);Idas3UnityUi.ConfigureLocalization();string code=Idas3Localization.LanguageCode;
-                if(language!=Idas3Localization.Language.English){
-                    var cjk=Idas3Localization.ChineseFont;Check(cjk!=null,"Locale-specific bundled font: "+code);
-                    var copy=new System.Text.StringBuilder();foreach(char c in characters)copy.Append(c);
-                    cjk.RequestCharactersInTexture(copy.ToString(),18,FontStyle.Normal);
-                    foreach(char c in characters)if(!char.IsWhiteSpace(c))Check(cjk.GetCharacterInfo(c,out var glyph,18,FontStyle.Normal)&&glyph.advance>0&&glyph.glyphWidth>0,"Actual requested Chinese glyph: "+code+" / "+c);
-                }
-                Check(Idas3Localization.Text("MENU")== (language==Idas3Localization.Language.English?"MENU":language==Idas3Localization.Language.SimplifiedChinese?"菜单":"選單"),"Reviewed menu caption: "+code);
-                Check(Idas3Localization.Text("Could not export layout: layout-中文.json").EndsWith("layout-中文.json",StringComparison.Ordinal),"Dynamic filenames stay intact: "+code);
-                Check(Idas3Localization.Text("NIGHT OF FIRE")=="NIGHT OF FIRE","Proper song title stays intact: "+code);
-                Check(Idas3Localization.Text("Previous")!=Idas3Localization.Text("PREVIOUS"),"Case-distinct copy stays distinct: "+code);
+            foreach(string code in new[]{"zh","zh-CN","zh-SG","zh-Hans-CN","zh-TW","zh-HK","zh-Hant-TW"})Check(Idas3MenuLocalization.ResolveDeviceLanguage(code)==2,"Chinese device tag uses upstream language: "+code);
+            Check(Idas3MenuLocalization.ResolveDeviceLanguage("ja-JP")==1,"Japanese device tag");
+            foreach(string code in new[]{"en-US","fr-FR",""})Check(Idas3MenuLocalization.ResolveDeviceLanguage(code)==0,"English fallback: "+code);
+            for(int language=0;language<3;++language){
+                Idas3MenuLocalization.SetLanguage(language);
+                Check(Idas3Native.Idas3SceneSetCustomMenuLanguage(language)==1,"Native custom-menu language");
+                string code=new[]{"en","ja","zh-Hans"}[language];var font=Idas3MenuLocalization.Font;
+                Check(font!=null,"Upstream bundled font: "+code);
+                var chars=new System.Collections.Generic.HashSet<char>();
+                foreach(var entry in Idas3MenuLocalization.Entries)foreach(char c in language==0?entry.Key:entry.Value[language-1])if(c>=0x3000)chars.Add(c);
+                foreach(char c in chars)Check(font.HasCharacter(c),"Catalog glyph: "+code+" / "+c);
+                Check(Idas3MenuLocalization.Format("Layout exported: {0}","layout-中文.json").EndsWith("layout-中文.json",StringComparison.Ordinal),"Opaque export filename: "+code);
+                Check(Idas3MenuLocalization.T("NIGHT OF FIRE")=="NIGHT OF FIRE","Song metadata stays intact: "+code);
+                if(language==2)Check(Idas3MenuLocalization.T("EDIT TOUCH LAYOUT")!="EDIT TOUCH LAYOUT","Mobile copy extends upstream Chinese catalog");
                 Check(Idas3SceneModeFlowFixture(350)==1,"Private localized Save Select fixture");yield return Frames(5);
-                var nativeUi=host.GetComponent<Idas3UnityUi>();
-                Check(language==Idas3Localization.Language.English?nativeUi.LocalizedLabelCount==0:nativeUi.LocalizedLabelCount>10,"Native semantic labels match language: "+code);
-                if(language!=Idas3Localization.Language.English){
-                    var sources=new System.Collections.Generic.List<string>(nativeUi.CapturedLabelSources);
-                    File.WriteAllLines(Path.Combine(root,"native-labels-"+code+".txt"),sources);
-                    Check(sources.Contains("SAVE SELECT"),"Save heading captured by production renderer");
-                }
                 yield return Capture("locale-"+code+"-save");menu.OpenGlobalOptions(true);menu.SelectTab(2);yield return Frames(3);
                 Check(host.GameOptions.SetGravitySteering(true),"Enable localized gravity settings");yield return Frames(3);
                 yield return Capture("locale-"+code+"-gameplay");menu.SelectTab(8);yield return Frames(3);
@@ -208,7 +194,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
                 Check(osd.DisplayRect.yMax<controls.ButtonRect("MENU").y&&safe.Contains(osd.DisplayRect.min)&&safe.Contains(osd.DisplayRect.max),"OSD stays inside safe area above MENU: "+code);
                 yield return Capture("locale-"+code+"-osd");Check(host.GameOptions.SetPerformanceOsd(false)&&host.GameOptions.SetGravitySteering(false),"Restore isolated overlay settings");
             }
-        }finally{Idas3Localization.UseDiagnosticLanguage(previous);Idas3UnityUi.ConfigureLocalization();menu.SetOpen(false);}
+        }finally{Idas3MenuLocalization.SetLanguage(previous);Idas3Native.Idas3SceneSetCustomMenuLanguage(previous);menu.SetOpen(false);}
     }
     private IEnumerator LayoutChecks(){
         var menu=host.PauseMenu;menu.SelectTab(8);Check(menu.SelectedTab==8,"Touch layout settings category reachable");yield return Frames(3);menu.Activate();

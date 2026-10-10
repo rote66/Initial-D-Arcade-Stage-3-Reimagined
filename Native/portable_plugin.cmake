@@ -5,7 +5,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
 else()
   set(IDAS3_PLUGIN_KIND SHARED)
 endif()
+set_source_files_properties(vendor/lz4/lz4.c PROPERTIES LANGUAGE CXX)
 add_library(Idas3Unity ${IDAS3_PLUGIN_KIND}
+  src/native_asset_storage.cpp
+  vendor/lz4/lz4.c
+  src/original_ending.cpp
   src/native_assets.cpp
   src/menu_font.cpp
   src/original_loading_screen.cpp
@@ -157,26 +161,26 @@ add_library(Idas3Unity ${IDAS3_PLUGIN_KIND}
   src/unity_scene_capture.cpp
   src/unity_ui_capture.cpp
 )
-target_include_directories(Idas3Unity PRIVATE src)
+target_include_directories(Idas3Unity PRIVATE src vendor/lz4)
 target_compile_definitions(Idas3Unity PRIVATE IDAS3_UNITY_PLUGIN IDAS3_PORTABLE_SCENE)
 target_compile_options(Idas3Unity PRIVATE -Wall -Wextra -ffp-contract=off -fno-fast-math)
 set_target_properties(Idas3Unity PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   enable_testing()
   add_executable(online_race_timeline_portable tests/online_race_timeline_tests.cpp)
-  target_include_directories(online_race_timeline_portable PRIVATE src)
+  target_include_directories(online_race_timeline_portable PRIVATE src vendor/lz4)
   target_compile_definitions(online_race_timeline_portable PRIVATE IDAS3_PORTABLE_SCENE)
   target_link_libraries(online_race_timeline_portable PRIVATE Idas3Unity)
   add_executable(portable_scene_tests tests/portable_scene_tests.cpp)
-  target_include_directories(portable_scene_tests PRIVATE src)
+  target_include_directories(portable_scene_tests PRIVATE src vendor/lz4)
   target_compile_definitions(portable_scene_tests PRIVATE IDAS3_PORTABLE_SCENE)
   target_link_libraries(portable_scene_tests PRIVATE Idas3Unity)
   add_test(NAME portable_scene COMMAND portable_scene_tests "${CMAKE_SOURCE_DIR}")
   add_executable(compressed_music_tests tests/compressed_music_tests.cpp)
-  target_include_directories(compressed_music_tests PRIVATE src)
+  target_include_directories(compressed_music_tests PRIVATE src vendor/lz4)
   target_link_libraries(compressed_music_tests PRIVATE Idas3Unity)
   add_executable(race_music_catalog_portable tests/race_music_catalog_tests.cpp)
-  target_include_directories(race_music_catalog_portable PRIVATE src)
+  target_include_directories(race_music_catalog_portable PRIVATE src vendor/lz4)
   target_compile_definitions(race_music_catalog_portable PRIVATE IDAS3_PORTABLE_SCENE)
   target_link_libraries(race_music_catalog_portable PRIVATE Idas3Unity)
 endif()

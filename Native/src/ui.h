@@ -3,6 +3,7 @@
 #include "physics.h"
 #include "race.h"
 #include "original_hud.h"
+#include "original_water_cup.h"
 #include "original_results.h"
 #include "original_battle_hud.h"
 #include "original_battle_names.h"
@@ -19,13 +20,14 @@ class Frontend;
 // Presentation only: an online peer is not a Legend/Bunta battle owner.
 struct OnlineBattleHudState {
     bool active=false;
+    bool opponentHeadlights=true;
     std::uint32_t playerCar=0,rivalCar=0;
     std::string playerName,rivalName;
     float advantage=0,rivalPositionFraction=0;
     std::int32_t frame=0;
 };
 struct HudBattlePresentation {
-    bool online=false,mirrorEnabled=false;
+    bool online=false,mirrorEnabled=false,advantageHidden=false;
     float signedAdvantage=0;
     std::uint32_t profileMode=0,game2dCommands=0,portraitCommands=0,playerGlyphs=0,rivalGlyphs=0;
     std::uint32_t localMapMarkers=0,opponentMapMarkers=0,sectionCount=0,sectionCapacity=0,elapsed6000=0;
@@ -69,6 +71,10 @@ public:
     void loadOriginal(const std::filesystem::path& root);
     void resize(int w,int h);
     void setMapSize(int size){mapSize_=size>=0&&size<=2?size:0;}
+    void setLightsOffAdvantage(bool hide){hideLightsOffAdvantage_=hide;}
+    void setMapDisplay(int display){mapDisplay_=display>=0&&display<=2?display:0;}
+    void resetWaterCup(){waterCup_.reset();}
+    void advanceWaterCup(float movement,const std::array<std::uint32_t,5>& cues){waterCup_.advance(movement,cues);}
     void setMapZoom(int zoom){mapZoom_=zoom>=0&&zoom<=2?zoom:2;}
     const std::uint32_t* paint(const UiState& s);
     const std::uint32_t* paintResult(const OriginalBattleResultsState&,
@@ -81,6 +87,7 @@ public:
     // Submissions from the most recent actual paint, never a diagnostic redraw.
     const HudBattlePresentation& lastBattlePresentation()const{return battlePresentation_;}
 private:
+    bool hideLightsOffAdvantage_=true;
     friend struct CourseMapTestAccess;
 #if defined(IDAS3_PORTABLE_SCENE)
     std::vector<std::uint32_t> scenePixels_;
@@ -130,7 +137,9 @@ private:
     // The desktop path forces alpha onto everything GDI drew, which would
     // flatten the map's see-through field. The map owns its own alpha, so it
     // records its frame and that pass leaves it alone.
-    int mapSize_=0,mapZoom_=2;
+    int mapSize_=0,mapZoom_=2,mapDisplay_=0;
+    OriginalWaterCup waterCup_;
+    OriginalWaterCupArtwork waterCupArtwork_;
     int mapX0_=0,mapY0_=0,mapX1_=0,mapY1_=0;
 };
 }

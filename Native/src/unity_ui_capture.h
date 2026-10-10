@@ -1,7 +1,6 @@
 #pragma once
 #include <cstdint>
 #include <span>
-#include <string_view>
 namespace idas3 {
 struct NativeImage;
 struct UnityUiVertex{float x,y,u,v;std::uint32_t argb,offsetArgb;};
@@ -11,9 +10,6 @@ struct UnityUiDraw{std::uint32_t first,count,texture,tsp,pcw,flags;float opacity
 struct UnityUiFrame{std::uint32_t size,width,height,drawCount,vertexCount,textureCount,unresolvedSurfaces,reserved;std::uint64_t revision;};
 struct UnityUiTextureInfo{std::uint32_t size,width,height,bytes;};
 bool unityUiEnabled();
-bool unityUiLocalizationEnabled();
-bool unityUiLocalizedLabel(const std::uint32_t* target,int width,int height,
-    std::string_view text,float x,float y,float w,float h,std::uint32_t argb);
 // Command-only HUD pixels and reusable frame storage. The exact diagnostic
 // argument -idas3-scene-perf-baseline restores the prior allocation/clear work.
 bool unityUiFrameReuseEnabled();
@@ -50,8 +46,6 @@ void unityUiSubmit(const std::uint32_t* pixels,int sourceWidth,int sourceHeight,
 #define IDAS3_UI_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 IDAS3_UI_EXPORT void Idas3UiEnable(int enabled);
-IDAS3_UI_EXPORT void Idas3UiEnableLocalization(int enabled);
-IDAS3_UI_EXPORT int Idas3UiCopyLabel(unsigned label,void* destination,int capacity);
 IDAS3_UI_EXPORT void Idas3UiBeginFrame(int width,int height);
 IDAS3_UI_EXPORT int Idas3UiGetFrame(idas3::UnityUiFrame* frame);
 IDAS3_UI_EXPORT int Idas3UiCopyDraws(idas3::UnityUiDraw* destination,int capacity);

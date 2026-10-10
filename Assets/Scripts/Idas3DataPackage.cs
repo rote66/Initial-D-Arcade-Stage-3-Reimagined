@@ -26,8 +26,8 @@ internal static class Idas3DataPackage
     internal static Manifest Parse(string json) {
         if (json == null || json.Length > 8 * 1024 * 1024) throw new InvalidDataException("Invalid game data manifest.");
         var manifest = JsonUtility.FromJson<Manifest>(json);
-        // v1 original audio and v2 original/MP3 data share the same layout.
-        if (manifest == null || manifest.schema != "idas3-game-data" || (manifest.version != 1 && manifest.version != Version) || manifest.files == null || manifest.files.Length < 1 || manifest.files.Length > 30000)
+        // v1-v3 share the same layout/audio readers; required course content must be current.
+        if (manifest == null || manifest.schema != "idas3-game-data" || (manifest.version < 1 || manifest.version > Version) || manifest.files == null || manifest.files.Length < 1 || manifest.files.Length > 30000)
             throw new InvalidDataException("This data package is not compatible with this app.");
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase); long total = 0;
         foreach (var file in manifest.files) {

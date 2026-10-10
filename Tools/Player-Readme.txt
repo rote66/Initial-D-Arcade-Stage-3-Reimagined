@@ -1,9 +1,143 @@
-0.3.95-community-replays.38
-REAR-VIEW MIRRORS AND COMMUNITY BUG FIXES
-All racing modes support rear-view mirrors with bumper, chase and natural cameras.
-Corrected Tsubaki lower-hairpin guardrail collision and wet-road shadows; restored meter speed colors and Infinity gear colors.
-Improved online controller recovery and separate wheel/pedal/shifter bindings. Included Sound Room fonts and fixed linked-folder updater staging.
-Only this version can submit new times; existing records and season 2 are preserved. Changed-file patches support .20 through .37.
+0.3.95-community-replays.46
+TRACK, STORAGE, LANGUAGE AND RECORD FIXES
+
+Includes the completed changes since .45. Update both drivers for online races; .46 is required for new community Time Attack submissions.
+
+- Optimize Gunsai and Odawara scenery and trees, including detail transitions and imported mesh packing. Close scenery and course visibility distances are retained. Measured full-route render time improved on the test PC; gains vary by hardware.
+- Reduce installed game size with lossless native asset compression and compressed Unity resources. The same-content comparison saved approximately 1.88 GB (31%). Download size is only slightly smaller. The updater replaces obsolete loose Unity data without touching personal files.
+- Add Japanese original-game text textures with English fallback. Add a separate custom-menu language setting for English, Japanese and Simplified Chinese, covering the remake's pause/settings, online, music and other custom menus. These settings are independent.
+- Correct replay freecam left/right movement and horizontal mouse look.
+- Add the Online setting to hide advantage distance when an opponent turns their headlights off at night (Hidden by default). The existing darker appearance of unlit opponents is retained.
+- Correct Odawara clockwise/counter-clockwise labels in course selection, results, online menus and the leaderboard website, without changing route IDs or physics.
+- Fix outdated local Gunsai and Odawara Time Attack records surviving the handling update. On first load, unversioned records for these two courses are reset in the shared rankings and each save's personal rankings. The original CSV is preserved beside it as .before-idzero-revision-1.bak. Other courses, tuning, points and saves are preserved; new revision-marked times remain valid. An earlier Odawara-only migration is respected.
+- Give Gunsai/Odawara best-time ghosts their own revision, so old-physics ghosts are not used against the revised courses. Existing ghost files and replay archives are preserved.
+
+The community boards are not reset again in this release. Existing published records are retained.
+
+Fresh installs: download Initial-D-Setup-0.3.95.46.zip, extract it, and run Install Initial D.cmd. Manual installs: extract both the Windows-x64 and matching Additional-Courses ZIPs into the same folder. Existing players can use the in-game updater; patches support .20 through .45. This compression update replaces more files than a typical code-only patch.
+
+A verified original GDS-0033 dump is required and is not included. Personal ROMs, saves, replays and custom music are not included in release archives.
+
+PREVIOUS UPDATE (.45)
+GUNSAI AND ODAWARA HANDLING UPDATE
+
+This update is required for new community Time Attack submissions. Both drivers must update for online races.
+
+- Gunsai now uses Stage 3 Usui handling in both directions and dry/wet conditions.
+- Odawara now uses Stage 3 Tsuchisaka handling, with powered acceleration increased by 27.05% over that setup. Its two-lap route and direction/weather options remain intact.
+- Reset the Gunsai and Odawara community leaderboards, including individual-car records, for the new handling. Previous uploaded runs and their replay downloads for these two tracks are removed. Other tracks and the current season are preserved.
+- Older builds and their queued runs cannot submit times to the refreshed boards. Personal saves, tuning, local records, local replays, custom music and original ROM files are preserved.
+
+Verified with route/collision/checkpoint and driving tests across both directions, dry/wet and automatic/manual gears, plus online simulations with latency, jitter and packet loss. Two-account Steam play was not newly tested.
+
+Fresh installs: download `Initial-D-Setup-0.3.95.45.zip`, extract it, and run `Install Initial D.cmd`. Manual installs: extract both the Windows-x64 and matching Additional-Courses ZIPs into the same folder. Existing players can use the in-game updater; patches support .20 through .44.
+
+A verified original GDS-0033 dump is required and is not included.
+
+PREVIOUS UPDATE (.44)
+NEW COURSES, PAINTS AND REPLAY OPTIONS
+
+Fresh installs: download `Initial-D-Setup-0.3.95.44.zip`, extract it, and run `Install Initial D.cmd`. It downloads and verifies both game packages automatically. Manual installs: extract the Windows-x64 ZIP and the matching Additional-Courses ZIP into the same folder.
+
+Existing players: normal updates use one changed-file patch; patches support .20 through .43. Full Repair in .44 fetches both packages automatically. An older updater that falls back to its full download may need one Full Repair after restarting to finish installing the new courses.
+
+This update is required for new community Time Attack submissions. Both drivers must update for online races.
+
+- Added Gunsai and Odawara with course selection cards, original scenery, collision, race titles, records and replay support.
+- Odawara runs two laps with separate clockwise/counterclockwise road layouts. Gunsai offers outbound/inbound routes. Both support day/night and dry/wet conditions and use Stage 3 Myogi handling.
+- Added Gunsai and Odawara to the in-game and website leaderboards, including direction/weather and individual-car records. Existing records and replay downloads are preserved.
+- All 93 factory paint colors are available on every car, including online opponents and replays. Existing colors and tuning parts are preserved.
+- Added a Sun Glare toggle under Display & Graphics.
+- Added Free Camera in Replay Viewer, plus separate switches for the game HUD and replay overlay. Use C / Y to cycle cameras, G / left-stick click for the game HUD, and H / Select for the replay overlay.
+
+The new courses use adapted wet scenery from the supplied dry assets. Physical controller freecam and two-account Steam races have not been newly verified. R35 development remains separate.
+
+Existing saves, tuning, records, season 2, replays, custom music and original ROM files are preserved. A verified original GDS-0033 dump is required and is not included.
+
+PREVIOUS UPDATE (.43)
+PRIVATE MATCHES, CONTROLS AND COMMUNITY FIXES
+This update is required for new community Time Attack submissions. Both drivers must update for online races.
+
+- Added private online rooms, hidden from public listings and Quick Match, with room-code joining.
+- Added individual Gear 1–6 bindings for manual transmission, including H-shifter inputs. Existing bindings are preserved. Neutral/clutch/reverse simulation is not added.
+- Reorganized settings into clearer categories and moved HUD sizes into a dedicated submenu.
+- Filled the margins around supported 4:3 menus with extended scrolling blue Initial D artwork.
+- Added Original/Balanced track lighting and corrected Special Stage ambient lighting and fog handling.
+- Added Map, Water Cup and Off minimap choices, including water movement and impact splashes.
+- Restored opponent headlight halos, including rearview visibility, and original online battle-stat artwork.
+- Corrected inverted Shomaru Time Attack section maps.
+- Corrected imported-track replay bumper-camera height and slope handling.
+- Restored recorded driving footage behind Legend ending credits. Some original cinematic effects remain incomplete.
+- Optimized HUD/menu rendering by reusing vertex/index buffers and draw commands. HUD CPU time improved 7–23% in local tests; this is not an overall FPS increase claim.
+
+Validation includes native regression tests, managed/player input checks, a full-course driving comparison and 45 pixel-identical rendered HUD/menu comparisons. Physical H-shifters and two-account Steam private rooms still need end-to-end testing. Online/later-sector FPS drops, intermittent public connection/collision reports, affected wheel hardware and Linux/Proton updater reports remain under investigation.
+
+Changed-file patches support .20 through .42. Existing saves, tuning, records, season 2, replays, custom music and original ROM files are preserved. A verified original GDS-0033 dump is still required and is not included. R35 development remains separate.
+
+PREVIOUS UPDATE (.42)
+ONLINE REMATCH FIXES
+This update is required for new community Time Attack submissions. Both drivers must update for online races.
+
+- Fixed online rooms closing with "Saved car changed" when starting the next race after receiving points and choosing Continue.
+- Kept the same save slot, car and automatic/manual choice through rematches, including cars selected from a save's garage.
+- Stopped the covered Mode Select screen from counting down or changing the selection behind the online menu.
+- Removed the remaining placeholder race-finished panel while the original online result is being confirmed. The arcade result, points and Continue screens remain in place.
+- Includes the leaderboard service fixes for delayed submissions, replay storage and restored model records. Leaderboards retain the top 10 overall and the top 10 per car for each course/direction/surface selection.
+
+Verified with 356 native result checks, finish-screen rendering checks, and two real Unity clients completing a connected rematch and starting a second race. Two-account Steam relay behavior was not newly tested.
+
+Changed-file patches support .20 through .41. Existing saves, tuning, records, season 2, replays, custom music and original ROM files are preserved. A verified original GDS-0033 dump is still required and is not included.
+
+PREVIOUS UPDATE (.41)
+ORIGINAL ARCADE ONLINE RESULTS
+This update is required for new community Time Attack submissions. Both drivers must update for online races.
+
+- Replaced the online post-race placeholder panels with the original arcade result and Continue screens.
+- Restored the original result artwork, rotating car, animated point counter, sounds, fades and YES/NO selection.
+- Preserved tuning-point rewards and battle-level progress. Repeated result messages cannot award points twice.
+- Both players choosing Yes returns to Mode Select with the online menu connected. No leaves the room; a player waiting on Yes can still leave.
+- Kept settled results and earned points visible when the other driver leaves. Continue uses the original countdown and defaults to No when time expires.
+- Added mouse selection on the original YES/NO labels alongside keyboard, controller and wheel navigation. Holding a button across screens does not confirm the next screen accidentally.
+- Kept the original Continue screen visible through the rematch handoff, removing the brief placeholder-panel flash.
+
+Includes the connection and Quick Match recovery fixes from .40. Verified with 227 native checks and two two-client LAN scenarios covering connected rematches, a second race, and both leaving cases. Physical controller hardware and two-account Steam relay behavior were not newly tested.
+
+Changed-file patches support .20 through .40. Existing saves, tuning, records, season 2, replays, custom music and original ROM files are preserved. A verified original GDS-0033 dump is still required and is not included.
+
+PREVIOUS UPDATE (.40)
+ONLINE CONNECTION AND QUEUE RECOVERY
+This update is required to submit new community Time Attack times. Both players need the new version for online races.
+
+- Fixed a race disconnect caused by brief packet loss. Input history now remains available until the other driver acknowledges it, allowing the same race to recover.
+- Fixed old room searches failing or timing out after an opponent connects and ending the match.
+- Quick Match retries temporary search failures and keeps its waiting room open. Brief Steam service interruptions pause matchmaking and resume it when Steam reconnects.
+- Temporary Steam service interruptions no longer immediately close an otherwise working peer connection.
+- Added ordered, bounded retries for a full Steam send buffer. Timing messages no longer accumulate behind reliable race controls.
+- Improved connection-failure logging while retaining normal handling for actual departures, failed connections and prolonged loss.
+
+Verified with simulated packet loss in both directions, two native game instances during live races, and 48 Steam/queue regression checks. Real two-account Steam/relay confirmation is still needed; this release does not claim every reported disconnect is resolved.
+Changed-file patches are available from .20 through .39. Existing saves, tuning, records, season 2, replays, custom music and original ROM files are preserved. A verified original GDS-0033 dump is still required and is not included.
+
+PREVIOUS UPDATE (.39)
+HUD COLORS, ONLINE RESULTS AND COMMUNITY BUG FIXES
+This update is required to submit new community Time Attack times. Both players need the new version for online races.
+
+- Restored original tachometer speed colors. Double Ace uses its original white digits; other fixed-color HUDs no longer get forced red, yellow, blue or rainbow tints. Preserved authored colors and pastel designs.
+- Fixed Retrowave/Vaporwave's missing neon drift outline and scrolling grid perspective. Restored missing fifth-gear digits on the 26 affected HUD styles.
+- Online races now end when the first car finishes, followed by win/lose, earned points and Continue screens. Both players choosing Yes returns to mode selection with the online menu connected; No leaves the room.
+- Online results also award the selected car 1,000 tuning points for participation and another 1,000 for a win. Double timeouts and unfinished disconnects award none.
+- Reduced controller interruptions caused by switching between a physical controller and its Steam Input duplicate.
+- Corrected the replay bumper-camera transform and restored saved HUD placement. Replay keychains now follow recorded motion, stay still while paused and appear only in bumper view.
+- Restored a separate tuning-package choice for stock cars selected through an existing save, while keeping upgraded cars' current tunes. Fixed Bunta's pace resetting after completing level 15.
+- Restored leaf debris and original sun-flare artwork on supported base courses, and corrected rear-view mirror height.
+- Restored qualifying race-start aura sound effects and tuned Evo III exhaust flashes for the local car and online opponent, including their warm lighting pulses.
+- Restored Legend ending credits, photo strips, music and final artwork. The original driving cinematic behind the credits remains unavailable.
+- Corrected imported-course names in Discord presence, Tsubaki's analysis-map orientation and the leaderboard's course order.
+- Added scrolling crash details, a Copy error details button and a saved error report.
+
+Existing records, season 2, saves, settings, replays, custom music and original ROM files are preserved. A verified original GDS-0033 dump is still required and is not included.
+
+Reports involving physical wheel binding, affected Steam/Proton updater installations, intermittent public online FPS/collisions and some replay or Sadamine camera cases still need affected-player confirmation. This release does not claim those reports are resolved.
 
 PREVIOUS UPDATE (.37)
 TSUBAKI LINE, PERSONAL-BEST GHOSTS AND SOUND ROOM
@@ -42,7 +176,7 @@ Provide your original Initial D Arcade Stage 3 GDS-0033 dump in the rom folder b
 No original ROM is included or downloaded. First launch creates rom/README.txt if needed. Updates and Full Repair preserve your ROM files and do not replace a missing or invalid dump.
 
 COMMUNITY TIME ATTACK
-Only 0.3.95-community-replays.38 can submit new times. After updating, complete a new Time Attack; queued runs from older builds are no longer eligible. Existing published times, replay downloads and the current season remain available.
+Only 0.3.95-community-replays.40 can submit new times. After updating, complete a new Time Attack; queued runs from older builds are no longer eligible. Existing published times, replay downloads and the current season remain available.
 Both online players need this version. Updates use a smaller changed-file patch when available for the installed version. Saves, settings, replays, custom music and locally supplied ROM files are preserved.
 
 FIXES INCLUDED FROM .28

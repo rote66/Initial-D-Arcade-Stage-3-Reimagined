@@ -672,7 +672,7 @@ namespace Idas3.Multiplayer
                 }
                 yield return Until(()=>session.CanReturnToLobby,180,"Natural time-up did not reach connected results.");
                 acceleratedReturnWait=false;
-                report.naturalTimeUp=session.LocalSnapshot.TimeUp&&session.ResultText.StartsWith("BOTH DRIVERS",StringComparison.Ordinal);
+                report.naturalTimeUp=session.LocalSnapshot.TimeUp&&session.ResultText=="TIME UP";
                 Check(report.naturalTimeUp,"Natural finish did not produce both-driver time-up.");
                 report.firstResult=ReadFinishAudio();Check(report.firstResult.scene==3,"Connected both-driver time-up selected the wrong music scene.");
                 yield return Frames(6);report.beforeDuplicate=ReadFinishAudio();
@@ -711,6 +711,7 @@ namespace Idas3.Multiplayer
                 host.RaceMusic.Refresh();report.selectedMusic=host.RaceMusic.State.selectedIndex;
                 if(finishMusicCheck)Check(report.selectedMusic==-1,"Private finish-music fixture must retain the game-default song choice.");
                 var localPick=session.LocalChoice;var remotePick=session.RemoteChoice;int localCar=session.LocalCar;
+                int selectedSaveSlot=session.LocalSavedCar.SaveSlot;bool selectedAutomatic=session.LocalSavedCar.Automatic;
                 Phase("waiting-natural-results");double waitStarted=Time.realtimeSinceStartupAsDouble;acceleratedReturnWait=true;
                 // Private diagnostic acceleration only: run the unchanged
                 // source rules until their real timer ends with no car input.
@@ -725,14 +726,29 @@ namespace Idas3.Multiplayer
                 yield return CaptureMenu("return-results");
                 File.WriteAllText(Path.Combine(root,"return-results-ready.json"),"{\"ready\":true}");
                 yield return Until(()=>File.Exists(Path.Combine(peerRoot,"return-results-ready.json")),20,"Both peers did not reach results before return.");
+                yield return Until(()=>menu.ResultsPage==1&&menu.CanAcknowledgeReturnToLobby,30,"Original finish presentation did not advance to points.");
+                yield return Until(()=>Idas3MultiplayerNative.Idas3MultiplayerResultScreen(5)>=1,3,"Original points reveal did not finish.");
+                yield return CaptureMenu("return-points");
+                pulse=13;
+                yield return Until(()=>menu.ResultsPage==2&&menu.CanAcknowledgeReturnToLobby,5,"Points did not advance to Continue.");
+                yield return CaptureMenu("return-continue");
                 Phase("requesting-connected-lobby");
-                if(role=="join")pulse=13; // Same fixed Enter/A action as the visible button.
+                if(role=="join"){
+                    pulse=13;yield return Until(()=>session.LocalContinueRequested,5,"Guest Yes was not recorded.");
+                    yield return Frames(15);Check(session.IsRacing&&session.StateName=="Results","One Yes retired both races.");
+                    File.WriteAllText(Path.Combine(root,"one-yes-verified.txt"),"Guest Yes kept both in results.\n");
+                }else{
+                    yield return Until(()=>session.RemoteContinueRequested&&File.Exists(Path.Combine(peerRoot,"one-yes-verified.txt")),10,"Host did not wait for peer Yes.");
+                    Check(session.IsRacing&&menu.ResultsPage==2,"Peer Yes skipped the local decision.");pulse=13;
+                }
                 yield return Until(()=>session.StateName=="Lobby"&&!session.IsRacing&&session.HandshakeComplete&&session.InLobby,30,"Return did not preserve the connected lobby on both clients.");
                 yield return Frames(6);
                 report.connectedLobby=menu.IsOpen&&session.RoomCode==report.roomCode&&PeerConnected()&&!session.DisconnectedFinish&&(host.Status.flags&(128u|2048u))==0&&(host.Status.flags&1u)!=0;
                 Check(report.connectedLobby,"Return closed the room, hid lobby, or retained native race state.");
+                Check(host.Status.frontendStage==5,"Both Yes must return behind the online menu to mode select.");
                 Check(ReferenceEquals(transport,SessionField<object>("transport"))&&SessionField<ulong>("localNonce")==localNonce&&SessionField<ulong>("remoteNonce")==remoteNonce,"Return replaced the transport or started a new peer handshake.");
                 Check(session.LocalChoice.Equals(localPick)&&session.RemoteChoice.Equals(remotePick)&&session.LocalCar==localCar&&CarSelectionAgrees(),"Return lost car or course picks.");
+                Check(session.LocalSavedCar.SaveSlot==selectedSaveSlot&&session.LocalSavedCar.Automatic==selectedAutomatic,"Return substituted another save or reset transmission.");
                 Check(!session.HasCourseDraw&&!session.LocalReady&&!session.RaceReleased&&string.IsNullOrEmpty(session.ResultText),"Return retained readiness, draw, result or GO state.");
                 foreach(var player in session.Players)Check(!player.Ready,"Return retained another player's Ready state.");
                 Check(session.LocalSnapshot.sequence==0&&session.RemoteSnapshot.sequence==0&&session.SnapshotsSent==0&&session.RemoteSnapshotsReceived==0,"Return retained a prior race snapshot stream.");
@@ -742,6 +758,11 @@ namespace Idas3.Multiplayer
                 File.WriteAllText(Path.Combine(root,"returned-lobby-verified.json"),"{\"ready\":true}");
                 yield return Until(()=>File.Exists(Path.Combine(peerRoot,"returned-lobby-verified.json")),20,"Peer did not verify its reset lobby before re-ready.");
                 Phase("ready-second-race");yield return Until(()=>session.CanReady,15,"Returned lobby would not accept fresh readiness.");
+                yield return Frames(60);
+                var refreshedWords=new uint[307];
+                Check(Idas3MultiplayerNative.Idas3MultiplayerReadCar(session.LocalSavedCar.Selection,refreshedWords,307)>0,"Returned save cannot be read.");
+                for(int word=0;word<refreshedWords.Length;++word)
+                    Check(refreshedWords[word]==session.LocalSavedCar.Words[word],"Covered mode menu changed the agreed saved car before rematch.");
                 Check(menu.IsOpen,"Returned lobby must be open before the second automatic closure.");yield return Frames(3);session.SetReady(true);
                 if(role=="host"){yield return Until(()=>session.CanStart,20,"Both returned drivers could not become Ready again.");session.StartRace();}
                 yield return Until(()=>session.IsRacing,30,"Second native race did not load.");
@@ -782,6 +803,35 @@ namespace Idas3.Multiplayer
                 File.WriteAllText(Path.Combine(root,"second-race-verified.json"),"{\"verified\":true}");
                 yield return Until(()=>File.Exists(Path.Combine(peerRoot,"second-race-verified.json")),20,"Peer did not verify its second race.");
                 if(showcaseCheck)yield return Idas3MultiplayerPresentationSmoke.VerifyWinnerAndReturn(host,session,root,role);
+                else {
+                    driving=false;
+                    yield return Until(()=>session.CanReturnToLobby,180,"Second race did not reach its result.");
+                    yield return Until(()=>menu.ResultsPage==1&&menu.CanAcknowledgeReturnToLobby,30,"Second result omitted original points.");
+                    File.WriteAllText(Path.Combine(root,"second-points-ready.txt"),session.ResultText);
+                    yield return Until(()=>File.Exists(Path.Combine(peerRoot,"second-points-ready.txt")),10,"Peer did not reach second points page.");
+                    if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-multiplayer-waiting-no-check")>=0){
+                        pulse=13;yield return Until(()=>menu.ResultsPage==2&&menu.CanAcknowledgeReturnToLobby,5,"Second Continue page unavailable.");
+                        if(role=="join"){
+                            pulse=13;yield return Until(()=>session.LocalContinueRequested,5,"Second guest Yes unavailable.");
+                            yield return Until(()=>!session.IsRacing&&!session.InLobby&&!menu.IsOpen,10,"Peer No did not release a driver already waiting on Yes.");
+                        }else{
+                            yield return Until(()=>session.RemoteContinueRequested,10,"Host did not receive guest Yes.");
+                            pulse=27;yield return Until(()=>!session.IsRacing&&!session.InLobby&&!menu.IsOpen,10,"Host No did not disconnect to mode select.");
+                        }
+                    }else if(role=="join"){
+                        pulse=13;yield return Until(()=>menu.ResultsPage==2&&menu.CanAcknowledgeReturnToLobby,5,"No choice page unavailable.");
+                        // Escape/B is the visible No action, not implicit Yes.
+                        pulse=27;yield return Until(()=>!session.IsRacing&&!session.InLobby&&!menu.IsOpen,10,"No did not disconnect and dismiss online UI.");
+                    }else{
+                        string outcome=session.ResultText;int points=session.TuningPointsEarned;
+                        yield return Until(()=>session.ResultPeerLeft,10,"Peer No was not received.");
+                        Check(menu.ResultsPage==1&&session.ResultText==outcome&&session.TuningPointsEarned==points&&!session.DisconnectedFinish,"Peer No erased the settled result or skipped its points.");
+                        pulse=13;yield return Until(()=>menu.ResultsPage==2,5,"Departed-peer mode choice unavailable.");
+                        yield return Frames(6);pulse=13;
+                        yield return Until(()=>!session.IsRacing&&!session.InLobby&&!menu.IsOpen,10,"Completed result did not return to mode after peer No.");
+                    }
+                    Check(host.Status.frontendStage==5&&(host.Status.flags&1u)!=0,"No did not return to select a mode.");
+                }
                 report.passed=true;Phase("connected-return-verified");
             }finally{
                 acceleratedReturnWait=false;driving=false;host.DiagnosticFocusOverride=priorFocus;
@@ -1045,6 +1095,14 @@ namespace Idas3.Multiplayer
         }
         private IEnumerator CaptureMenu(string name)
         {
+            if(menu.ResultsVisible){
+                // The original owners are native camera/UI geometry, including
+                // the rotating result car. Capture those actual renderers.
+                yield return CaptureWorld(name);
+                Check(!shots[shots.Count-1].menuHeaderVisible,"Placeholder online panel covered the original result.");
+                if(menu.ResultsPage>0)Check((host.Status.flags&262144u)!=0,"Original result preview flag was absent.");
+                yield break;
+            }
             // Hidden-window transport matrix does not claim an IMGUI pixel check.
             // Game cameras are still rendered and validated below.
             if(WorldOnly)yield break;
@@ -1191,4 +1249,3 @@ namespace Idas3.Multiplayer
         }
     }
 }
-

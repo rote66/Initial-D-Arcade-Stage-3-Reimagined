@@ -5,7 +5,7 @@ using UnityEngine;
 public static class Idas3AssetPaths
 {
     public const string DataFolder = "IDAS3GameData";
-    public const int DataVersion = 2;
+    public const int DataVersion = 3;
     public static bool HasBundledData => Application.platform == RuntimePlatform.IPhonePlayer
         && File.Exists(Path.Combine(Application.streamingAssetsPath, DataFolder, "game-data.json"));
     // Packaging changes the data location, never the audio support in the core.

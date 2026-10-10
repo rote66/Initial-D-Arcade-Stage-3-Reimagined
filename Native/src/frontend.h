@@ -62,6 +62,7 @@ public:
     // Non-ASCII driver names use the recovered alphabet rather than the UI face.
     std::function<void(std::span<std::uint32_t>,int,int,const std::string&,float,float,float,float)> paintSaveName;
     MenuFont menuFont;
+    std::array<MenuFont,2> localizedMenuFonts;
     // In-memory host lookup; menu painting never reads save files.
     std::function<TimeAttackBest(unsigned,unsigned,unsigned)> timeAttackBest;
     std::function<TimeAttackEntry(unsigned,unsigned,unsigned)> importedPersonalBest;
@@ -120,6 +121,8 @@ public:
     bool saveCarChangeRequested=false;
     bool saveCarPreviewReset=false;
     bool showingGasstand()const{return stage==FrontendStage::Title&&attractChildId==11;}
+    void paintMenuMargins(std::span<std::uint32_t> target,int width,int height)const;
+    void advanceMenuBackdrop(double seconds);
     unsigned attractChild()const{return attractChildId;}
     // Source gear/view edges, consumed once at the next original60Hz tick.
     void queueRankingInput(original::OriginalRankingPageInput input){
@@ -177,6 +180,7 @@ private:
     std::vector<std::uint32_t> previousModePaintKey;
     const std::vector<std::uint32_t>* displayedCanvas=nullptr;
     std::uint64_t canvasRevision=0,displayedRevision=0;
+    std::uint64_t menuBackdropFrame=0,displayedBackdropFrame=0;
     int displayedWidth=0,displayedHeight=0;
     // 196CE0 changes only its selected glow during confirmation. Keep both
     // complete compositions, including their original depth ordering.
@@ -184,7 +188,6 @@ private:
     std::vector<int> rivalCacheKey;
     std::vector<int> previousKey;
     std::vector<int> previousMotionKey;
-    bool previousLocalized=false;
     int carouselMake=-1, carouselCar=-1, carouselSlot=0, carouselScroll=0;
     int displayedScroll=0, carConfirmationFrame=-1;
     // Time Attack owner+440 during phase3: AA0 at1, Stop after exceeding15.
@@ -194,6 +197,7 @@ private:
     std::uint32_t buntaBadgeFrame=0;
     std::uint32_t carFrame=0;
     double frameRemainder=0;
+    double menuBackdropRemainder=0;
     NativeTextureBank titleExtension,creditTextures;
     NativeSpriteBank creditSprites;
     bool hasTitleExtension=false;

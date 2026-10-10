@@ -18,6 +18,8 @@ public sealed class Idas3GameOptions
         public int frameRateLimit=60,antiAliasing=4,defaultCamera,controllerResponse;
         public int steeringSettingsVersion=1;
         public int aiDifficulty;
+        public int customMenuLanguage; // English / Japanese / Simplified Chinese; custom menus only.
+        public int arcadeTextLanguage; // 0 = English, 1 = original Japanese artwork; restart required.
         public float steeringDeadzoneGamepad=.1f,steeringDeadzonePrevious=.13f,steeringDeadzoneWheel;
         public float steeringSmoothing;
         public bool gravitySteering;
@@ -27,11 +29,14 @@ public sealed class Idas3GameOptions
         public string wheelFeedbackDevice="";
         public bool showFps,showOsd,muteWhenUnfocused;
         public bool discordPresence=true;
+        public bool hideLightsOffAdvantage=true;
         public bool communityTimes=true;
         public bool replayTimeAttack=true,replayOnline,replayLegend;
         public bool timeAttackGhost=true;
         public bool TimeAttackReplayRequired=>communityTimes||replayTimeAttack;
         public int rainDetail,importedSceneryDetail;
+        public int trackLighting=1; // 0 = original, 1 = balanced scenery exposure.
+        public bool sunGlare=true;
         public int hudMeterStyle; // Stable catalog ID: 0 = original, 1 = Stuttgart.
         public int hudMeterLayout=1; // 0 = saved legacy anchor, 1 = camera-aware wide meter defaults.
         public int hudOrnamentId; // Stable source ornament ID; 0 = off.
@@ -82,6 +87,7 @@ public sealed class Idas3GameOptions
             // Apply only the remaining ratio, including to its clipping bounds.
             return group==5?(float)HudSizePercent(group)/(100+25*Math.Max(0,Math.Min(2,minimapSize))):HudSizePercent(group)/100f;
         }
+        public int minimapDisplay; // 0 = map, 1 = original water cup, 2 = off.
         public int minimapSize; // 0 = original, 1 = 125%, 2 = 150%.
         public int minimapZoom=2; // Zoom-out only: 50%, 75%, original 100%.
         public float SteeringDeadzone {
@@ -153,8 +159,18 @@ public sealed class Idas3GameOptions
     public Values Defaults(){
         var defaults=new Values{width=Math.Max(640,platform.Width),height=Math.Max(360,platform.Height),
             displayMode=Math.Max(0,Math.Min(2,platform.DisplayMode))};
-        if(platform is UnityPlatform&&Application.platform==RuntimePlatform.IPhonePlayer){defaults.antiAliasing=2;defaults.discordPresence=false;}
+        if(platform is UnityPlatform&&Application.platform==RuntimePlatform.IPhonePlayer){defaults.antiAliasing=2;defaults.discordPresence=false;defaults.customMenuLanguage=Idas3MenuLocalization.DeviceLanguage;}
         return defaults;
+    }
+    // Native menus preload asynchronously, before the normal settings event.
+    // Read the same validated setting before creating any native asset owners.
+    public static int LoadArcadeTextLanguage(string saveRoot){
+        try{
+            string path=Path.Combine(saveRoot,"game-options.json");
+            if(!File.Exists(path))return 0;
+            var saved=new Values{version=0};JsonUtility.FromJsonOverwrite(File.ReadAllText(path),saved);
+            return saved.version==1&&saved.arcadeTextLanguage==1?1:0;
+        }catch(Exception e){Debug.LogWarning("Using English arcade text: "+e.Message);return 0;}
     }
     public void Initialize(string saveRoot){
         if(string.IsNullOrWhiteSpace(saveRoot))throw new ArgumentException("An options save directory is required.",nameof(saveRoot));
@@ -166,7 +182,8 @@ public sealed class Idas3GameOptions
                 // Initialize missing fields explicitly. The zero marker lets
                 // old JSON migrate without treating saved zero deadzones as
                 // missing once these settings have been written.
-                var loaded=new Values{version=0,steeringSettingsVersion=0,audioSettingsVersion=0,hudMeterLayout=-1};
+                int defaultsLanguage=current.customMenuLanguage;
+                var loaded=new Values{version=0,steeringSettingsVersion=0,audioSettingsVersion=0,hudMeterLayout=-1,customMenuLanguage=defaultsLanguage};
                 JsonUtility.FromJsonOverwrite(File.ReadAllText(file),loaded);
                 if(loaded==null||loaded.version!=1)throw new InvalidDataException("Unsupported options format.");
                 current=Normalize(loaded);loadedSaved=true;
@@ -176,7 +193,7 @@ public sealed class Idas3GameOptions
         // A missing file must not overwrite the host's diagnostic resolution,
         // vSync or frame cap. Normal first-run defaults already match the game.
         if(loadedSaved){var live=Defaults();platform.Apply(live,current,DisplayChanged(live,current));}
-        Changed?.Invoke(current);
+        Idas3MenuLocalization.SetLanguage(current.customMenuLanguage);Changed?.Invoke(current);
     }
     public void BeginEdit(){
         EnsureInitialized();
@@ -240,7 +257,7 @@ public sealed class Idas3GameOptions
         LastError=null;var next=Normalize(draft);var previous=current.Clone();
         bool displayChanged=DisplayChanged(previous,next);
         try{
-            platform.Apply(previous,next,displayChanged);current=next;draft=next.Clone();Changed?.Invoke(current);
+            platform.Apply(previous,next,displayChanged);current=next;draft=next.Clone();Idas3MenuLocalization.SetLanguage(current.customMenuLanguage);Changed?.Invoke(current);
             if(displayChanged){rollback=previous;lastNow=platform.Now;confirmationDeadline=lastNow+15;}
             else SaveCurrent();
             return true;
@@ -272,7 +289,7 @@ public sealed class Idas3GameOptions
         to.hudOnlineSize=from.hudOnlineSize;to.hudMirrorSize=from.hudMirrorSize;
         to.hudMessagesSize=from.hudMessagesSize;to.hudChallengersSize=from.hudChallengersSize;
         to.hudTimeExtensionSize=from.hudTimeExtensionSize;to.hudOrnamentSize=from.hudOrnamentSize;
-        to.minimapSize=from.minimapSize;to.minimapZoom=from.minimapZoom;
+        to.minimapDisplay=from.minimapDisplay;to.minimapSize=from.minimapSize;to.minimapZoom=from.minimapZoom;
     }
     public bool ConfirmDisplay(){
         if(!DisplayConfirmationPending)return false;
@@ -290,7 +307,7 @@ public sealed class Idas3GameOptions
         var changed=DisplayChanged(current,previous);
         try{platform.Apply(current,previous,changed);}
         catch(Exception error){LastError=(LastError==null?"":LastError+" ")+"Could not restore the display. "+error.Message;}
-        current=previous.Clone();draft=current.Clone();Changed?.Invoke(current);
+        current=previous.Clone();draft=current.Clone();Idas3MenuLocalization.SetLanguage(current.customMenuLanguage);Changed?.Invoke(current);
     }
     private void SaveCurrent(){
         Directory.CreateDirectory(Path.GetDirectoryName(file));
@@ -343,10 +360,14 @@ public sealed class Idas3GameOptions
         value.hudMirrorSize=Math.Max(0,Math.Min(4,value.hudMirrorSize));
         value.hudMessagesSize=Math.Max(0,Math.Min(4,value.hudMessagesSize));
         value.hudChallengersSize=Math.Max(0,Math.Min(4,value.hudChallengersSize));
+        value.minimapDisplay=Math.Max(0,Math.Min(2,value.minimapDisplay));
         value.minimapZoom=Math.Max(0,Math.Min(2,value.minimapZoom));
         value.minimapSize=Math.Max(0,Math.Min(2,value.minimapSize));
         value.rainDetail=Math.Max(0,Math.Min(1,value.rainDetail));
         value.importedSceneryDetail=Math.Max(0,Math.Min(2,value.importedSceneryDetail));
+        value.trackLighting=Math.Max(0,Math.Min(1,value.trackLighting));
+        if(value.customMenuLanguage<0||value.customMenuLanguage>2)value.customMenuLanguage=0;
+        if(value.arcadeTextLanguage!=1)value.arcadeTextLanguage=0;
         if(value.controllerResponse<0||value.controllerResponse>2)value.controllerResponse=0;
         if(value.steeringSettingsVersion<1){value.steeringDeadzoneGamepad=.1f;value.steeringDeadzonePrevious=.13f;value.steeringDeadzoneWheel=0;}
         value.steeringSettingsVersion=1;
@@ -365,7 +386,7 @@ public sealed class Idas3GameOptions
     public static bool Equivalent(Values a,Values b)=>a!=null&&b!=null&&
         a.masterVolume==b.masterVolume&&a.musicVolume==b.musicVolume&&a.engineVolume==b.engineVolume&&a.effectsVolume==b.effectsVolume&&a.tireVolume==b.tireVolume&&a.audioSettingsVersion==b.audioSettingsVersion&&
         !DisplayChanged(a,b)&&a.vSync==b.vSync&&a.frameRateLimit==b.frameRateLimit&&a.antiAliasing==b.antiAliasing&&
-        a.aiDifficulty==b.aiDifficulty&&a.defaultCamera==b.defaultCamera&&a.controllerResponse==b.controllerResponse&&a.timeAttackGhost==b.timeAttackGhost&&
+        a.aiDifficulty==b.aiDifficulty&&a.arcadeTextLanguage==b.arcadeTextLanguage&&a.customMenuLanguage==b.customMenuLanguage&&a.defaultCamera==b.defaultCamera&&a.controllerResponse==b.controllerResponse&&a.timeAttackGhost==b.timeAttackGhost&&
         a.steeringSettingsVersion==b.steeringSettingsVersion&&a.steeringDeadzoneGamepad==b.steeringDeadzoneGamepad&&
         a.steeringDeadzonePrevious==b.steeringDeadzonePrevious&&a.steeringDeadzoneWheel==b.steeringDeadzoneWheel&&
         a.steeringSmoothing==b.steeringSmoothing&&a.gravitySteering==b.gravitySteering&&
@@ -373,8 +394,8 @@ public sealed class Idas3GameOptions
         a.wheelForceFeedback==b.wheelForceFeedback&&a.wheelFeedbackStrength==b.wheelFeedbackStrength&&
         a.wheelFeedbackInvert==b.wheelFeedbackInvert&&a.wheelFeedbackDevice==b.wheelFeedbackDevice&&
         a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
-        a.discordPresence==b.discordPresence&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
+        a.discordPresence==b.discordPresence&&a.hideLightsOffAdvantage==b.hideLightsOffAdvantage&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
         a.hudMeterStyle==b.hudMeterStyle&&a.hudMeterLayout==b.hudMeterLayout&&a.hudOrnamentId==b.hudOrnamentId&&a.hudShiftLights==b.hudShiftLights&&a.hudPedalIndicators==b.hudPedalIndicators&&a.hudNameplateStyle==b.hudNameplateStyle&&
         SameHudPositions(a,b)&&SameHudSizes(a,b)&&a.hudOrnamentSize==b.hudOrnamentSize&&a.hudTimeExtensionSize==b.hudTimeExtensionSize&&a.hudTimerSize==b.hudTimerSize&&a.hudSpeedometerSize==b.hudSpeedometerSize&&a.hudRecordsSize==b.hudRecordsSize&&a.hudLegendSize==b.hudLegendSize&&a.hudOnlineSize==b.hudOnlineSize&&a.hudMirrorSize==b.hudMirrorSize&&a.hudMessagesSize==b.hudMessagesSize&&a.hudChallengersSize==b.hudChallengersSize&&
-        a.minimapSize==b.minimapSize&&a.minimapZoom==b.minimapZoom&&a.rainDetail==b.rainDetail&&a.importedSceneryDetail==b.importedSceneryDetail;
+        a.minimapDisplay==b.minimapDisplay&&a.minimapSize==b.minimapSize&&a.minimapZoom==b.minimapZoom&&a.rainDetail==b.rainDetail&&a.importedSceneryDetail==b.importedSceneryDetail&&a.trackLighting==b.trackLighting&&a.sunGlare==b.sunGlare;
 }

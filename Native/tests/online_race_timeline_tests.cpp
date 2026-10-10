@@ -26,6 +26,8 @@ std::array<OriginalVehicleInputs,2> driving(const OnlineRaceSimulation& sim,std:
     std::array<OriginalVehicleInputs,2> out;
     for(unsigned slot=0;slot<2;++slot){
         out[slot]=adaptOriginalHostInput(host[slot],onlineRaceTestControls(sim,slot,frame),sim.setup().automatic[slot],false,frame);
+        // Exercise direct gears through delayed/reordered history and rollback.
+        if(frame%180<30)out[slot].requestedGear=std::uint8_t(1+(frame/180+slot)%6);
     }
     return out;
 }
@@ -68,6 +70,12 @@ void wireContracts(const std::filesystem::path& root){
     wireBackpressure(root);
     std::array<OriginalRaceRuleState,2> result;
     require(resolveOnlineRaceWinner(result)==-3,"Unfinished race awarded a result");
+    result[0].phase=OriginalRacePhase::Finished;
+    require(resolveOnlineRaceWinner(result)==0,"Host finish waited for unfinished client");
+    std::swap(result[0],result[1]);
+    require(resolveOnlineRaceWinner(result)==1,"Client finish waited for unfinished host");
+    result[1].phase=OriginalRacePhase::TimeUp;
+    require(resolveOnlineRaceWinner(result)==-3,"One timeout ended a still-running race");
     for(auto& state:result)state.phase=OriginalRacePhase::Finished;
     result[0].times.finishTime=10000;result[1].times.finishTime=10004;
     require(resolveOnlineRaceWinner(result)==0,"Sub-frame host win became a draw");
@@ -80,6 +88,7 @@ void wireContracts(const std::filesystem::path& root){
     auto selected=setup(3);OnlineRaceSimulation a(root,selected),b(root,selected);
     OnlineRaceLink host(a,91,true),client(b,91,false);auto input=neutral();
     for(unsigned f=0;f<600;++f){
+        input.requestedGear=std::uint8_t(1+(f/30)%6);
         require(host.step(input)&&client.step(input),"Wire stalled on a healthy link");
         if(f%2==0){auto h=host.packet(),c=client.packet();host.receive(c);client.receive(h);host.reconcile();client.reconcile();}
     }
@@ -92,7 +101,69 @@ void wireContracts(const std::filesystem::path& root){
     require(host.step(input)&&client.step(input),"Digest setup stalled");auto c=client.packet();host.receive(c);host.reconcile();bad=host.packet();bad[24]^=1;reject(bad);
     std::cout<<"PASS actual wire codec, confirmed hash exchange, truncation/version/race/reserved/digest rejection"<<std::endl;
 }
+void wireOutageRecovery(const std::filesystem::path& root){
+    constexpr unsigned frames=600;
+    const auto selected=setup(3);const auto baseline=record(root,selected,frames);
+    // Stop delivery for three seconds in either direction, then both. Use the
+    // production packet codec and differently paced peers, not direct timeline
+    // injection: one side may confirm input while the other's ACKs are lost.
+    for(unsigned outage=0;outage<3;++outage){
+        OnlineRaceSimulation a(root,selected),b(root,selected);
+        std::array<unsigned,2> emitted{};
+        auto output=[&](unsigned slot,const OnlineRaceFrame& e,std::uint64_t digest){
+            require(e.frame==emitted[slot]++,"Outage repeated or skipped confirmed effects");
+            require(digest==baseline.hashes.at(e.frame),"Outage changed confirmed race state");
+            require(onlineContactEffectsDigest(e)==baseline.contactEffects.at(e.frame),"Outage changed contact effects");
+        };
+        OnlineRaceLink host(a,92,true,[&](const auto& e,auto d){output(0,e,d);});
+        OnlineRaceLink client(b,92,false,[&](const auto& e,auto d){output(1,e,d);});
+        std::array<OnlineRaceLink*,2> peers{&host,&client};
+        std::array<std::vector<std::uint8_t>,2> delayed;
+        unsigned stalls=0;
+        for(unsigned wall=0;wall<2000&&(emitted[0]<frames||emitted[1]<frames);++wall){
+            for(unsigned slot=0;slot<2;++slot){auto& peer=*peers[slot];peer.reconcile();
+                if(peer.timeline().frame()<frames && (slot==0||wall%3!=0)){
+                    if(!peer.step(baseline.inputs.at(peer.timeline().frame())[slot]))++stalls;
+                }
+            }
+            auto h=host.packet(),c=client.packet();std::array packets{h,c};
+            for(unsigned receiver=0;receiver<2;++receiver){
+                const auto& bytes=packets[1-receiver];
+                if(wall==175)delayed[receiver]=bytes;
+                if(wall>=180&&wall<360&&(outage==2||outage==receiver))continue;
+                peers[receiver]->receive(bytes);
+                if(wall%17==0)peers[receiver]->receive(bytes);
+                if(wall==362)peers[receiver]->receive(delayed[receiver]);
+                peers[receiver]->reconcile();
+            }
+        }
+        require(stalls>0,"Outage never exhausted the bounded history");
+        require(emitted[0]==frames&&emitted[1]==frames,"Peers failed to recover after a packet outage");
+        require(a.digest()==b.digest()&&a.digest()==baseline.hashes.back(),"Recovered peer states disagree");
+        std::cout<<"PASS wire outage="<<outage<<" stalls="<<stalls<<" confirmed_peer_frames="<<emitted[0]+emitted[1]<<"; asymmetric pace, duplicates and reordered packets"<<std::endl;
+    }
+}
 void contracts(const std::filesystem::path& root){
+    for(unsigned winner=0;winner<2;++winner){
+        OnlineRaceSimulation ended(root,setup(6));const auto idle=neutral();
+        for(unsigned f=0;f<300;++f)ended.step({idle,idle});
+        // Isolated numerical boundary fixture: let the real rules cross their
+        // goal with the other car still at the start. No runtime test hook.
+        auto& rules=const_cast<OriginalRaceRules&>(ended.rules(winner));
+        auto state=rules.state();state.progress.index=rules.rules().goalIndex;
+        rules.restoreNumericalState(state);
+        const auto crossing=ended.step({idle,idle});
+        require(crossing.rules[winner].finished&&resolveOnlineRaceWinner(crossing.states)==int(winner),"First source goal did not settle the online race");
+        const auto loser=1-winner;const auto before=ended.rules(loser).state();
+        require(before.phase==OriginalRacePhase::Running&&before.times.finishTime==0xffffffffu,"Loser was given a fictional finish");
+        const auto checkpoint=ended.checkpoint();
+        for(unsigned f=0;f<30;++f)ended.step({idle,idle});
+        require(ended.rules(loser).state().elapsed.value==before.elapsed.value&&ended.rules(loser).state().progress.index==before.progress.index,"Trailing car clock/progress continued after the winner finished");
+        require(ended.car(loser).raceAutomaticBrakeByte()!=0&&ended.car(winner).raceAutomaticBrakeByte()!=0,"Both cars must brake after the first finish");
+        const auto digest=ended.digest();ended.restore(checkpoint);
+        for(unsigned f=0;f<30;++f)ended.step({idle,idle});
+        require(ended.digest()==digest,"Settled first-finish result was not rollback deterministic");
+    }
     {
         OnlineRaceSimulation ended(root,setup(6));const auto idle=neutral();
         for(unsigned f=0;f<20000&&ended.rules(0).state().phase!=OriginalRacePhase::TimeUp;++f)ended.step({idle,idle});
@@ -185,8 +256,10 @@ Report run(const std::filesystem::path& root,const OnlineRaceSetup& selected,con
 }
 int main(int argc,char** argv)try{
     if(argc<2)throw std::invalid_argument("online_race_timeline_tests native_root [report.csv] [frames=1800] [cases=18]");
-    const std::filesystem::path root=argv[1];unsigned frames=argc>3?std::stoul(argv[3]):1800,cases=argc>4?std::stoul(argv[4]):18;
-    contracts(root);wireContracts(root);std::ofstream csv;if(argc>2)csv.open(argv[2]);
+    const std::filesystem::path root=argv[1];
+    if(argc>2&&std::string(argv[2])=="--recovery"){wireOutageRecovery(root);return 0;}
+    unsigned frames=argc>3?std::stoul(argv[3]):1800,cases=argc>4?std::stoul(argv[4]):18;
+    contracts(root);wireContracts(root);wireOutageRecovery(root);std::ofstream csv;if(argc>2)csv.open(argv[2]);
     if(csv)csv<<"case,condition,car0,car1,ping_ms,jitter_ms,loss_pct,confirmed_peer_frames,contacts,wall_impacts,host_rollbacks,client_rollbacks,replayed_frames,max_depth,p99_both_peers_ms,max_both_peers_ms,max_correction_units,history_bytes_both_peers,packets,lost,duplicate,desyncs\n";
     std::uint64_t checked=0,contacts=0;
     for(unsigned scenario=0;scenario<cases;++scenario){auto selected=setup(scenario);

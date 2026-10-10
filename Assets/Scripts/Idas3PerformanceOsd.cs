@@ -52,8 +52,8 @@ public sealed class Idas3PerformanceOsd : MonoBehaviour
         if(style==null)style=new GUIStyle(GUI.skin.label){padding=new RectOffset(0,0,0,0),fontStyle=FontStyle.Bold};
         style.fontSize=Mathf.RoundToInt(18*unit);
         var matrix=GUI.matrix;var color=GUI.color;GUI.matrix=Matrix4x4.identity;GUI.depth=-21000;
-        var lines=Array.ConvertAll(Text.Split('\n'),Idas3Localization.Text);
-        var localizedStyle=Idas3Localization.Style(style);
+        var lines=Array.ConvertAll(Text.Split('\n'),Idas3MenuLocalization.T);
+        var localizedStyle=Idas3MenuLocalization.Style(style);
         float width=0,height=0;
         foreach(string line in lines){var size=localizedStyle.CalcSize(new GUIContent(line));width=Mathf.Max(width,size.x);height=Mathf.Max(height,size.y);}
         // A CJK font has a taller line box than the English font. Measure the

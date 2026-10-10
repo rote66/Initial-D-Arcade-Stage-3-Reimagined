@@ -242,7 +242,12 @@ void OriginalTimeAttackVisit::paintLecture(std::span<std::uint32_t> target,int w
         constexpr std::array<unsigned,4> tsuchisakaPages{4,0,1,3};
         const auto artworkIndex=course==7?tsuchisakaPages[mapIndex_]:
             course==6?(mapIndex_==0?4u:mapIndex_-1):mapIndex_;
-        c.chunk(map.model,map.textures,artworkIndex,0,24);
+        // Shomaru's three close-up pieces are authored opposite the
+        // overview/telemetry orientation. Rotate artwork around the map
+        // centre (315,291), then apply the shared 24px screen offset.
+        // Keep driving/impact coordinates and every other course unchanged.
+        if(course==6&&mapIndex_)c.chunk(map.model,map.textures,artworkIndex,630,606,-1,-1);
+        else c.chunk(map.model,map.textures,artworkIndex,0,24);
     }else{
         c.rectangle(195,195,240,240,0xff202c39);
         const auto& page=setup_.customMaps.at(mapIndex_);
@@ -290,7 +295,7 @@ void OriginalTimeAttackVisit::paintRanking(std::span<std::uint32_t> target,int w
     using namespace ranking_data;const Canvas c(target,width,height);const auto course=setup_.condition/2,direction=setup_.condition&1;
     std::vector<OriginalRankingBoardDraw> draws;
     auto fixed=[&](unsigned chunk,Vec3 pos={}){OriginalRankingBoardDraw d;d.chunk=chunk;d.position=pos;draws.push_back(d);};
-    fixed(48);if(setup_.customCourseName.empty())fixed(courseChunks[course]);fixed(routeChunks[(setup_.customCourseName.empty()?course:3)*2+direction]);if(course!=8)fixed(setup_.weather?43:42);fixed(47);fixed(3);
+    fixed(48);if(setup_.customCourseName.empty())fixed(courseChunks[course]);fixed(routeChunks[originalCoursePresentationCondition(setup_.condition)]);if(course!=8)fixed(setup_.weather?43:42);fixed(47);fixed(3);
     // ARankinTA supplies a nonnegative qualified row, suppressing attract's
     // gear/model hint50. That control belongs only to attract child12.
     float y=f(lit_0C1BDBC8);

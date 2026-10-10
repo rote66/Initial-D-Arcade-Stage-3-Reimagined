@@ -27,6 +27,7 @@ public sealed class Idas3IosDataGate : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap() {
         if (Application.platform != RuntimePlatform.IPhonePlayer) return;
+        Idas3MenuLocalization.SetLanguage(Idas3MenuLocalization.LoadLanguage(Path.Combine(Application.persistentDataPath,"userdata-unity-scene")));
         PrepareDocuments();
         // A signed full IPA reads its resources in place, without duplicating
         // several GB into Documents or offering an importer for a read-only bundle.
@@ -44,6 +45,7 @@ public sealed class Idas3IosDataGate : MonoBehaviour
         if (operation != null || selecting) return;
         cancellation?.Dispose(); cancellation = new CancellationTokenSource(); var token = cancellation.Token;
         importing = false; message = "Checking installed game data…";
+        Idas3MenuLocalization.SetLanguage(Idas3MenuLocalization.LoadLanguage(Path.Combine(Application.persistentDataPath,"userdata-unity-scene")));
         PrepareDocuments();
         operation = Task.Run(() => { Idas3DataPackage.Recover(root); Idas3DataPackage.ValidateDirectory(root, token); }, token);
     }
@@ -68,6 +70,7 @@ public sealed class Idas3IosDataGate : MonoBehaviour
         if (string.IsNullOrEmpty(path)) { message = "Import cancelled. Your saved games are kept."; return; }
         cancellation?.Dispose(); cancellation = new CancellationTokenSource(); var token = cancellation.Token;
         progress = 0; importing = true; message = "Installing game data…";
+        Idas3MenuLocalization.SetLanguage(Idas3MenuLocalization.LoadLanguage(Path.Combine(Application.persistentDataPath,"userdata-unity-scene")));
         PrepareDocuments();
         operation = Task.Run(() => { Idas3DataPackage.Import(path, root, value => progress = value, token); }, token);
     }
@@ -100,14 +103,14 @@ public sealed class Idas3IosDataGate : MonoBehaviour
         title.fontSize = Mathf.RoundToInt(36 * scale); body.fontSize = Mathf.RoundToInt(21 * scale); button.fontSize = Mathf.RoundToInt(20 * scale);
         title.normal.textColor = body.normal.textColor = button.normal.textColor = Color.white;
         Fill(new Rect(0, 0, Screen.width, Screen.height), new Color(.025f,.035f,.05f)); Fill(new Rect(x,y,1020*scale,440*scale),new Color(.055f,.075f,.105f));
-        Idas3Localization.Label(new Rect(x+36*scale,y+25*scale,948*scale,55*scale), importing ? "INSTALLING GAME DATA" : "GAME DATA", title);
-        Idas3Localization.Label(new Rect(x+36*scale,y+102*scale,948*scale,66*scale), message, body);
-        Idas3Localization.Label(new Rect(x+36*scale,y+181*scale,948*scale,102*scale), "Install the data package once. App updates keep your data and saves.\n\nOr unzip IDAS3GameData into this app's Documents folder, then tap CHECK AGAIN.", body);
+        Idas3MenuLocalization.Label(new Rect(x+36*scale,y+25*scale,948*scale,55*scale), importing ? "INSTALLING GAME DATA" : "GAME DATA", title);
+        Idas3MenuLocalization.Label(new Rect(x+36*scale,y+102*scale,948*scale,66*scale), message, body);
+        Idas3MenuLocalization.Label(new Rect(x+36*scale,y+181*scale,948*scale,102*scale), "Install the data package once. App updates keep your data and saves.\n\nOr unzip IDAS3GameData into this app's Documents folder, then tap CHECK AGAIN.", body);
         importButton = new Rect(x+36*scale,y+351*scale,455*scale,58*scale); retryButton = new Rect(x+529*scale,y+351*scale,455*scale,58*scale);
         if (importing) { Fill(new Rect(x+36*scale,y+312*scale,948*scale,10*scale),new Color(.2f,.25f,.33f)); Fill(new Rect(x+36*scale,y+312*scale,948*scale*progress,10*scale),new Color(1,.66f,.3f)); }
         Fill(importButton,new Color(.16f,.21f,.29f)); Fill(retryButton,new Color(.16f,.21f,.29f));
-        Idas3Localization.Label(importButton, importing ? "CANCEL IMPORT  " + Mathf.RoundToInt(progress*100) + "%" : "IMPORT DATA ZIP", button);
-        Idas3Localization.Label(retryButton,"CHECK AGAIN",button);
+        Idas3MenuLocalization.Label(importButton, importing ? "CANCEL IMPORT  " + Mathf.RoundToInt(progress*100) + "%" : "IMPORT DATA ZIP", button);
+        Idas3MenuLocalization.Label(retryButton,"CHECK AGAIN",button);
         GUI.matrix = matrix; GUI.color = color;
     }
     private void OnDestroy() { cancellation?.Cancel(); cancellation?.Dispose(); }

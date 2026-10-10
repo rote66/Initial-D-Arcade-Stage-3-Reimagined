@@ -6,8 +6,8 @@ import importlib.util
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'Builds/iOS'
-PACKS = ('HAKONE', 'SADAMINE', 'ENNA', 'MYOGI_SPECIAL', 'USUI_SPECIAL', 'MOMIJI', 'TSUBAKI')
-VERSION = 2
+PACKS = ('HAKONE', 'SADAMINE', 'ENNA', 'MYOGI_SPECIAL', 'USUI_SPECIAL', 'MOMIJI', 'TSUBAKI', 'GUNSAI', 'ODAWARA')
+VERSION = 3
 MODES = ('full', 'core-full', 'core-small')
 MUSIC_ROOT = OUTPUT / 'Music-MP3'
 

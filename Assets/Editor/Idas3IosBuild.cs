@@ -31,7 +31,7 @@ public static class Idas3IosBuild
         PlayerSettings.productName="Initial D iOS";
         PlayerSettings.bundleVersion="0.3.95";
         PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,"org.idas3.reimagined.ios");
-        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"12";
+        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"13";
         if(!int.TryParse(buildNumber,out int number)||number<1)throw new ArgumentException("IDAS3_BUILD_NUMBER must be a positive integer.");
         PlayerSettings.iOS.buildNumber=buildNumber;
         PlayerSettings.enableFrameTimingStats=true;
@@ -92,9 +92,10 @@ public static class Idas3IosBuild
         }
         var plist=new PlistDocument();string info=Path.Combine(output,"Info.plist");plist.ReadFromFile(info);
         plist.root.SetString("MinimumOSVersion","15.0");
+        plist.root.SetString("IDAS3UpstreamRelease","0.3.95-community-replays.46");
         plist.root.SetString("CFBundleDevelopmentRegion","en");
         var localizations=plist.root.CreateArray("CFBundleLocalizations");
-        foreach(string language in new[]{"en","zh-Hans","zh-Hant"})localizations.AddString(language);
+        foreach(string language in new[]{"en","ja","zh-Hans"})localizations.AddString(language);
         plist.root.SetBoolean("UIFileSharingEnabled",true);
         plist.root.SetBoolean("LSSupportsOpeningDocumentsInPlace",true);
         plist.root.SetString("NSMotionUsageDescription","Use device tilt for optional gravity steering.");

@@ -14,27 +14,30 @@ public static class Idas3ControllerMenuChecks
     }
     public static void Run(){
         checks=0;string root=Path.GetFullPath("Verification/wheel-menu-navigation-20260918/unit-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+        CheckSunGlareOptions(Path.Combine(root,"sun-glare"));
+        CheckLightsOffAdvantage(Path.Combine(root,"night-advantage"));
         var go=new GameObject("Private menu checks");
         try{
             var options=new Idas3GameOptions(new Platform());options.Initialize(root);
             var bindings=new Idas3ControlBindings();bindings.Initialize(root);
             var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.InitializeBindings(bindings);menu.OpenAttractOptions();
             Check(menu.CategoryFocused,"Attract category focus");
-            for(int tab=0;tab<8;++tab){
+            for(int tab=0;tab<Enum.GetValues(typeof(Idas3PauseMenu.Category)).Length;++tab){
                 Check(menu.SelectedTab==tab,"Category traversal");menu.Activate();Check(!menu.CategoryFocused,"Enter category");
                 menu.Back();Check(menu.IsOpen&&menu.CategoryFocused,"Back preserves settings screen");menu.Navigate(1);
             }
             Check(menu.SelectedTab==0,"Category wrap");menu.Activate();float volume=options.Draft.masterVolume;
             menu.NavigateHorizontal(-1);menu.Back();Check(options.Draft.masterVolume<volume,"Back from fields preserves draft");
             menu.Navigate(1);menu.Activate();menu.Back();menu.Navigate(-1);menu.Activate();Check(options.Draft.masterVolume<volume,"Switch category preserves draft");
-            for(int i=0;i<6;++i)menu.Navigate(1);menu.Activate();Check(!options.HasUnsavedChanges&&options.Current.masterVolume<volume,"Apply via menu navigation");
+            for(int i=0;i<7;++i)menu.Navigate(1);menu.Activate();Check(!options.HasUnsavedChanges&&options.Current.masterVolume<volume,"Apply via menu navigation");
             menu.Back();menu.Back();Check(!menu.IsOpen,"Exit settings");
             CheckCameraOptions(Path.Combine(root,"camera-options"));
+            CheckOptionCategories(Path.Combine(root,"categories"));
             menu.SetWheelNavigation(true);menu.OpenAttractOptions();menu.Activate();
             float music=options.Draft.musicVolume;menu.NavigateHorizontal(1);menu.Activate();Check(menu.WheelEditing,"Pedal enters wheel value edit");
             menu.NavigateHorizontal(-1);Check(options.Draft.musicVolume<music,"Wheel edits focused value");
             menu.Back();Check(!menu.WheelEditing&&!menu.CategoryFocused,"Brake leaves edit before category");
-            for(int i=0;i<5;++i)menu.NavigateHorizontal(1);menu.Activate();Check(!options.HasUnsavedChanges&&options.Current.musicVolume<music,"Wheel reaches Apply without paddles");
+            for(int i=0;i<6;++i)menu.NavigateHorizontal(1);menu.Activate();Check(!options.HasUnsavedChanges&&options.Current.musicVolume<music,"Wheel reaches Apply without paddles");
             menu.Back();menu.NavigateHorizontal(1);Check(menu.SelectedTab==1,"Wheel switches category");menu.Back();Check(!menu.IsOpen,"Wheel exits settings");menu.SetWheelNavigation(false);
             menu.OpenAttractOptions();menu.SelectTab(3);menu.SelectBindingColumn(0);menu.Activate();
             Check(menu.BindingChoiceVisible&&!bindings.IsCapturing,"Binding actions accessible before capture");menu.Back();Check(!menu.BindingChoiceVisible,"Controller cancels binding chooser");
@@ -68,6 +71,22 @@ public static class Idas3ControllerMenuChecks
             File.WriteAllText(Path.Combine(root,"result.txt"),"PASS "+checks+" checks\n");File.WriteAllText("Verification/wheel-menu-navigation-20260918/unit-result.txt","PASS "+checks+" checks; isolated preferences: "+root+"\n");Debug.Log("PASS controller menu checks "+checks);
         }finally{UnityEngine.Object.DestroyImmediate(go);}
     }
+    private static void CheckSunGlareOptions(string root){
+        Directory.CreateDirectory(root);
+        string file=Path.Combine(root,"game-options.json");
+        const string legacy="{\"version\":1,\"musicVolume\":0.4,\"trackLighting\":0}";
+        File.WriteAllText(file,legacy);
+        var options=new Idas3GameOptions(new Platform());options.Initialize(root);
+        Check(options.Current.sunGlare&&File.ReadAllText(file)==legacy,"Legacy preferences must retain sun glare without rewriting saves");
+        options.BeginEdit();options.Draft.sunGlare=false;
+        Check(options.HasUnsavedChanges&&options.Current.sunGlare,"Glare edit must remain a tracked draft until Apply");
+        options.BeginEdit();Check(options.Draft.sunGlare&&!options.HasUnsavedChanges,"Cancel must restore the saved glare setting");
+        options.Draft.sunGlare=false;Check(options.ApplyDraft(),"Sun glare Apply failed");
+        var reload=new Idas3GameOptions(new Platform());reload.Initialize(root);
+        Check(!reload.Current.sunGlare&&reload.Current.musicVolume==.4f&&reload.Current.trackLighting==0,"Disabling glare must persist without changing other settings");
+        reload.BeginEdit();reload.ResetDraft();
+        Check(reload.Draft.sunGlare&&!reload.Current.sunGlare,"Reset must propose the original glare without immediately applying it");
+    }
     private static void CheckCameraOptions(string root){
         var options=new Idas3GameOptions(new Platform());options.Initialize(Path.Combine(root,"new"));
         Check(options.Current.defaultCamera==0&&options.Draft.defaultCamera==0&&!options.HasUnsavedChanges,"New preferences must keep Bumper as the default camera");
@@ -96,7 +115,7 @@ public static class Idas3ControllerMenuChecks
             menu.Activate();menu.Activate();Check(options.Draft.defaultCamera==2&&options.Current.defaultCamera==0&&options.HasUnsavedChanges,"Confirm should select Natural only in the draft");
             menu.Back();menu.Back();Check(!menu.IsOpen&&options.Current.defaultCamera==0&&File.ReadAllText(options.FilePath)==original,"Back committed an unapplied camera choice");
             menu.OpenAttractOptions();menu.SelectTab(2);menu.NavigateHorizontal(-1);
-            for(int i=0;i<11;++i)menu.Navigate(1);menu.Activate();
+            for(int i=0;i<menu.OptionRows+1;++i)menu.Navigate(1);menu.Activate();
             expected.defaultCamera=2;
             Check(!options.HasUnsavedChanges&&Idas3GameOptions.Equivalent(options.Current,expected),"Camera menu Apply did not preserve all unrelated preferences");
             var reload=new Idas3GameOptions(new Platform());reload.Initialize(Path.GetDirectoryName(options.FilePath));
@@ -105,6 +124,76 @@ public static class Idas3ControllerMenuChecks
             Check(options.Draft.defaultCamera==0&&options.Current.defaultCamera==2,"Natural should wrap to Bumper without applying it");
             menu.Back();menu.Back();Check(options.Current.defaultCamera==2&&File.ReadAllText(options.FilePath)==applied,"Cancel overwrote the saved Natural preference");
             options.BeginEdit();options.ResetDraft();Check(options.Draft.defaultCamera==0&&options.Current.defaultCamera==2,"Reset defaults must propose Bumper without changing the saved camera");
+        }finally{UnityEngine.Object.DestroyImmediate(go);}
+    }
+    private static void CheckLightsOffAdvantage(string root){
+        Directory.CreateDirectory(root);File.WriteAllText(Path.Combine(root,"game-options.json"),"{\"version\":1}");
+        var options=new Idas3GameOptions(new Platform());options.Initialize(root);
+        Check(options.Current.hideLightsOffAdvantage,"Existing settings should hide lights-off advantage by default");
+        options.BeginEdit();options.Draft.hideLightsOffAdvantage=false;
+        Check(options.HasUnsavedChanges&&options.Current.hideLightsOffAdvantage,"Draft option applied early or was not detected");
+        options.BeginEdit();Check(options.Draft.hideLightsOffAdvantage,"Discard did not restore gap option");
+        options.Draft.hideLightsOffAdvantage=false;Check(options.ApplyDraft(),"Could not apply lights-off advantage option");
+        var loaded=new Idas3GameOptions(new Platform());loaded.Initialize(root);
+        Check(!loaded.Current.hideLightsOffAdvantage,"Visible-gap preference did not survive reload");
+        loaded.BeginEdit();loaded.ResetDraft();Check(loaded.Draft.hideLightsOffAdvantage&&!loaded.Current.hideLightsOffAdvantage,"Reset changed the applied preference");
+    }
+    private static void CheckOptionCategories(string root){
+        var options=new Idas3GameOptions(new Platform());options.Initialize(root);
+        var go=new GameObject("Private option category checks");
+        try{
+            var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.OpenAttractOptions();
+            var expected=options.Current.Clone();
+            Action<Idas3PauseMenu.Category,int> select=(category,row)=>{menu.SelectCategory(category);for(int i=0;i<row;++i)menu.Navigate(1);};
+            select(Idas3PauseMenu.Category.Audio,5);menu.Activate();expected.muteWhenUnfocused=!expected.muteWhenUnfocused;
+            select(Idas3PauseMenu.Category.Graphics,8);menu.Activate();expected.trackLighting=1-expected.trackLighting;
+            select(Idas3PauseMenu.Category.Graphics,9);menu.Activate();expected.sunGlare=!expected.sunGlare;
+            select(Idas3PauseMenu.Category.Graphics,10);menu.Activate();expected.showFps=!expected.showFps;
+            select(Idas3PauseMenu.Category.Gameplay,1);menu.Activate();expected.aiDifficulty=1;
+            select(Idas3PauseMenu.Category.Gameplay,2);menu.Activate();expected.timeAttackGhost=!expected.timeAttackGhost;
+            select(Idas3PauseMenu.Category.Steering,0);menu.Activate();expected.controllerResponse=1;
+            menu.Navigate(1);menu.NavigateHorizontal(1);expected.SteeringDeadzone=.14f;
+            menu.Navigate(1);menu.NavigateHorizontal(1);expected.steeringSmoothing=.01f;
+            menu.Navigate(1);menu.Activate();expected.wheelForceFeedback=true;
+            menu.Navigate(1);menu.Navigate(1);menu.NavigateHorizontal(1);expected.wheelFeedbackStrength=.36f;
+            menu.Navigate(1);menu.Activate();expected.wheelFeedbackInvert=true;
+            select(Idas3PauseMenu.Category.Online,2);menu.Activate();expected.discordPresence=!expected.discordPresence;
+            select(Idas3PauseMenu.Category.Online,3);menu.Activate();expected.hideLightsOffAdvantage=false;
+            select(Idas3PauseMenu.Category.Hud,3);menu.Activate();expected.minimapDisplay=1;
+            menu.Navigate(1);menu.NavigateHorizontal(1);expected.SetHudSizePercent(5,101);
+            menu.Navigate(1);menu.NavigateHorizontal(1);expected.minimapZoom=1;
+            select(Idas3PauseMenu.Category.Hud,2);menu.Activate();
+            Check(menu.HudSizesVisible&&menu.SelectedTab==(int)Idas3PauseMenu.Category.Hud,"HUD Sizes must open under HUD options");
+            for(int row=0;row<8;++row)menu.Navigate(1);menu.NavigateHorizontal(1);expected.SetHudSizePercent(10,101);
+            Check(options.HasUnsavedChanges&&Idas3GameOptions.Equivalent(options.Draft,expected),"Relocated controls edited the wrong settings: "+JsonUtility.ToJson(options.Draft)+" expected "+JsonUtility.ToJson(expected));
+            Check(!options.Current.showFps&&!options.Current.muteWhenUnfocused,"Category changes applied before Apply");
+            menu.Navigate(1);menu.Navigate(1);menu.Activate();
+            Check(!options.HasUnsavedChanges&&Idas3GameOptions.Equivalent(options.Current,expected),"Apply lost changes across categories");
+            menu.Back();Check(!menu.HudSizesVisible&&menu.IsOpen&&menu.DiagnosticSelection==3,"Back from HUD Sizes must return to its parent entry");
+            menu.Activate();menu.NavigateHorizontal(1);
+            menu.Back();Check(!menu.HudSizesVisible&&options.HasUnsavedChanges,"Returning to HUD options discarded pending size changes");
+            menu.Activate();menu.SelectCategory(Idas3PauseMenu.Category.Audio);
+            Check(!menu.HudSizesVisible&&menu.OptionRows==6,"Switching categories left the HUD Sizes submenu active");
+            menu.Back();menu.Back();menu.OpenAttractOptions();
+            Check(!options.HasUnsavedChanges,"Leaving settings did not discard unapplied size changes");
+            select(Idas3PauseMenu.Category.Hud,2);menu.SetWheelNavigation(true);menu.Activate();menu.Activate();
+            Check(menu.HudSizesVisible&&menu.WheelEditing,"Wheel could not enter a HUD size adjustment");
+            menu.Back();Check(menu.HudSizesVisible&&!menu.WheelEditing,"Wheel Back must finish adjusting before leaving HUD Sizes");
+            menu.Back();Check(!menu.HudSizesVisible&&menu.DiagnosticSelection==3,"Wheel Back must return to HUD options");menu.SetWheelNavigation(false);
+            var reload=new Idas3GameOptions(new Platform());reload.Initialize(root);
+            Check(Idas3GameOptions.Equivalent(reload.Current,expected),"Relocated preferences did not survive reload");
+            select(Idas3PauseMenu.Category.Audio,5);menu.Activate();menu.Back();menu.Back();
+            Check(!menu.IsOpen&&Idas3GameOptions.Equivalent(options.Current,expected),"Cancel applied a relocated setting");
+            menu.OpenAttractOptions();select(Idas3PauseMenu.Category.Gameplay,3);menu.FullTuneAvailable=false;menu.Activate();
+            Check(!menu.TryConsumeCommand(out _),"Unavailable Full Tune activated");
+            menu.FullTuneAvailable=true;menu.Activate();
+            Check(menu.TryConsumeCommand(out var command)&&command==Idas3PauseMenu.Command.FullTune,"Full Tune action was lost");
+            select(Idas3PauseMenu.Category.Replays,0);menu.Activate();
+            Check(menu.TryConsumeCommand(out command)&&command==Idas3PauseMenu.Command.Replays,"Replay library action was lost");
+            select(Idas3PauseMenu.Category.Updates,0);menu.Activate();
+            Check(!menu.TryConsumeCommand(out _),"Updates triggered an unrelated gameplay action");
+            select(Idas3PauseMenu.Category.Hud,0);menu.Activate();Check(menu.CustomizingHud,"HUD Appearance action was lost");menu.Back();
+            menu.Navigate(1);Check(menu.DiagnosticSelection==2&&!menu.CustomizingHud,"HUD layout entry is unreachable after appearance settings");
         }finally{UnityEngine.Object.DestroyImmediate(go);}
     }
     public static void RunPointerChecks(){

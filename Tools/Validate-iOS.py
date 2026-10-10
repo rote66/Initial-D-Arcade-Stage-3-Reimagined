@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import zipfile
 
-from ios_packaging import (ROOT, MODES, VERSION, MUSIC_ROOT, content_files, data_path,
+from ios_packaging import (ROOT, MODES, VERSION, MUSIC_ROOT, PACKS, content_files, data_path,
                            ipa_path, original_tracks, variant_for_mode)
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -37,7 +37,7 @@ with zipfile.ZipFile(ipa_path) as ipa:
     check(info['CFBundleVersion'] == manifest['buildNumber'], 'Build number matches manifest')
     check(info.get('IDAS3RomValidationEnabled') == (manifest['romValidation'] == 'enabled'), 'ROM macro matches manifest')
     check(info.get('IDAS3UpdatesEnabled') is False, 'Updates disabled')
-    check(info.get('CFBundleLocalizations') == manifest['languages'] == ['en', 'zh-Hans', 'zh-Hant'], 'Supported app languages')
+    check(info.get('CFBundleLocalizations') == manifest['languages'] == ['en', 'ja', 'zh-Hans'], 'Supported app languages')
     check(info.get('CFBundleDevelopmentRegion') == 'en', 'English language fallback')
     check(bool(info.get('NSMotionUsageDescription')), 'Motion privacy description')
     check(bool(info.get('NSLocalNetworkUsageDescription')), 'Local network privacy description')
@@ -50,12 +50,12 @@ with zipfile.ZipFile(ipa_path) as ipa:
     data_version = info.get('IDAS3GameDataVersion')
     check(data_version == manifest['dataPackage']['version'] == data_info['version'] == VERSION, 'Shared game data version')
     check(manifest['supportedDataVariants'] == ['full', 'small'], 'Universal full/small data compatibility')
-    check(manifest['supportedDataVersions'] == [1, VERSION], 'Legacy original data compatibility')
+    check(manifest['supportedDataVersions'] == list(range(1, VERSION + 1)), 'Legacy original data compatibility')
     check(info.get('IDAS3EmbeddedGameData') == (args.mode == 'full'), 'Embedded/external data selection')
     check(info.get('IDAS3PackageMode') == manifest['packageMode'] == ('full' if args.mode == 'full' else 'core'), 'Package mode')
     embedded_prefix = prefix + 'Data/Raw/IDAS3GameData/'
     check(any(name.startswith(embedded_prefix) for name in ipa.namelist()) == (args.mode == 'full'), 'Full embeds data; core excludes data')
-    for folder in ['IDAS3', 'SoundRoom', 'SteamInput', 'HAKONE', 'SADAMINE', 'ENNA', 'MYOGI_SPECIAL', 'USUI_SPECIAL', 'MOMIJI', 'TSUBAKI']:
+    for folder in ['IDAS3', 'SoundRoom', 'SteamInput', *PACKS]:
         check(not any(name.startswith(prefix + 'Data/Raw/' + folder + '/') for name in ipa.namelist()), 'Core excludes ' + folder)
     binaries = {}
     signatures = {}

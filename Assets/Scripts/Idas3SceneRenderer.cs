@@ -45,6 +45,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     public Camera MainCamera => main;
     public Camera MirrorCamera => mirror;
     public Idas3GameOptions.Values HudOptions { get; set; } = new Idas3GameOptions.Values();
+    public bool ShowGameHud { get; set; } = true;
     public Rect ViewportRect { get; private set; } = new Rect(0, 0, 1, 1);
     public int ActiveMeshCount { get; private set; }
     public int UploadedVertexCount { get; private set; }
@@ -238,6 +239,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     private void BeforeCamera(Camera camera)
     {
         if (camera != main && camera != mirror) return;
+        Shader.SetGlobalFloat("_IdasTrackLighting", HudOptions.trackLighting);
         Shader.SetGlobalInteger("_IdasView", camera == mirror ? 1 : 0);
         Shader.SetGlobalBuffer("_IdasFrameWords", framesBuffer);
         Shader.SetGlobalBuffer("_IdasLightWords", lightsBuffer);
@@ -440,7 +442,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         for (int i = 0; i < frame.overlayCount; ++i) behind |= ((*(SceneOverlay*)IntPtr.Add(frame.overlays, i * 24)).flags & 1) != 0;
         main.clearFlags = behind ? CameraClearFlags.Depth : CameraClearFlags.SolidColor;
         SetCamera(main, outputMainCamera, 0, clear, frame.width, frame.height);
-        mirror.enabled = frame.viewCount == 2;
+        mirror.enabled = ShowGameHud && frame.viewCount == 2;
         if (mirror.enabled) SetCamera(mirror, frame.mirrorCamera, 1, clear, frame.width, frame.height);
         DepthDrawCount = DepthBufferRebuildCount = 0;
         UpdateDepthCommands(main, 1, opaqueAlphaDepth, mainDepthDraws, true);
@@ -650,6 +652,10 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         m.SetInt("_SrcBlend", (int)Factor(source, true, false)); m.SetInt("_DstBlend", (int)Factor(destination, false, false));
         m.SetInt("_SrcBlendAlpha", (int)Factor(source, true, true)); m.SetInt("_DstBlendAlpha", (int)Factor(destination, false, true));
         uint list = original ? (r.pcw >> 24) & 7 : 0;
+        // Keep cars, skies/unlit artwork, UI, projected headlights and
+        // translucent shadow overlays out of the scenery exposure curve.
+        m.SetFloat("_TrackSurface", IsCourseGeometry(r) && list != 2 &&
+            (r.flags & 2) == 0 && (r.gmp & 512) == 0 ? 1 : 0);
         // The source translucent list is auto-sorted per pixel by the original
         // hardware, which compares greater-or-equal and does not write depth.
         // Punch-through is not auto-sorted on the hardware: only the translucent

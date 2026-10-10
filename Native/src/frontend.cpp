@@ -82,6 +82,8 @@ void Frontend::initialize(const std::filesystem::path& rootPath,bool preloadArtw
     preloadedBanks={};
     projectRoot=rootPath;assetRoot = rootPath / "data" / "original_assets" / "menus" / "v3";
     menuFont=MenuFont::load(rootPath);
+    localizedMenuFonts[0]=MenuFont::load(rootPath,"data/localization/custom-menus/ja.bin");
+    localizedMenuFonts[1]=MenuFont::load(rootPath,"data/localization/custom-menus/zh-Hans.bin");
     namePresentation.reset();nameState={};nameInput={};menuCueIds.clear();driverProfileCommit=false;
     tuningData.reset();tuningPresentation.reset();tuningCourseMenu={};tuningCourseSelected=0;tuningCourseConfirmPending=false;
     nameCommittedForVisit=driverSetupCompleted=savedCarTuningCourse=false;
@@ -89,6 +91,8 @@ void Frontend::initialize(const std::filesystem::path& rootPath,bool preloadArtw
     banks.clear(); previousKey.clear(); previousMotionKey.clear(); pixels.clear(); staticPixels.clear();
     displayPixels.clear();previousModePaintKey.clear();displayedCanvas=nullptr;
     canvasRevision=displayedRevision=0;displayedWidth=displayedHeight=0;
+    menuBackdropFrame=displayedBackdropFrame=0;
+    menuBackdropRemainder=0;
     rivalCacheKey.clear();for(auto& frame:rivalPixels)frame.clear();
     carouselMake=-1;carouselCar=-1;carouselSlot=0;carouselScroll=displayedScroll=0;
     carConfirmationFrame=-1;selectionExitFrame=-1;frameRemainder=0;carFrame=0;
@@ -269,15 +273,15 @@ void Frontend::selectSavedCarTransmission(bool returnToCar){
 void Frontend::initializeColorSelection(){
     const auto roster=carsForMake(make);const auto found=std::find(roster.begin(),roster.end(),car);
     if(found==roster.end())throw std::logic_error("Car color owner has a different manufacturer");
-    std::vector<std::uint32_t> counts;for(int id:roster)counts.push_back(original::originalCarColorCounts[std::size_t(id)]);
+    std::vector<std::uint32_t> counts(roster.size(),original::carPaintCount);
     const auto saved=battleProfile.u(64),selected=unsigned(found-roster.begin());
     original::initializeOriginalCarColorSelection(colorSelection,counts,selected,saved<counts[selected]?saved:0);
     colorSelectionMake=make;pendingColorButtons=0;
 }
 unsigned Frontend::selectedColor()const{
     if(stage==FrontendStage::Car&&stageInitialized&&observedStage==stage&&colorSelectionMake==make&&
-            colorSelection.currentColor684<original::originalCarColorCounts.at(std::size_t(car)))return colorSelection.currentColor684;
-    const auto saved=battleProfile.u(64);return saved<original::originalCarColorCounts.at(std::size_t(car))?saved:0;
+            colorSelection.currentColor684<original::carPaintCount)return colorSelection.currentColor684;
+    const auto saved=battleProfile.u(64);return saved<original::carPaintCount?saved:0;
 }
 void Frontend::driverProfileLoaded(){
     // At entry the source seeds the saved color. While browsing, its own
@@ -526,6 +530,7 @@ void Frontend::advance(double seconds) {
     frameRemainder+=seconds*60.;
     const auto frames=std::uint64_t(std::floor(frameRemainder+1.e-9));
     frameRemainder-=double(frames);
+    advanceMenuBackdrop(seconds);
     const auto updateOwner=[&]() -> bool {
         ++carFrame;
         if(stage==FrontendStage::Course&&gameMode==original::OriginalGameMode::BuntaChallenge)
@@ -858,10 +863,11 @@ void Frontend::drawCourseCarousel(int width,int height) {
 }
 void Frontend::drawChoiceMenu(int width,int height,bool movingWidgets) {
     original::OriginalChoiceMenuState state;
-    state.course=isImportedCourse(course)?3:course;state.frame=carFrame;
+    const auto presentation=originalCoursePresentationCondition(unsigned(course)*2+unsigned(reverse));
+    state.course=int(presentation/2);state.frame=carFrame;
     state.confirmationPhase=carConfirmationFrame<0?0.f:1.f;
     if(stage==FrontendStage::Transmission){state.screen=original::OriginalChoiceScreen::Transmission;state.selected=automatic?0:1;state.confirmationPhase=transmissionConfirmationPhase;}
-    else if(stage==FrontendStage::Route){state.screen=original::OriginalChoiceScreen::Route;state.selected=reverse?1:0;}
+    else if(stage==FrontendStage::Route){state.screen=original::OriginalChoiceScreen::Route;state.selected=int(presentation&1);}
     else if(stage==FrontendStage::Weather){state.screen=original::OriginalChoiceScreen::Weather;state.selected=wet?1:0;}
     else {state.screen=original::OriginalChoiceScreen::Time;state.selected=night?1:0;}
     const float fit=std::min(float(width)/640.f,float(height)/480.f);
@@ -938,9 +944,10 @@ void Frontend::drawCarCarousel(int width,int height) {
     }
 }
 void Frontend::drawCarColorIndicator(int width,int height){
-    const auto count=original::originalCarColorCounts.at(std::size_t(car));
-    const auto& rgb=original::originalCarPaintRgb.at(std::size_t(car));
-    const auto commands=original::originalCarColorIndicatorDraws(unsigned(car),selectedColor(),std::span(rgb).first(count));
+    const auto& rgb=original::carPaintPalettes.at(std::size_t(car));
+    const auto selected=selectedColor(),first=selected/8*8;
+    const auto commands=original::originalCarColorIndicatorDraws(first?35u:unsigned(car),selected-first,
+        std::span(rgb).subspan(first,std::min(8u,original::carPaintCount-first)));
     auto& assets=bank("v3sS05cars");const float fit=std::min(float(width)/640.f,float(height)/480.f);
     struct PaletteBatch{NativeModelChunk chunk;SpritePlacement placement;float depth;};
     std::vector<PaletteBatch> batches;
@@ -959,6 +966,8 @@ void Frontend::drawCarColorIndicator(int width,int height){
     }
     std::stable_sort(batches.begin(),batches.end(),[](const auto& a,const auto& b){return a.depth<b.depth;});
     for(const auto& batch:batches)compositeOriginalMenuChunk(pixels,width,height,assets.textures,batch.chunk,batch.placement);
+    menuFont.paint(pixels,width,height,"PAINT "+std::to_string(selected+1)+" / "+std::to_string(original::carPaintCount),
+        (width-640.f*fit)*.5f+90*fit,(height-480.f*fit)*.5f+345*fit,10*fit,0xffffffffu,0xff000000u,fit);
 }
 void Frontend::draw(const std::string& name,int chunk,int width,int height,float x,float y,float multiplier,float opacity) {
     auto& selected=bank(name);
@@ -972,13 +981,24 @@ void Frontend::draw(const std::string& name,int chunk,int width,int height,float
     placement.defaultOriginalUiColors=true;
     compositeOriginalMenuChunk(pixels,width,height,selected.textures,selected.model.chunks[std::size_t(chunk)],placement);
 }
+void Frontend::paintMenuMargins(std::span<std::uint32_t> target,int width,int height)const{
+    if(gasstandLoaded)gasstand.paintMenuMargins(target,width,height,menuBackdropFrame);
+}
+void Frontend::advanceMenuBackdrop(double seconds){
+    if(!std::isfinite(seconds)||seconds<0)throw std::invalid_argument("Invalid menu backdrop duration");
+    menuBackdropRemainder+=seconds*60.;
+    const auto frames=std::uint64_t(std::floor(menuBackdropRemainder+1.e-9));
+    menuBackdropRemainder-=double(frames);menuBackdropFrame+=frames;
+}
 const std::vector<std::uint32_t>& Frontend::paint(int width,int height) {
     synchronizeStage();
     if(width<=0 || height<=0 || width>16384 || height>16384) throw std::invalid_argument("Invalid native menu dimensions");
     collectPreloadedArtwork();
     const auto& canvas=paintOriginalCanvas();
     if(width==640&&height==480)return canvas;
-    if(displayedCanvas==&canvas&&displayedRevision==canvasRevision&&displayedWidth==width&&displayedHeight==height)return displayPixels;
+    const bool menuMargins=stage!=FrontendStage::Title&&std::int64_t(width)*3!=std::int64_t(height)*4;
+    if(displayedCanvas==&canvas&&displayedRevision==canvasRevision&&displayedWidth==width&&displayedHeight==height&&
+        (!menuMargins||displayedBackdropFrame==menuBackdropFrame))return displayPixels;
     // Original menu geometry and color blending live on the640x480 arcade
     // canvas. Scaling that finished frame avoids rerasterizing the same tiny
     // authored textures across millions of host pixels during each animation.
@@ -999,8 +1019,10 @@ const std::vector<std::uint32_t>& Frontend::paint(int width,int height) {
         for(int x=0;x<drawWidth;++x)destination[x]=row[columns[std::size_t(x)]];}
     }
     if(showingGasstand())gasstand.extendBackdrop(displayPixels,width,height);
+    else if(menuMargins)paintMenuMargins(displayPixels,width,height);
     if(stage==FrontendStage::Title&&attractChildId==7)demoOverlays.extendBackdrop(displayPixels,width,height,titleFrame?titleFrame-1:0);
     displayedCanvas=&canvas;displayedRevision=canvasRevision;displayedWidth=width;displayedHeight=height;
+    displayedBackdropFrame=menuBackdropFrame;
     return displayPixels;
 }
 void Frontend::paintAttractPrompts(std::span<std::uint32_t> target,int width,int height)const{
@@ -1021,8 +1043,6 @@ void Frontend::paintAttractPrompts(std::span<std::uint32_t> target,int width,int
 }
 const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
     constexpr int width=640,height=480;
-    const bool localized=unityUiLocalizationEnabled();
-    if(localized!=previousLocalized){previousKey.clear();previousMotionKey.clear();previousLocalized=localized;}
     if(make<0 || make>=7 || car<0 || car>=35 || course<0 || (course>=9 && (!isImportedCourse(course) || !importedArtwork(course).size()))) throw std::out_of_range("Invalid native menu selection");
     if(stage==FrontendStage::Car)synchronizeCarousel();
     if(stage==FrontendStage::Course)synchronizeCourseCarousel();
@@ -1033,7 +1053,9 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
         tuningPresentation->paintCanvas(pixels,width,height,tuningCourseMenu,battleProfile.u(1176));return pixels;
     }
     if(stage==FrontendStage::SaveSelect){
-        const std::vector<int> key{int(stage),saveSelected,int(saveFileCarLive),int(saveActionsOpen),saveActionSelected,
+        const int language=customMenuLanguage();
+        const auto& font=language&&localizedMenuFonts[language-1].ready()?localizedMenuFonts[language-1]:menuFont;
+        const std::vector<int> key{int(stage),language,saveSelected,int(saveFileCarLive),int(saveActionsOpen),saveActionSelected,
             int(saveDeleteOpen),saveDeleteSelected,int(saveDeleteFailed),int(saveFiles.at(std::size_t(saveSelected)).level)};
         if(key==previousKey)return pixels;previousKey=key;++canvasRevision;
         constexpr std::uint32_t ink=0xff0b0c0fu,panel=0xff16181du,raised=0xff22242au;
@@ -1051,20 +1073,21 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
         const auto frame=[&](int x,int y,int w,int h,std::uint32_t argb){
             fill(x,y,w,1,argb);fill(x,y+h-1,w,1,argb);fill(x,y,1,h,argb);fill(x+w-1,y,1,h,argb);
         };
-        const auto text=[&](std::string_view value,float x,float y,float size,std::uint32_t color,float maxWidth=1000.f,bool localize=true){
-            const float measured=menuFont.width(value,size);
+        const auto text=[&](std::string_view value,float x,float y,float size,std::uint32_t color,float maxWidth=1000.f){
+            const float measured=font.width(value,size);
             if(measured>maxWidth)size*=maxWidth/measured;
-            menuFont.paint(pixels,width,height,value,x,y,size,color,0,0,localize);
+            font.paint(pixels,width,height,value,x,y,size,color);
         };
+        const auto tr=[&](std::string_view value){return language&&localizedMenuFonts[language-1].ready()?customMenuText(value):value;};
         const auto number=[](unsigned value){return (value<10?std::string("0"):std::string())+std::to_string(value);};
         const auto& chosen=saveFiles[std::size_t(std::clamp(saveSelected,0,int(saveFiles.size())-1))];
         const auto used=std::count_if(saveFiles.begin(),saveFiles.end(),[](const auto& file){return file.used;});
 
         fill(24,18,592,446,ink);frame(24,18,592,446,edge);fill(24,18,592,3,red);
-        text("SAVE SELECT",42,31,30,white);
-        text("INITIAL D / SELECT A DRIVER",43,73,11,muted);
-        const auto count=std::to_string(used)+" / "+std::to_string(saveFiles.size())+" USED";
-        text(count,596-menuFont.width(count,12),43,12,muted);
+        text(tr("SAVE SELECT"),42,31,30,white);
+        text(tr("INITIAL D / SELECT A DRIVER"),43,73,11,muted);
+        const auto count=std::to_string(used)+" / "+std::to_string(saveFiles.size())+" "+std::string(tr("USED"));
+        text(count,596-font.width(count,12),43,12,muted);
         fill(25,96,590,1,edge);
 
         constexpr int listX=42,listY=110,listW=252,rowH=50,pitch=59;
@@ -1077,62 +1100,62 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
             text(number(i+1),listX+13,float(y+13),20,selected?white:muted);
             if(file.used&&paintSaveName&&std::any_of(file.name.begin(),file.name.end(),[](unsigned char c){return c>=128;}))
                 paintSaveName(pixels,width,height,file.name,listX+50,float(y+9),20,listW-64);
-            else text(file.used?file.name:"NEW DRIVER",listX+50,float(y+5),20,file.used?white:muted,listW-64,!file.used);
-            text(file.used?file.car:"EMPTY SLOT",listX+51,float(y+30),11,muted,listW-65,!file.used);
+            else text(file.used?file.name:tr("NEW DRIVER"),listX+50,float(y+5),20,file.used?white:muted,listW-64);
+            text(file.used?file.car:tr("EMPTY SLOT"),listX+51,float(y+30),11,muted,listW-65);
         }
 
         fill(310,110,288,316,panel);fill(310,110,3,43,red);
-        text(chosen.used?"LAST USED CAR":"FILE "+number(unsigned(saveSelected+1)),326,119,10,muted);
+        text(chosen.used?tr("LAST USED CAR"):std::string(tr("FILE"))+" "+number(unsigned(saveSelected+1)),326,119,10,muted);
         if(chosen.used){
-            text(chosen.car,326,135,21,white,256,false);
-            text(chosen.grade,326,163,11,muted,256,false);
+            text(chosen.car,326,135,21,white,256);
+            text(chosen.grade,326,163,11,muted,256);
             const auto& box=saveCarViewport;
             fill(box[0]-1,box[1]-1,box[2]+2,box[3]+2,ink);
             frame(box[0]-1,box[1]-1,box[2]+2,box[3]+2,edge);
-            if(!saveFileCarLive)text("CAR PREVIEW",392,235,12,muted);
-            text("PLAY TIME",326,saveActionsOpen?312:317,10,muted);
+            if(!saveFileCarLive)text(tr("CAR PREVIEW"),392,235,12,muted);
+            text(tr("PLAY TIME"),326,saveActionsOpen?312:317,10,muted);
             text(formatPlayTime(chosen.playedSeconds),326,saveActionsOpen?325:332,saveActionsOpen?17:20,white,155);
             fill(498,saveActionsOpen?312:320,1,saveActionsOpen?29:35,edge);
-            text("LEVEL",516,saveActionsOpen?312:317,10,muted);
+            text(tr("LEVEL"),516,saveActionsOpen?312:317,10,muted);
             text(chosen.level?std::to_string(chosen.level):"--",516,saveActionsOpen?325:332,saveActionsOpen?17:20,white,66);
             if(!saveActionsOpen)fill(326,366,256,1,edge);
-            text("LAST PLAYED",326,saveActionsOpen?348:377,10,muted);
+            text(tr("LAST PLAYED"),326,saveActionsOpen?348:377,10,muted);
             const auto date=chosen.lastPlayed.empty()?std::string("----/--/--"):chosen.lastPlayed;
-            text(date,582-menuFont.width(date,12),saveActionsOpen?346:374,12,white);
+            text(date,582-font.width(date,12),saveActionsOpen?346:374,12,white);
             if(saveActionsOpen){
                 for(int action=0;action<2;++action){
                     const int x=326+action*133;const bool selected=saveActionSelected==action;
                     fill(x,365,123,30,selected?red:raised);frame(x,365,123,30,selected?white:edge);
-                    const std::string_view label=action==0?"CONTINUE":"CHANGE CAR";
-                    text(label,x+(123-menuFont.width(label,13))*.5f,373,13,white);
+                    const std::string_view label=action==0?tr("CONTINUE"):tr("CHANGE CAR");
+                    text(label,x+(123-font.width(label,13))*.5f,373,13,white);
                 }
                 const bool selected=saveActionSelected==2;
                 fill(326,399,256,26,selected?red:raised);frame(326,399,256,26,selected?white:edge);
-                text("DELETE SAVE",454-menuFont.width("DELETE SAVE",12)*.5f,406,12,white);
+                text(tr("DELETE SAVE"),454-font.width(tr("DELETE SAVE"),12)*.5f,406,12,white);
             }
         }else{
             frame(433,196,42,42,edge);fill(443,216,22,2,muted);fill(453,206,2,22,muted);
-            text("NEW DRIVER",380,258,22,white);
-            text("EMPTY SLOT",419,291,11,muted);
+            text(tr("NEW DRIVER"),380,258,22,white);
+            text(tr("EMPTY SLOT"),419,291,11,muted);
         }
         fill(42,440,556,1,edge);
         float x=43;
         for(const auto& [keyName,action]:std::initializer_list<std::pair<const char*,const char*>>{
                 {"ARROWS / STEERING","SELECT"},{"ACCEL.","CONFIRM"},{"BRAKE","BACK"}}){
-            text(keyName,x,451,11,white);x+=menuFont.width(keyName,11)+7;
-            text(action,x,451,11,muted);x+=menuFont.width(action,11)+25;
+            text(tr(keyName),x,451,11,white);x+=font.width(tr(keyName),11)+7;
+            text(tr(action),x,451,11,muted);x+=font.width(tr(action),11)+25;
         }
         if(saveDeleteOpen){
             fill(154,162,332,166,ink);frame(154,162,332,166,edge);fill(154,162,332,3,red);
-            text("ARE YOU SURE?",320-menuFont.width("ARE YOU SURE?",25)*.5f,186,25,white);
-            const auto label="DELETE SAVE "+number(unsigned(saveSelected+1));
-            text(label,320-menuFont.width(label,12)*.5f,224,12,muted);
-            if(saveDeleteFailed)text("COULD NOT DELETE SAVE",320-menuFont.width("COULD NOT DELETE SAVE",10)*.5f,249,10,red);
+            text(tr("ARE YOU SURE?"),320-font.width(tr("ARE YOU SURE?"),25)*.5f,186,25,white);
+            const auto label=std::string(tr("DELETE SAVE"))+" "+number(unsigned(saveSelected+1));
+            text(label,320-font.width(label,12)*.5f,224,12,muted);
+            if(saveDeleteFailed)text(tr("COULD NOT DELETE SAVE"),320-font.width(tr("COULD NOT DELETE SAVE"),10)*.5f,249,10,red);
             for(int choice=0;choice<2;++choice){
                 const int buttonX=180+choice*152;const bool selected=saveDeleteSelected==choice;
                 fill(buttonX,270,128,36,selected?red:raised);frame(buttonX,270,128,36,selected?white:edge);
-                const std::string_view label=choice==0?"NO":"YES";
-                text(label,buttonX+(128-menuFont.width(label,17))*.5f,280,17,white);
+                const std::string_view label=choice==0?tr("NO"):tr("YES");
+                text(label,buttonX+(128-font.width(label,17))*.5f,280,17,white);
             }
         }
         return pixels;

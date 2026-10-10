@@ -83,6 +83,46 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
         if(layer.parameters!=null)foreach(var p in layer.parameters)if(p.name==name)return Safe(p.value,fallback);
         return fallback;
     }
+    internal static bool TryRetainerProjection(Layer layer,out Matrix4x4 inverse){
+        inverse=Matrix4x4.identity;
+        if(layer.retainers==null)return false;
+        foreach(var retainer in layer.retainers){
+            if(!Contains(retainer.materialParent,"M_Homography.")||retainer.owner==null)continue;
+            var owner=retainer.owner;
+            if(owner.width<=0||owner.height<=0||layer.width<=0||layer.height<=0)return false;
+            float Parameter(string name,float fallback){
+                if(retainer.parameters!=null)foreach(var p in retainer.parameters)if(p.name==name)return Safe(p.value,fallback);
+                return fallback;
+            }
+            var a=new Vector2(Parameter("LT_X",0),Parameter("LT_Y",0));
+            var b=new Vector2(Parameter("RT_X",1),Parameter("RT_Y",0));
+            var c=new Vector2(Parameter("RB_X",1),Parameter("RB_Y",1));
+            var d=new Vector2(Parameter("LB_X",0),Parameter("LB_Y",1));
+            var bc=b-c;var dc=d-c;var diagonal=a-b+c-d;
+            float determinant=bc.x*dc.y-dc.x*bc.y;
+            if(Mathf.Abs(determinant)<.000001f)return false;
+            float g=(diagonal.x*dc.y-dc.x*diagonal.y)/determinant;
+            float h=(bc.x*diagonal.y-diagonal.x*bc.y)/determinant;
+            var forward=Matrix4x4.identity;
+            forward.m00=b.x-a.x+g*b.x;forward.m01=d.x-a.x+h*d.x;forward.m03=a.x;
+            forward.m10=b.y-a.y+g*b.y;forward.m11=d.y-a.y+h*d.y;forward.m13=a.y;
+            forward.m30=g;forward.m31=h;
+            // Source parameters use top-left retainer coordinates. The shader
+            // samples bottom-left layer UVs; account for both canvases before
+            // projecting, so tiling/fading scroll inside the original trapezoid.
+            var uvToLocal=Matrix4x4.TRS(new Vector3(0,layer.height,0),Quaternion.identity,new Vector3(layer.width,-layer.height,1));
+            var canvas=Matrix4x4.Scale(new Vector3(1/owner.width,1/owner.height,1))*Matrix(owner.transform).inverse*Matrix(layer.transform,layer.x,layer.y)*uvToLocal;
+            forward=canvas.inverse*forward*canvas;
+            if(Mathf.Abs(forward.determinant)<.000001f)return false;
+            inverse=forward.inverse;
+            // Normalize the enable flag and homogeneous denominator together.
+            if(Mathf.Abs(inverse.m33)<.000001f)return false;
+            float divisor=inverse.m33;
+            for(int row=0;row<4;++row)for(int column=0;column<4;++column)inverse[row,column]/=divisor;
+            return true;
+        }
+        return false;
+    }
     static Color Tint(float[] value)=>value!=null&&value.Length>=4?new Color(Safe(value[0],1),Safe(value[1],1),Safe(value[2],1),Safe(value[3],1)):Color.white;
     static Color MaterialColor(Layer layer,string name,Color fallback){
         if(layer.vectorParameters!=null)foreach(var value in layer.vectorParameters)if(value.name==name)return Tint(value.values);
@@ -124,10 +164,10 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
     // Recovered WBP_SpeedMeter_Base.GetSpeedColor compares <90, <150, <210.
     internal static int SpeedColorBand(float speed)=>Safe(speed)<90?0:speed<150?1:speed<210?2:3;
     internal static int GearDigit(Layer layer,Idas3ArcadeHud.Telemetry t){
-        // Infinity's eighth atlas cell is the ordinary silver 5. Its gold 5
-        // is reserved for five-speed cars; six-speed cars highlight only 6.
-        bool infinity=Contains(layer.texture,"_Meter01_ShiftNum")||Contains(layer.texture,"_Meter12_ShiftNum")||Contains(layer.texture,"_Meter13_ShiftNum");
-        return infinity&&t.gear==5&&t.version>=4&&((t.flags>>16)&7)==6?7:Mathf.Clamp(t.gear,0,6);
+        // The recovered Infinity atlas has D, 1..6 and an empty eighth cell.
+        // This also supplies the themed meters; never select the empty cell
+        // for fifth gear on a six-speed car.
+        return Mathf.Clamp(t.gear,0,6);
     }
     static int Digit(string role,Idas3ArcadeHud.Telemetry t){
         int speed=Mathf.Clamp(Mathf.FloorToInt(Safe(t.speedKmh)),0,999),rpm=Mathf.Clamp(Mathf.FloorToInt(Safe(t.rpm)),0,19999);
@@ -221,18 +261,10 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
             if(opacity<=0)continue;
             var texture=Texture(SelectTexture(layer,data));if(!texture)continue;
             Color color=Tint(layer.color);
-            // The white DAC face reuses the white digit atlas. Its source
-            // runtime tint is absent from the export; retain readable contrast.
             bool speedColor=layer.speedTextures!=null&&layer.speedTextures.Length==4;
-            bool tintSpeed=meter.id==58&&(role=="speed1"||role=="speed10"||role=="speed100"||layer.name=="SpeedRate");
-            if(tintSpeed){
-                int band=SpeedColorBand(data.speedKmh);
-                if(band<3)color*=band==0?new Color(1,.02f,.02f):band==1?new Color(1,.94f,.02f):new Color(.02f,.66f,1);
-            }
-            if(meter.id==42&&layer.name.StartsWith("SpeedRate",StringComparison.Ordinal)&&!speedColor)color=new Color(.08f,.08f,.08f,color.a);
             // The fourth atlas is neutral for the animated rainbow. Drive its
             // hue from presentation time so pausing/seeking and FPS stay stable.
-            if((speedColor&&!layer.speedPalette||tintSpeed)&&SpeedColorBand(data.speedKmh)==3)
+            if(speedColor&&layer.speedRainbow&&SpeedColorBand(data.speedKmh)==3)
                 color*=Color.HSVToRGB(Mathf.Repeat(Safe(seconds)*.5f,1),.85f,1);
             // Reuse the authored gauge colors. Their vector alpha is commonly
             // zero and is not widget opacity. Circle01's RGB emission survived
@@ -368,14 +400,6 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
             var sprite=new Idas3ArcadeHud.Sprite{texture=texture,rect=new Rect(0,0,layer.width,layer.height),uv=uv,color=color,fill=-1,additive=additive,
                 transformed=true,transform=matrix,gaugeMode=gaugeMode,gauge=gauge,clipped=clipped,clip=clip,mask=mask,maskTransform=maskTransform,radial=radial};
             ApplySeason5Material(ref sprite,layer,data,seconds,percentage,options.hudShiftLights);
-            if(layer.speedPalette){
-                int band=SpeedColorBand(data.speedKmh);
-                sprite.materialEffect=17;
-                // Preserve the source yellow band and its beveled white/dark
-                // details. The shader recolors only the chromatic component.
-                sprite.effectParams.x=band==1?0:1;
-                sprite.effectColor1=band==0?new Color(1,.02f,.02f):band==2?new Color(.02f,.66f,1):Color.HSVToRGB(Mathf.Repeat(seconds*.5f,1),.85f,1);
-            }
             if(Contains(layer.materialParent,"M_Add_Ball")){
                 sprite.materialEffect=1;
                 sprite.effectParams=new Vector4(Scalar(layer,"S Radius",.2f),Scalar(layer,"M Radius",.3f),Scalar(layer,"L Radius",.5f),Scalar(layer,"Diamond",5));
@@ -406,6 +430,11 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
                 sprite.materialEffect=7;sprite.effectTex1=texture;sprite.effectTex2=BoundTexture(layer,"Tex_Base01");sprite.effectTex3=BoundTexture(layer,"Tex_Mask");
                 sprite.effectParams=new Vector4(Scalar(layer,"Utiling",1),Scalar(layer,"Vtiling",1),seconds*Scalar(layer,"Speed",1)*Scalar(layer,"SpeedX",0),seconds*Scalar(layer,"Speed",1)*Scalar(layer,"SpeedY",0));
                 sprite.effectParams2=new Vector4(Scalar(layer,"H_Radius",.7f),Scalar(layer,"H_Density",1),Scalar(layer,"V_Radius",.7f),Scalar(layer,"V_Density",1));
+                if(TryRetainerProjection(layer,out var projection)){
+                    sprite.projective0=new Vector4(projection.m00,projection.m01,projection.m03,0);
+                    sprite.projective1=new Vector4(projection.m10,projection.m11,projection.m13,0);
+                    sprite.projective2=new Vector4(projection.m30,projection.m31,projection.m33,0);
+                }
             }
             if(Contains(layer.materialParent,"M_UVScroll."))sprite.sampleMotion=new Vector4(scrollU,-scrollV,0,1);
             if(Contains(layer.materialParent,"MeterRotation")||Contains(layer.materialParent,"EffRotation")){

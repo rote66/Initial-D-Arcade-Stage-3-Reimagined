@@ -25,6 +25,9 @@ struct OriginalVehicleParameters {
     idas3::OriginalTransmissionProfile profile;
     OriginalRoadParameters road;
     idas3::OriginalInputConstants inputConstants=idas3::verifiedGds0033InputConstants();
+    // Imported-course adaptation of powered acceleration only. One preserves
+    // the original transmission profile, including source-parity callers.
+    float accelerationScale=1.f;
 };
 struct OriginalVehicleInputs {
     idas3::RawAnalog16 analog{};
@@ -33,6 +36,7 @@ struct OriginalVehicleInputs {
     std::uint8_t pressedByte=0;
     bool automaticMode=false,gearEnabled=false;
     std::int32_t elapsedFrames0C900E84=0;
+    std::uint8_t requestedGear=0; // Host H-pattern extension; 0 preserves original shifting.
 };
 struct OriginalVehicleStepResult {
     float frameCoefficient=0,motionScalar=0;

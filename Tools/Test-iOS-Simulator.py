@@ -20,6 +20,8 @@ CASES = {
     "audio": ("-idas3-scene-smoke", ["-idas3-scene-realtime-audio"]),
     "pause": ("-idas3-pause-smoke", ["-idas3-pause-no-capture"]),
     "courses": ("-idas3-mode-flow-smoke", ["-idas3-pause-course-check"]),
+    "gunsai": ("-gunsai-ta-smoke", []),
+    "odawara": ("-odawara-ta-smoke", []),
     "tsubaki": ("-idas3-mode-flow-smoke", ["-idas3-tsubaki-check"]),
 }
 
@@ -31,7 +33,7 @@ def main():
     parser.add_argument("--disable-engine-audio", action="store_true",
                         help="Use Unity's diagnostic -disableaudio startup flag for UI tests when Simulator CoreAudio is unavailable.")
     parser.add_argument("--preferred-language", choices=["en", "zh-Hans", "zh-Hant", "ja"],
-                        help="Override AppleLanguages for this process only; ja checks the unsupported-language English fallback.")
+                        help="Override AppleLanguages for this process only; supports upstream English, Japanese and Simplified Chinese.")
     args = parser.parse_args()
     if args.disable_engine_audio and any(name in {"audio", "soundroom"} for name in args.cases):
         parser.error("Audio cases require the normal engine audio path.")
@@ -56,6 +58,9 @@ def main():
             test_root = container / "Documents" / f"simulator-test-{stamp}-{name}"
             flag, extra = CASES[name]
             report_path = test_root / "report.json"
+            pass_path = test_root / "PASS.txt"
+            failure_path = test_root / "failure.txt"
+            text_report = name in {"gunsai", "odawara"}
             with (output / f"{name}.log").open("w") as log:
                 proc = subprocess.Popen([
                     "xcrun", "simctl", "launch", "--console", "--terminate-running-process",
@@ -65,15 +70,19 @@ def main():
                 ], stdout=log, stderr=subprocess.STDOUT)
                 try:
                     deadline = time.monotonic() + 180
-                    while not report_path.exists() and time.monotonic() < deadline:
+                    while not report_path.exists() and not (text_report and pass_path.exists()) and time.monotonic() < deadline:
+                        if failure_path.exists():
+                            raise RuntimeError(failure_path.read_text())
                         if proc.poll() is not None:
                             raise RuntimeError(f"{name} exited without a report; see {log.name}")
                         time.sleep(1)
+                    if text_report and pass_path.exists():
+                        report_path.write_text(json.dumps({"passed": True, "scope": pass_path.read_text(), "course": name}, indent=2))
                     if not report_path.exists():
                         raise RuntimeError(f"{name} timed out; see {log.name}")
                     report = json.loads(report_path.read_text())
                     if args.preferred_language:
-                        expected = "en" if args.preferred_language == "ja" else args.preferred_language
+                        expected = "zh-Hans" if args.preferred_language.startswith("zh") else args.preferred_language
                         log.flush()
                         actual = (output / f"{name}.log").read_text(errors="replace")
                         if "IDAS3 UI language: " + expected not in actual:

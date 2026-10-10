@@ -10,8 +10,11 @@ std::array<std::uint64_t,2> authorityFinishFrame{},authorityFinishTicks{};
 std::array<bool,2> authorityFinished{},authorityTimeUp{};
 bool authorityStalled=false;
 int authorityConfirmedWinner=-3;
+std::uint64_t authorityResultFrame=0;
 std::uint64_t authorityRemoteHeadlightSequence=0;
 bool authorityRemoteHeadlights=false;
+unsigned authorityRemoteBackfireFrames=0;
+int remoteBackfireFrame()const{return authorityRemoteBackfireFrames?int(2-authorityRemoteBackfireFrames):-1;}
 
 const original::OriginalDrivingSession& presentedSession()const {
     return authorityRace?authorityRace->car(multiplayer.config.localSlot):originalSession;
@@ -20,8 +23,9 @@ void clearAuthority(){
     authorityLink.reset();authorityRace.reset();authorityInput={};
     authorityVisualOffset={};authorityYawOffset={};authorityFinishFrame={};authorityFinishTicks={};
     authorityRemoteCorrectionVelocity={};authorityRemoteYawVelocity=0;
-    authorityFinished={};authorityTimeUp={};authorityStalled=false;authorityConfirmedWinner=-3;
+    authorityFinished={};authorityTimeUp={};authorityStalled=false;authorityConfirmedWinner=-3;authorityResultFrame=0;
     authorityRemoteHeadlightSequence=0;authorityRemoteHeadlights=false;
+    authorityRemoteBackfireFrames=0;
 }
 void confirmedAuthorityFrame(const original::OnlineRaceFrame& frame){
     const auto local=multiplayer.config.localSlot;
@@ -32,7 +36,10 @@ void confirmedAuthorityFrame(const original::OnlineRaceFrame& frame){
             authorityFinishTicks[slot]=(authorityTimeUp[slot]?state.elapsed.value:state.times.finishTime)/100u;
         }
     }
-    authorityConfirmedWinner=original::resolveOnlineRaceWinner(frame.states);
+    if(authorityConfirmedWinner==-3){
+        authorityConfirmedWinner=original::resolveOnlineRaceWinner(frame.states);
+        if(authorityConfirmedWinner!=-3)authorityResultFrame=frame.frame+1;
+    }
     // All commands were decided within the captured numerical RNG boundary.
     // Playback occurs once on confirmation and cannot feed back into physics.
     if(frame.start.cue2)audio.playRaceCue(4,2);
@@ -40,6 +47,13 @@ void confirmedAuthorityFrame(const original::OnlineRaceFrame& frame){
     for(auto cue:frame.driving[local].feedback142460)audio.playRaceCue(2,cue);
     if(frame.driving[local].completion.requestCue4)audio.playRaceCue(2,4);
     audio.applyConfirmedOnlineAudio(frame.engine[local],frame.tires[local]);
+    // The remote engine has already emitted its commands within the shared
+    // simulation. Consume only confirmed cues; repaints and prediction replay
+    // cannot extend a flash or consume another gameplay random number.
+    if(authorityRemoteBackfireFrames)--authorityRemoteBackfireFrames;
+    for(const auto& command:frame.engine[1-local])
+        if(command.target==original::OriginalEngineCommandTarget::RaceCue1424A0&&command.value==7&&authorityRemoteBackfireFrames==0)
+            authorityRemoteBackfireFrames=2;
     if(frame.rules[local].timeExtension)raceFeedback.extend(std::bit_cast<std::int32_t>(frame.states[local].remaining.value)-frame.rules[local].secondsAdded*6000);
 }
 void enableAuthority(std::uint64_t raceId,bool remoteAutomatic,bool boost,bool collisions=true){
@@ -117,7 +131,7 @@ void receiveAuthority(std::span<const std::uint8_t> packet){
 }
 void simulateAuthority(const DriverInput& d){
     auto inputState=authorityInput;
-    const auto input=original::adaptOriginalHostInput(inputState,{d.steer,d.throttle,d.brake,d.shiftDown,d.shiftUp},automatic,false,0);
+    const auto input=original::adaptOriginalHostInput(inputState,{d.steer,d.throttle,d.brake,d.shiftDown,d.shiftUp,d.requestedGear},automatic,false,0);
     if(!authorityLink->step(input)){authorityStalled=true;return;}
     authorityStalled=false;authorityInput=inputState;
     const auto remote=1-multiplayer.config.localSlot;
@@ -131,7 +145,7 @@ void simulateAuthority(const DriverInput& d){
     const auto local=multiplayer.config.localSlot;const auto& state=authorityRace->rules(local).state();const auto& frame=authorityRace->lastFrame();
     originalRaceStart=authorityRace->start();originalRace.restoreNumericalState(state);originalCoordinate=state.previousCoordinate;originalRaceOwnerFrame=std::uint32_t(authorityRace->frame());
     race.originalStartDigit=frame.start.countdownDigit;race.originalStartElapsed=240-frame.start.countdownRemaining;race.countdown=int(frame.start.countdownRemaining>60?frame.start.countdownRemaining-60:0);
-    race.phase=authorityFinished[local]?RacePhase::Finished:frame.start.runRules?RacePhase::Running:RacePhase::Countdown;
+    race.phase=authorityConfirmedWinner!=-3||authorityFinished[local]?RacePhase::Finished:frame.start.runRules?RacePhase::Running:RacePhase::Countdown;
     race.timeUp=authorityFinished[local]&&authorityTimeUp[local];race.ticks=state.elapsed.value/100u;
     race.elapsed6000=authorityRace->rules(local).displayedElapsed();race.remaining6000=std::bit_cast<std::int32_t>(state.remaining.value);
     race.progress=float(state.progress.index)+state.progress.fraction;race.furthest=std::max(race.furthest,race.progress);
@@ -144,6 +158,6 @@ void simulateAuthority(const DriverInput& d){
     if(raceFeedback.tick(race.remaining6000))audio.playRaceCue(4,1);
 }
 int authorityWinner()const {
-    if(!authorityLink||!authorityFinished[0]||!authorityFinished[1]||authorityLink->verifiedPeerFrames()<std::max(authorityFinishFrame[0],authorityFinishFrame[1]))return -3;
+    if(!authorityLink||!authorityResultFrame||authorityLink->verifiedPeerFrames()<authorityResultFrame)return -3;
     return authorityConfirmedWinner;
 }

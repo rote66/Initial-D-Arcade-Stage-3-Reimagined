@@ -23,7 +23,7 @@ OriginalBattleResults OriginalBattleResults::load(const std::filesystem::path& r
     OriginalBattleResults out;const auto path=root/"data/original_assets/results/result";
     out.model_=NativeModel::load(path/"result.idasmesh");
     out.textures_=NativeTextureBank::load(path/"textures/textures.idastex");
-    if(out.model_.chunks.size()!=43||out.textures_.size()!=10)throw std::runtime_error("Original battle results bank identity mismatch");
+    if(out.model_.chunks.size()!=43||out.textures_.sourceSize()!=10)throw std::runtime_error("Original battle results bank identity mismatch");
     return out;
 }
 std::vector<OriginalHudDraw> OriginalBattleResults::drawList(const OriginalBattleResultsState& s)const{
@@ -68,7 +68,7 @@ std::vector<OriginalHudDraw> OriginalBattleResults::drawList(const OriginalBattl
     // It has no WIN/LOSE heading or opponent advantage widget.
     if(timeAttack){draw(s.circuitLayout?5:4);return out;}
     //0EEC80: result heading, WIN/LOSE/TIME UP, signed advantage.
-    draw(s.circuitLayout?3:2);draw(9+s.resultStatus);
+    draw(s.circuitLayout?3:2);if(!s.draw)draw(9+s.resultStatus);
     std::array<float,7> advantageX{};advantageX[0]=4.87f;x=4.64f;
     for(unsigned i=1;i<7;++i){advantageX[i]=x;x-=.16f;}
     if(s.resultStatus>1){for(unsigned i=0;i<2;++i)draw(17,advantageX[i],-2.51f);}
@@ -121,7 +121,7 @@ OriginalTimeAttackResults OriginalTimeAttackResults::load(const std::filesystem:
     out.mainTextures_=NativeTextureBank::load(directory/"game2d/textures/textures.idastex");
     out.timeAttack_=NativeModel::load(directory/"game2d_ta/game2d_ta.idasmesh");
     out.timeAttackTextures_=NativeTextureBank::load(directory/"game2d_ta/textures/textures.idastex");
-    if(out.main_.chunks.size()!=212||out.mainTextures_.size()!=76||out.timeAttack_.chunks.size()!=24)throw std::runtime_error("Original results bank identity mismatch");
+    if(out.main_.chunks.size()!=212||out.mainTextures_.sourceSize()!=76||out.timeAttack_.chunks.size()!=24)throw std::runtime_error("Original results bank identity mismatch");
     // These authored widgets submit their foreground label before their black
     // backing strip. The arcade resolves that with Z; our 2D compositor uses
     // submission order. Sort once at load, keeping the original artwork intact.

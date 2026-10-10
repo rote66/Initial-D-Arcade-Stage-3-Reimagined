@@ -130,7 +130,7 @@ public sealed class Idas3TouchLayoutEditor : MonoBehaviour
     private Rect ResetYes=>new Rect(safe.center.x-160*ui,safe.center.y+24*ui,150*ui,42*ui);
     private Rect ResetNo=>new Rect(safe.center.x+10*ui,safe.center.y+24*ui,150*ui,42*ui);
     private static void Fill(Rect r,Color c){GUI.DrawTexture(r,Texture2D.whiteTexture,ScaleMode.StretchToFill,true,0,c,0,0);}
-    private void Text(Rect r,string value,GUIStyle style){Idas3Localization.Label(r,value,style);}
+    private void Text(Rect r,string value,GUIStyle style){Idas3MenuLocalization.Label(r,value,style);}
     private void Button(Rect r,string value){Fill(r,new Color(.10f,.13f,.18f,.97f));GUI.DrawTexture(r,Texture2D.whiteTexture,ScaleMode.StretchToFill,true,0,new Color(.65f,.71f,.79f),1.2f*ui,7*ui);Text(r,value,label);}
     private static string Name(string id){switch(id){case "STICK":return "STEERING STICK";case "L2":return "BRAKE";case "R2":return "ACCELERATOR";case "L1":return "SHIFT DOWN";case "R1":return "SHIFT UP";case "A":return "CONFIRM";case "B":return "BACK";default:return id;}}
     private void OnGUI(){

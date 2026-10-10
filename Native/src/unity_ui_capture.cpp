@@ -19,13 +19,11 @@ static_assert(sizeof(UnityUiVertex)==24&&sizeof(UnityUiDraw)==48&&sizeof(UnityUi
 namespace {
 struct Surface{int width=0,height=0;std::vector<UnityUiVertex> vertices;std::vector<UnityUiDraw> draws;};
 struct Capture {
- unsigned hudGroup=0;bool enabled=false,localized=false;UnityUiFrame frame{sizeof(UnityUiFrame)};Surface output;
+ unsigned hudGroup=0;bool enabled=false;UnityUiFrame frame{sizeof(UnityUiFrame)};Surface output;
  std::unordered_map<const std::uint32_t*,Surface> surfaces;
  std::vector<NativeImage> textures;
  std::unordered_map<const std::uint32_t*,std::pair<std::size_t,unsigned>> texturePointers;
  std::map<std::wstring,unsigned> glyphs;
- std::vector<std::string> labels;
- std::unordered_map<std::string,unsigned> labelIds;
 };
 Capture& state(){static Capture s;return s;}
 #if defined(IDAS3_PORTABLE_SCENE)
@@ -59,7 +57,6 @@ void append(Surface& dst,const Surface& src,float sx,float sy,float ox,float oy,
 }
 }
 bool unityUiEnabled(){return state().enabled;}
-bool unityUiLocalizationEnabled(){return state().localized;}
 bool unityUiFrameReuseEnabled(){return unityUiEnabled()&&!performanceBaseline();}
 void unityUiForgetTexture(const NativeImage& image){state().texturePointers.erase(image.argb.data());}
 bool unityUiTriangle(const std::uint32_t* target,int width,int height,const NativeImage& image,UnityUiVertex a,UnityUiVertex b,UnityUiVertex c,float opacity,unsigned tsp,bool original,unsigned pcw){
@@ -99,21 +96,6 @@ void unityUiSolid(const std::uint32_t* target,int width,int height,float x,float
  unityUiTriangle(target,width,height,white,a,b,c,1,(4u<<29)|(5u<<26)|(1u<<20)|(3u<<6),true,0);
  unityUiTriangle(target,width,height,white,c,b,d,1,(4u<<29)|(5u<<26)|(1u<<20)|(3u<<6),true,0);
 }
-bool unityUiLocalizedLabel(const std::uint32_t* target,int width,int height,std::string_view text,float x,float y,float w,float h,unsigned argb){
- auto& s=state();if(!s.enabled||!s.localized||text.empty()||w<=0||h<=0)return false;
- if(std::none_of(text.begin(),text.end(),[](unsigned char c){return (c>='A'&&c<='Z')||(c>='a'&&c<='z');}))return false;
- const std::string key(text);auto found=s.labelIds.find(key);unsigned id;
- if(found!=s.labelIds.end())id=found->second;
- else{if(s.labels.size()>=32768)return false;id=unsigned(s.labels.size());s.labels.push_back(key);s.labelIds.emplace(key,id);}
- static const NativeImage white{1,1,{0xffffffff}};
- auto& out=surface(target,width,height);const auto first=unsigned(out.vertices.size());
- out.vertices.insert(out.vertices.end(),{{x,y,0,0,argb,0},{x+w,y,0,0,argb,0},{x,y+h,0,0,argb,0},
-     {x,y+h,0,0,argb,0},{x+w,y,0,0,argb,0},{x+w,y+h,0,0,argb,0}});
- // The rectangle follows the same surface caching, clipping, HUD transforms
- // and submission order as sprites. Unity expands its reviewed text to glyphs.
- out.draws.push_back({first,6,texture(white),(1u<<15)|(1u<<16)|(1u<<20)|(3u<<6),8,16u|(s.hudGroup<<8),1,id,0,0,float(width),float(height)});
- return true;
-}
 void unityUiLine(const std::uint32_t* target,int width,int height,float x,float y,float xx,float yy,float thickness,unsigned argb){
  if(!unityUiEnabled())return;static const NativeImage white{1,1,{0xffffffff}};
  const float length=std::hypot(xx-x,yy-y);if(length<=0)return;const float dx=(yy-y)*thickness/(2*length),dy=(x-xx)*thickness/(2*length);
@@ -152,13 +134,7 @@ void unityUiSubmit(const std::uint32_t* pixels,int width,int height,bool behind,
   originalCanvas?(s.frame.width-width*fit)*.5f:0,originalCanvas?(s.frame.height-height*fit)*.5f:0,(behind?2u:0u)|(additive?4u:0u));
 }
 }
-void Idas3UiEnable(int enabled){auto& s=idas3::state();const bool localized=s.localized;s={};s.localized=localized;s.enabled=enabled!=0;}
-void Idas3UiEnableLocalization(int enabled){idas3::state().localized=enabled!=0;}
-int Idas3UiCopyLabel(unsigned id,void* destination,int capacity){
- const auto& labels=idas3::state().labels;if(id>=labels.size()||capacity<0)return 0;
- const auto& value=labels[id];if(!destination)return int(value.size());
- if(std::size_t(capacity)<value.size())return 0;std::memcpy(destination,value.data(),value.size());return int(value.size());
-}
+void Idas3UiEnable(int enabled){auto& s=idas3::state();s={};s.enabled=enabled!=0;}
 void Idas3UiBeginFrame(int width,int height){auto& s=idas3::state();if(!s.enabled)return;
  if(idas3::unityUiFrameReuseEnabled()){s.output.width=s.output.height=0;s.output.vertices.clear();s.output.draws.clear();}
  else s.output={};

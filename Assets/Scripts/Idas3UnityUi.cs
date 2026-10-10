@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -21,22 +20,33 @@ public sealed class Idas3UnityUi : MonoBehaviour
     [StructLayout(LayoutKind.Sequential, Pack = 8)] struct Vertex {
         public float x, y, u, v; public uint argb, offsetArgb;
     }
+    [StructLayout(LayoutKind.Sequential)] struct MeshVertex {
+        public Vector3 position; public Color32 color; public Vector2 uv; public Vector4 offset;
+    }
+    static readonly VertexAttributeDescriptor[] MeshLayout = {
+        new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+        new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
+        new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+        new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4)
+    };
+    const MeshUpdateFlags UploadFlags = MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices;
     [StructLayout(LayoutKind.Sequential, Pack = 8)] struct TextureInfo { public uint size, width, height, bytes; }
     [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiGetFrame(ref Frame frame);
     [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyDraws([Out] Draw[] draws, int capacity);
     [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyVertices([Out] Vertex[] vertices, int capacity);
     [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiGetTextureInfo(uint id, ref TextureInfo info);
     [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyTextureRGBA(uint id, [Out] byte[] rgba, int capacity);
-    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern void Idas3UiEnableLocalization(int enabled);
-    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)] static extern int Idas3UiCopyLabel(uint id,[Out] byte[] utf8,int capacity);
-    internal static void ConfigureLocalization()=>Idas3UiEnableLocalization(Idas3Localization.Chinese?1:0);
 
     Camera source, backgroundCamera, foregroundCamera;
-    CommandBuffer background, foreground;
+    CommandBuffer background, foreground, extras;
     Shader shader;
     Mesh mesh, fadeMesh;
     Material fadeMaterial;
     Draw[] draws = Array.Empty<Draw>(); Vertex[] vertices = Array.Empty<Vertex>();
+    MeshVertex[] meshVertices = Array.Empty<MeshVertex>();
+    int[] sequentialIndices = Array.Empty<int>();
+    SubMeshDescriptor[] submeshes = Array.Empty<SubMeshDescriptor>();
+    bool packedMesh;
     readonly List<Vector3> positions = new List<Vector3>();
     readonly List<Vector2> uv = new List<Vector2>();
     readonly List<Color32> colors = new List<Color32>();
@@ -45,42 +55,12 @@ public sealed class Idas3UnityUi : MonoBehaviour
     readonly Dictionary<ulong, Material> materials = new Dictionary<ulong, Material>();
     readonly List<int[]> indexBuffers = new List<int[]>();
     readonly List<Draw> reusableBatches = new List<Draw>();
+    readonly List<Draw> submittedBatches = new List<Draw>();
     readonly List<MaterialPropertyBlock> drawProperties = new List<MaterialPropertyBlock>();
-    readonly Dictionary<uint,string> localizedLabels=new Dictionary<uint,string>();
-    Font localizedFont;
-    internal int LocalizedLabelCount {get;private set;}
-    internal IEnumerable<string> CapturedLabelSources=>localizedLabels.Values;
-    string LabelSource(uint id){
-        if(localizedLabels.TryGetValue(id,out var value))return value;
-        int size=Idas3UiCopyLabel(id,null,0);if(size<=0||size>65536)throw new InvalidOperationException("Invalid native UI label");
-        var bytes=new byte[size];if(Idas3UiCopyLabel(id,bytes,size)!=size)throw new InvalidOperationException("Native UI label transfer failed");
-        value=Encoding.UTF8.GetString(bytes);localizedLabels.Add(id,value);return value;
-    }
-    void ExpandLocalizedLabels(uint count){
-        LocalizedLabelCount=0;for(int i=0;i<count;++i)if((draws[i].flags&16)!=0)++LocalizedLabelCount;if(LocalizedLabelCount==0)return;
-        // A cloned dynamic Font can retain the source material/atlas while its
-        // glyph cache changes. Use the imported font's matched atlas and UVs.
-        localizedFont=Idas3Localization.ChineseFont;
-        // Request the entire frame first; atlas repacking must precede UV reads.
-        for(int i=0;i<count;++i)if((draws[i].flags&16)!=0){var d=draws[i];float h=positions[(int)d.first+2].y-positions[(int)d.first].y;
-            localizedFont.RequestCharactersInTexture(Idas3Localization.Text(LabelSource(d.reserved)),Mathf.Clamp(Mathf.CeilToInt(h),8,256),FontStyle.Normal);}
-        for(int i=0;i<count;++i){
-            var d=draws[i];if((d.flags&16)==0)continue;
-            var origin=positions[(int)d.first];float w=positions[(int)d.first+1].x-origin.x,h=positions[(int)d.first+2].y-origin.y;
-            int size=Mathf.Clamp(Mathf.CeilToInt(h),8,256);string value=Idas3Localization.Text(LabelSource(d.reserved));float measured=0;
-            foreach(char c in value)if(localizedFont.GetCharacterInfo(c,out var glyph,size,FontStyle.Normal))measured+=glyph.advance;
-            float fit=Mathf.Min(1,w/Mathf.Max(1,measured)),pen=origin.x,baseline=origin.y+h*.88f;
-            var color=colors[(int)d.first];d.first=(uint)positions.Count;d.count=0;
-            foreach(char c in value){
-                if(!localizedFont.GetCharacterInfo(c,out var glyph,size,FontStyle.Normal))continue;
-                float x0=pen+glyph.minX*fit,x1=pen+glyph.maxX*fit,y0=baseline-glyph.maxY*fit,y1=baseline-glyph.minY*fit;
-                var a=new Vector3(x0,y0,0);var b=new Vector3(x1,y0,0);var cc=new Vector3(x0,y1,0);var dd=new Vector3(x1,y1,0);
-                positions.AddRange(new[]{a,b,cc,cc,b,dd});uv.AddRange(new[]{glyph.uvTopLeft,glyph.uvTopRight,glyph.uvBottomLeft,glyph.uvBottomLeft,glyph.uvTopRight,glyph.uvBottomRight});
-                for(int n=0;n<6;++n){colors.Add(color);offsets.Add(Vector4.zero);}d.count+=6;pen+=glyph.advance*fit;
-            }
-            draws[i]=d;
-        }
-    }
+    uint submittedWidth, submittedHeight;
+    internal bool SubmissionCacheBaseline { get; set; }
+    public int IndexUploadCount { get; private set; }
+    public int CommandRebuildCount { get; private set; }
     MaterialPropertyBlock fadeProperties;
     Idas3SceneRenderer sceneRenderer;
     Idas3ArcadeHud arcadeHud;
@@ -113,6 +93,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
         // initializers during editor deserialization/component creation.
         fadeProperties = new MaterialPropertyBlock();
         performanceBaseline = Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-scene-perf-baseline") >= 0;
+        SubmissionCacheBaseline = Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-ui-submission-baseline") >= 0;
         sceneRenderer = GetComponent<Idas3SceneRenderer>();
         if (Marshal.SizeOf<Frame>() != 40 || Marshal.SizeOf<Draw>() != 48 || Marshal.SizeOf<Vertex>() != 24)
             throw new InvalidOperationException("Native UI ABI size mismatch");
@@ -122,8 +103,10 @@ public sealed class Idas3UnityUi : MonoBehaviour
         foregroundCamera = CreateCamera("Original UI foreground", 2);
         background = new CommandBuffer { name = "Original animated UI background" };
         foreground = new CommandBuffer { name = "Original animated UI foreground" };
+        extras = new CommandBuffer { name = "Custom instruments and original fade" };
         backgroundCamera.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, background);
         foregroundCamera.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, foreground);
+        foregroundCamera.AddCommandBuffer(CameraEvent.BeforeForwardOpaque, extras);
         mesh = new Mesh { name = "Original menu and HUD elements", indexFormat = IndexFormat.UInt32 };
         mesh.MarkDynamic();
         fadeMesh = new Mesh { name = "Original owner full-screen fade" };
@@ -155,14 +138,13 @@ public sealed class Idas3UnityUi : MonoBehaviour
     }
     Material GetMaterial(Draw draw)
     {
-        ulong key = draw.tsp | ((ulong)(draw.pcw & 12) << 32) | ((ulong)(draw.flags & 21) << 40);
+        ulong key = draw.tsp | ((ulong)(draw.pcw & 12) << 32) | ((ulong)(draw.flags & 5) << 40);
         if (materials.TryGetValue(key, out var material)) return material;
         material = new Material(shader) { name = "Original UI material " + key.ToString("X"), hideFlags = HideFlags.DontSave };
         bool original = (draw.flags & 1) != 0;
         uint src = original ? draw.tsp >> 29 : 4, dst = original ? (draw.tsp >> 26) & 7 : 5;
         if ((draw.flags & 4) != 0) dst = 1;
         material.SetInteger("_Tsp", unchecked((int)draw.tsp)); material.SetInteger("_Pcw", (int)draw.pcw);
-        material.SetInteger("_FontAtlas", (draw.flags & 16) != 0 ? 1 : 0);
         material.SetInteger("_Original", original ? 1 : 0); material.SetInteger("_SourceIsOne", src == 1 ? 1 : 0);
         material.SetInt("_SrcBlend", (int)Blend(src, true)); material.SetInt("_DstBlend", (int)Blend(dst, false));
         materials.Add(key, material); return material;
@@ -183,9 +165,15 @@ public sealed class Idas3UnityUi : MonoBehaviour
         }
     }
     static bool SameBatch(Draw a, Draw b) => a.first + a.count == b.first && a.texture == b.texture && a.tsp == b.tsp && a.pcw == b.pcw && a.flags == b.flags && a.opacity == b.opacity && a.clip == b.clip;
+    static bool SameSubmission(Draw a, Draw b) => a.first == b.first && a.count == b.count && a.texture == b.texture &&
+        a.tsp == b.tsp && a.pcw == b.pcw && a.flags == b.flags && a.opacity == b.opacity && a.clip.Equals(b.clip);
     public void ApplyFrame()
     {
         if (source == null) return;
+        bool visible=sceneRenderer==null||sceneRenderer.ShowGameHud;
+        backgroundCamera.enabled=foregroundCamera.enabled=visible;
+        if(!visible)return;
+        IndexUploadCount = CommandRebuildCount = 0;
         var frame = new Frame { size = 40 };
         if (Idas3UiGetFrame(ref frame) == 0) throw new InvalidOperationException("Native UI frame unavailable");
         if (frame.drawCount > 100000 || frame.vertexCount > 1000000 || frame.width == 0 || frame.height == 0) throw new InvalidOperationException("Invalid native UI frame bounds");
@@ -193,9 +181,17 @@ public sealed class Idas3UnityUi : MonoBehaviour
         if (vertices.Length < frame.vertexCount) vertices = new Vertex[frame.vertexCount];
         if (Idas3UiCopyDraws(draws, draws.Length) != (int)frame.drawCount || Idas3UiCopyVertices(vertices, vertices.Length) != (int)frame.vertexCount) throw new InvalidOperationException("UI frame transfer failed");
         LoadTextures(frame.textureCount);
-        positions.Clear(); uv.Clear(); colors.Clear(); offsets.Clear();
+        bool baselineSubmission = performanceBaseline || SubmissionCacheBaseline;
+        bool growMesh = meshVertices.Length == 0 || meshVertices.Length < frame.vertexCount;
+        if (growMesh) {
+            int capacity = Mathf.NextPowerOfTwo(Mathf.Max(256, (int)frame.vertexCount));
+            meshVertices = new MeshVertex[capacity]; sequentialIndices = new int[capacity];
+            for (int i = 0; i < capacity; ++i) sequentialIndices[i] = i;
+        }
         for (int i = 0; i < frame.vertexCount; ++i) {
-            var v = vertices[i]; positions.Add(new Vector3(v.x, v.y, 0)); uv.Add(new Vector2(v.u, v.v)); colors.Add(Color(v.argb)); offsets.Add(Offset(v.offsetArgb));
+            var v = vertices[i]; meshVertices[i] = new MeshVertex {
+                position = new Vector3(v.x, v.y, 0), color = Color(v.argb), uv = new Vector2(v.u, v.v), offset = Offset(v.offsetArgb)
+            };
         }
         // Semantic groups keep all authored pieces on a shared pivot, including
         // animated backings, digits, portraits and names from different banks.
@@ -210,19 +206,43 @@ public sealed class Idas3UnityUi : MonoBehaviour
             var pivot=HudPivot(group,frame.width,frame.height);
             var offset=layout?.HudOffset(group)??Vector2.zero;
             float hudX=pivot.x*(1-hudScale)+offset.x*frame.width,hudY=pivot.y*(1-hudScale)+offset.y*frame.height;
+            float minX=float.PositiveInfinity,minY=float.PositiveInfinity,maxX=float.NegativeInfinity,maxY=float.NegativeInfinity;
             for(int k=(int)d.first;k<d.first+d.count;++k){
-                var v=vertices[k];var point=new Vector3(v.x*hudScale+hudX,v.y*hudScale+hudY,0);positions[k]=point;
-                if(group<hudBounds.Length){
-                    if(!hudVisible[group]){hudBounds[group]=new Rect(point.x,point.y,0,0);hudVisible[group]=true;}
-                    else{var bounds=hudBounds[group];hudBounds[group]=Rect.MinMaxRect(Mathf.Min(bounds.xMin,point.x),Mathf.Min(bounds.yMin,point.y),Mathf.Max(bounds.xMax,point.x),Mathf.Max(bounds.yMax,point.y));}
-                }
+                var v=vertices[k];var point=new Vector3(v.x*hudScale+hudX,v.y*hudScale+hudY,0);meshVertices[k].position=point;
+                minX=Mathf.Min(minX,point.x);minY=Mathf.Min(minY,point.y);maxX=Mathf.Max(maxX,point.x);maxY=Mathf.Max(maxY,point.y);
+            }
+            if(group<hudBounds.Length&&d.count>0){
+                // Merge each source draw once instead of reconstructing a Rect
+                // for every triangle vertex. Editor hit bounds stay identical.
+                if(hudVisible[group]){var bounds=hudBounds[group];minX=Mathf.Min(bounds.xMin,minX);minY=Mathf.Min(bounds.yMin,minY);maxX=Mathf.Max(bounds.xMax,maxX);maxY=Mathf.Max(bounds.yMax,maxY);}
+                hudBounds[group]=Rect.MinMaxRect(minX,minY,maxX,maxY);hudVisible[group]=true;
             }
             HudVertexCount+=(int)d.count;
             d.clip=new Vector4(d.clip.x*hudScale+hudX,d.clip.y*hudScale+hudY,d.clip.z*hudScale+hudX,d.clip.w*hudScale+hudY);
             draws[i]=d;
         }
-        ExpandLocalizedLabels(frame.drawCount);
-        mesh.Clear(); mesh.SetVertices(positions); mesh.SetUVs(0, uv); mesh.SetColors(colors); mesh.SetUVs(1, offsets);
+        // All source triangles use consecutive vertices. Keep one sequential
+        // index buffer and update only each draw's range. Capacity survives
+        // changing digit/glyph counts; unused vertices are never submitted.
+        bool resetIndices = baselineSubmission || !packedMesh || growMesh;
+        if (baselineSubmission) {
+            positions.Clear(); uv.Clear(); colors.Clear(); offsets.Clear();
+            for (int i = 0; i < frame.vertexCount; ++i) {
+                var v = meshVertices[i]; positions.Add(v.position); uv.Add(v.uv); colors.Add(v.color); offsets.Add(v.offset);
+            }
+            mesh.Clear(); mesh.SetVertices(positions); mesh.SetUVs(0, uv); mesh.SetColors(colors); mesh.SetUVs(1, offsets);
+            packedMesh = false;
+        } else {
+            if (resetIndices) {
+                mesh.Clear(); mesh.SetVertexBufferParams(meshVertices.Length, MeshLayout);
+                mesh.SetIndexBufferParams(sequentialIndices.Length, IndexFormat.UInt32);
+                if (sequentialIndices.Length > 0) {
+                    mesh.SetIndexBufferData(sequentialIndices, 0, 0, sequentialIndices.Length, UploadFlags); ++IndexUploadCount;
+                }
+                packedMesh = true;
+            }
+            if (frame.vertexCount > 0) mesh.SetVertexBufferData(meshVertices, 0, 0, (int)frame.vertexCount, 0, UploadFlags);
+        }
         ArcadeMeterVisible=false;
         ReleaseOriginalMeter(layout);
         if(layout!=null&&layout.hudMeterStyle>0&&hudVisible[2]&&Idas3ArcadeMeterCatalog.IsAvailable(layout.hudMeterStyle)){
@@ -254,49 +274,82 @@ public sealed class Idas3UnityUi : MonoBehaviour
         if(!ArcadeMeterVisible){meterClock.Reset();meterWasPreview=false;}
         OrnamentVisible=false;
         if(layout==null||layout.hudOrnamentId==0){ornament?.Dispose();ornament=null;}
-        else if(hudVisible[2]){
+        else if(hudVisible[2]&&(ArcadePreview||Idas3ReplayViewer.Instance==null||Idas3ReplayViewer.Instance.OrnamentCameraVisible)){
             if(ornament==null)ornament=new Idas3OrnamentRenderer();
-            OrnamentVisible=ArcadePreview?ornament.RenderPreview(layout.hudOrnamentId,Time.unscaledTime)!=null:ornament.UpdateLive(layout.hudOrnamentId,out _);
+            OrnamentVisible=ArcadePreview?ornament.RenderPreview(layout.hudOrnamentId,Time.unscaledTime)!=null:
+                Idas3ReplayViewer.Instance!=null?ornament.UpdateReplay(layout.hudOrnamentId,Idas3ReplayViewer.Instance):ornament.UpdateLive(layout.hudOrnamentId,out _);
             if(OrnamentVisible){hudBounds[10]=Idas3OrnamentRenderer.ScreenBounds(frame.width,frame.height,layout);hudVisible[10]=true;}
         }else ornament?.Suspend();
         var batches = performanceBaseline ? new List<Draw>() : reusableBatches;
         batches.Clear();
         for (int i = 0; i < frame.drawCount; ++i) {
             var d = draws[i];
-            if (d.first + d.count > positions.Count || d.texture >= frame.textureCount) throw new InvalidOperationException("UI draw outside source frame");
+            if (d.first + d.count > frame.vertexCount || d.texture >= frame.textureCount) throw new InvalidOperationException("UI draw outside source frame");
             if(ArcadeMeterVisible&&(d.flags&8)!=0&&((d.flags>>8)&15)==2)continue;
             if (batches.Count != 0 && SameBatch(batches[batches.Count - 1], d)) { var merged = batches[batches.Count - 1]; merged.count += d.count; batches[batches.Count - 1] = merged; }
             else batches.Add(d);
         }
-        mesh.subMeshCount = batches.Count;
-        background.Clear(); foreground.Clear();
+        int previousSubmeshes = mesh.subMeshCount;
+        if (baselineSubmission) {
+            if (previousSubmeshes != batches.Count) mesh.subMeshCount = batches.Count;
+        } else {
+            bool topologyChanged = resetIndices || previousSubmeshes != batches.Count;
+            if (submeshes.Length < batches.Count) submeshes = new SubMeshDescriptor[batches.Count];
+            for (int i = 0; i < batches.Count; ++i) {
+                var d = batches[i];
+                topologyChanged |= i >= submittedBatches.Count || submittedBatches[i].first != d.first || submittedBatches[i].count != d.count;
+                submeshes[i] = new SubMeshDescriptor((int)d.first, (int)d.count, MeshTopology.Triangles) {
+                    firstVertex = (int)d.first, vertexCount = (int)d.count,
+                    bounds = new Bounds(Vector3.zero, Vector3.one * 100000)
+                };
+            }
+            // Publish together: setting shifted ranges individually temporarily
+            // overlaps the previous frame's ranges and triggers Unity warnings.
+            if (topologyChanged) mesh.SetSubMeshes(submeshes, 0, batches.Count, UploadFlags);
+        }
+        bool rebuildCommands = performanceBaseline || SubmissionCacheBaseline || submittedWidth != frame.width ||
+            submittedHeight != frame.height || submittedBatches.Count != batches.Count;
+        if (!rebuildCommands) for (int i = 0; i < batches.Count; ++i)
+            if (!SameSubmission(submittedBatches[i], batches[i])) { rebuildCommands = true; break; }
+        if (rebuildCommands) { background.Clear(); foreground.Clear(); ++CommandRebuildCount; }
         var size = new Vector4(frame.width, frame.height, 0, 0);
         for (int i = 0; i < batches.Count; ++i) {
             var d = batches[i];
-            while (indexBuffers.Count <= i) indexBuffers.Add(Array.Empty<int>());
-            var indices = indexBuffers[i]; if (indices.Length != d.count) indexBuffers[i] = indices = new int[d.count];
-            for (int k = 0; k < indices.Length; ++k) indices[k] = (int)d.first + k;
-            mesh.SetIndices(indices, MeshTopology.Triangles, i, false);
+            if (baselineSubmission) {
+                while (indexBuffers.Count <= i) indexBuffers.Add(Array.Empty<int>());
+                var indices = indexBuffers[i];
+                if (indices.Length != d.count) indexBuffers[i] = indices = new int[d.count];
+                for (int k = 0; k < indices.Length; ++k) indices[k] = (int)d.first + k;
+                mesh.SetIndices(indices, MeshTopology.Triangles, i, false); ++IndexUploadCount;
+            }
+            if (!rebuildCommands) continue;
             MaterialPropertyBlock properties;
             if (performanceBaseline) properties = new MaterialPropertyBlock();
             else {
                 while (drawProperties.Count <= i) drawProperties.Add(new MaterialPropertyBlock());
                 properties = drawProperties[i];
             }
-            properties.SetTexture("_MainTex", (d.flags&16)!=0?localizedFont.material.mainTexture:textures[(int)d.texture]); properties.SetVector("_Canvas", size); properties.SetVector("_Clip", d.clip);
+            properties.SetTexture("_MainTex", textures[(int)d.texture]); properties.SetVector("_Canvas", size); properties.SetVector("_Clip", d.clip);
             properties.SetFloat("_Opacity", d.opacity); properties.SetColor("_Tint", UnityEngine.Color.white);
             var command = (d.flags & 2) != 0 ? background : foreground;
             command.DrawMesh(mesh, Matrix4x4.identity, GetMaterial(d), i, 0, properties);
         }
+        if (rebuildCommands) {
+            submittedBatches.Clear(); submittedBatches.AddRange(batches);
+            submittedWidth = frame.width; submittedHeight = frame.height;
+        }
         mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000);
-        if(ArcadeMeterVisible)arcadeHud.Render(foreground,frame.width,frame.height);
-        if(OrnamentVisible)ornament.Render(foreground,frame.width,frame.height,layout);
+        // These animate independently of the native HUD. Keeping their commands
+        // separate lets the original sprite lists reuse their live mesh safely.
+        extras.Clear();
+        if(ArcadeMeterVisible)arcadeHud.Render(extras,frame.width,frame.height);
+        if(OrnamentVisible)ornament.Render(extras,frame.width,frame.height,layout);
         var renderer = performanceBaseline ? GetComponent<Idas3SceneRenderer>() : sceneRenderer;
         uint fade = renderer ? renderer.CurrentFrame.screenFadeArgb : 0;
         if ((fade >> 24) != 0) {
             var properties = performanceBaseline ? new MaterialPropertyBlock() : fadeProperties; properties.SetVector("_Canvas", new Vector4(1,1,0,0)); properties.SetVector("_Clip", new Vector4(0,0,1,1));
             properties.SetFloat("_Opacity", 1); properties.SetColor("_Tint", Color(fade));
-            foreground.DrawMesh(fadeMesh, Matrix4x4.identity, fadeMaterial, 0, 0, properties);
+            extras.DrawMesh(fadeMesh, Matrix4x4.identity, fadeMaterial, 0, 0, properties);
         }
         backgroundCamera.targetTexture = foregroundCamera.targetTexture = source.targetTexture;
         backgroundCamera.rect = foregroundCamera.rect = renderer ? renderer.ViewportRect : new Rect(0,0,1,1);
@@ -330,7 +383,7 @@ public sealed class Idas3UnityUi : MonoBehaviour
     // Explicit captures render the same overlay cameras as the normal player.
     public void RenderOverlayForCapture()
     {
-        if(source==null)return;
+        if(source==null||sceneRenderer!=null&&!sceneRenderer.ShowGameHud)return;
         backgroundCamera.targetTexture=foregroundCamera.targetTexture=source.targetTexture;
         try {backgroundCamera.Render();foregroundCamera.Render();}
         finally {backgroundCamera.targetTexture=foregroundCamera.targetTexture=null;}
@@ -339,10 +392,11 @@ public sealed class Idas3UnityUi : MonoBehaviour
     {
         if (backgroundCamera && background != null) backgroundCamera.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, background);
         if (foregroundCamera && foreground != null) foregroundCamera.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, foreground);
-        background?.Release(); foreground?.Release(); background = foreground = null;
+        if (foregroundCamera && extras != null) foregroundCamera.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque, extras);
+        background?.Release(); foreground?.Release(); extras?.Release(); background = foreground = extras = null;
+        submittedBatches.Clear(); submittedWidth = submittedHeight = 0; packedMesh = false;
         if (backgroundCamera) Destroy(backgroundCamera.gameObject); if (foregroundCamera) Destroy(foregroundCamera.gameObject);
         if (mesh) Destroy(mesh); if (fadeMesh) Destroy(fadeMesh); if (fadeMaterial) Destroy(fadeMaterial);
-        localizedFont=null;localizedLabels.Clear();
         arcadeHud?.Dispose();arcadeHud=null;meterClock.Reset();meterWasPreview=false;
         ornament?.Dispose();ornament=null;OrnamentVisible=false;
         foreach (var material in materials.Values) Destroy(material); materials.Clear();

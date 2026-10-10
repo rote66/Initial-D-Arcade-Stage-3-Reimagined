@@ -20,7 +20,7 @@ namespace Idas3.Multiplayer
             if(Array.IndexOf(args,"-idas3-online-controller-smoke")>=0 &&
                Array.IndexOf(args,"-idas3-online-controller-steam-baseline")>=0)
             {Debug.Log("IDAS3 Steam Input baseline: bundled mapping intentionally skipped for private diagnostic.");return;}
-            string manifest=Path.GetFullPath(Path.Combine(Application.streamingAssetsPath,"SteamInput/steam_input_manifest.vdf"));
+            string manifest=Path.GetFullPath(Path.Combine(Idas3AssetPaths.Root,"SteamInput/steam_input_manifest.vdf"));
             if(!File.Exists(manifest))throw new FileNotFoundException("Bundled Steam gamepad mapping is missing.",manifest);
             configurationLoaded=Callback<SteamInputConfigurationLoaded_t>.Create(value=> {
                 Debug.Log("IDAS3 Steam Input config loaded: app="+value.m_unAppID+" device="+value.m_ulDeviceHandle+

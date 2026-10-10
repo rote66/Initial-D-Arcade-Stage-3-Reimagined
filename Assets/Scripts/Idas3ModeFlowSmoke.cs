@@ -375,14 +375,14 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             var folder=Path.Combine(root,"legacy-options");Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"game-options.json"),"{\"version\":1}");
             var legacy=new Idas3GameOptions(new PerformancePlatform());legacy.Initialize(folder);Check(legacy.Current.timeAttackGhost,"Old settings default ghost on");
             var menu=host.PauseMenu;menu.SetOpen(true);menu.SelectTab(2);
-            for(int i=0;i<10;++i)menu.Navigate(1);
-            Check(menu.DiagnosticSelection==11&&host.GameOptions.Draft.timeAttackGhost,"Gameplay controller reaches ghost toggle");
+            for(int i=0;i<2;++i)menu.Navigate(1);
+            Check(menu.DiagnosticSelection==3&&host.GameOptions.Draft.timeAttackGhost,"Gameplay controller reaches ghost toggle");
             // Optional interactive capture: hidden Windows players do not send
             // OnGUI repaint events. Controller/settings checks run in both.
             if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-ghost-menu-capture")>=0)yield return Capture("gameplay-ghost-setting");
             menu.Activate();
             Check(!host.GameOptions.Draft.timeAttackGhost&&host.GameOptions.Current.timeAttackGhost&&host.GameOptions.HasUnsavedChanges,"Toggle remains draft before Apply");
-            menu.Navigate(1);menu.Navigate(1);Check(menu.DiagnosticSelection==13,"Apply remains reachable");menu.Activate();yield return Frames(2);
+            menu.Navigate(1);menu.Navigate(1);menu.Navigate(1);Check(menu.DiagnosticSelection==6,"Apply remains reachable");menu.Activate();yield return Frames(2);
             Check(!host.GameOptions.Current.timeAttackGhost&&!ghost.ShowGhost&&!ghost.Visible,"Apply turns live ghost off");
             var reload=new Idas3GameOptions(new PerformancePlatform());reload.Initialize(Path.GetDirectoryName(host.GameOptions.FilePath));
             Check(!reload.Current.timeAttackGhost,"Ghost off survives restart");
@@ -773,9 +773,10 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             Check(Idas3GameOptions.PerformancePreset(host.GameOptions.Draft)==1,"Controller selects Balanced preset");
             menu.Navigate(1);menu.Activate();Check(host.GameOptions.Draft.rainDetail==0,"Controller rain detail toggle");
             menu.Navigate(1);menu.Activate();Check(host.GameOptions.Draft.importedSceneryDetail==2,"Controller scenery toggle");
-            menu.Navigate(1);Check(menu.DiagnosticSelection==9,"Graphics controller reaches Reset Defaults");
-            menu.Navigate(1);Check(menu.DiagnosticSelection==10,"Graphics controller reaches Apply");
-            menu.Navigate(1);Check(menu.DiagnosticSelection==11,"Graphics controller reaches Back");
+            menu.Navigate(1);Check(menu.DiagnosticSelection==9,"Graphics controller reaches FPS display");
+            menu.Navigate(1);Check(menu.DiagnosticSelection==10,"Graphics controller reaches Reset Defaults");
+            menu.Navigate(1);Check(menu.DiagnosticSelection==11,"Graphics controller reaches Apply");
+            menu.Navigate(1);Check(menu.DiagnosticSelection==12,"Graphics controller reaches Back");
             menu.SetOpen(false);Check(host.GameOptions.Current.rainDetail==0,"Leaving without Apply discards graphics edits");
             Check(Idas3Native.Idas3SceneSetPerformance(-1)==0&&Idas3Native.Idas3SceneSetPerformance(2)==0,"Native quality boundary rejects invalid values");
             Check(Idas3SceneModeFlowFixture(-7)==1,"Native weather/mirror and race invariance regression");
@@ -804,13 +805,13 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             foreach(string build in new[]{"0.3.93-replay-detail.1","0.3.94-player-replays.4","0.3.95-community-replays.0","0.3.95-other.99","invalid",null})Check(!Idas3CommunityTimes.SupportedBuild(build),"Older/unknown build rejected: "+build);
             foreach(string build in new[]{Application.version,"0.3.95-community-replays.2","0.3.95-community-replays.10","0.3.95","0.3.96","0.4.0"})Check(Idas3CommunityTimes.SupportedBuild(build),"Current/newer build accepted: "+build);
             Check(Application.version==Idas3CommunityTimes.RequiredSubmissionBuild&&Idas3CommunityTimes.SubmissionBuild(Application.version),"Current player exactly matches the upload release");
-            foreach(string build in new[]{"0.3.95-community-replays.1","0.3.95-community-replays.36","0.3.95-community-replays.37","0.3.95-community-replays.39","0.3.96","0.4.0","0.3.95-community-replays.038","0.3.95-community-replays.38 ",null}){
+            foreach(string build in new[]{"0.3.95-community-replays.1","0.3.95-community-replays.36","0.3.95-community-replays.37","0.3.95-community-replays.38","0.3.95-community-replays.39","0.3.95-community-replays.40","0.3.95-community-replays.41","0.3.95-community-replays.42","0.3.95-community-replays.43","0.3.95-community-replays.44","0.3.95-community-replays.45","0.3.95-community-replays.47","0.3.96","0.4.0","0.3.95-community-replays.046","0.3.95-community-replays.46 ",null}){
                 var wrongBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));wrongBuild.build=build;
                 Check(!Idas3CommunityTimes.SubmissionBuild(build)&&!Idas3CommunityTimes.Uploadable(wrongBuild),"Only exact build can submit: "+build);
             }
             var previousBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));previousBuild.id=Guid.NewGuid().ToString();previousBuild.build="0.3.95-community-replays.36";
             previousBuild.ticks6000=60000;previousBuild.splits=new[]{20000,40000,60000,0};
-            var futureBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));futureBuild.id=Guid.NewGuid().ToString();futureBuild.build="0.3.95-community-replays.39";
+            var futureBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));futureBuild.id=Guid.NewGuid().ToString();futureBuild.build="0.3.95-community-replays.47";
             var previousSeason=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));previousSeason.id=Guid.NewGuid().ToString();previousSeason.epoch=1;
             Check(!Idas3CommunityTimes.Uploadable(previousBuild)&&!Idas3CommunityTimes.Uploadable(previousSeason),"Old build and season queues cannot re-enter rankings");
             Check(Idas3CommunityTimes.Flatten(new Idas3CommunityTimes.Snapshot{ruleset=Idas3CommunityTimes.Ruleset,entries=new[]{old,imported}}).Length==28,"Existing leaderboard history remains readable");
@@ -829,7 +830,7 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             string saved=File.ReadAllText(Path.Combine(community,"pending.json"));Check(saved.Contains(fresh.id)&&!saved.Contains(old.id)&&!saved.Contains(imported.id)&&!saved.Contains(previousBuild.id)&&!saved.Contains(futureBuild.id),"Queue migration keeps only the exact-release run");
             Check(File.Exists(Path.Combine(community,fresh.id+".idr")),"Eligible queued replay is preserved");
             var menu=host.PauseMenu;menu.OpenAttractOptions();menu.SelectTab(5);menu.Navigate(1);Check(menu.DiagnosticSelection==2,"Controller reaches rankings");
-            menu.Navigate(1);Check(menu.DiagnosticSelection==3,"Controller reaches Reset after the two Records options");menu.Navigate(1);menu.Navigate(1);Check(menu.DiagnosticSelection==5,"Controller reaches Back without an import row");
+            menu.Navigate(1);Check(menu.DiagnosticSelection==3,"Controller reaches Discord presence");menu.Navigate(1);Check(menu.DiagnosticSelection==4,"Controller reaches lights-off advantage");menu.Navigate(1);Check(menu.DiagnosticSelection==5,"Controller reaches Reset after Online options");menu.Navigate(1);menu.Navigate(1);Check(menu.DiagnosticSelection==7,"Controller reaches Back without an import row");
             menu.SetOpen(false);Finish(true,null);yield break;
         }
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-replay-local-check")>=0){
@@ -888,7 +889,7 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             var menu=(Idas3PauseMenu)typeof(Idas3SceneGame).GetField("pauseMenu",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(host);
             menu.OpenAttractOptions();menu.SelectTab(2);yield return Frames(3);
             Check(menu.FullTuneAvailable,"Gameplay Full Tune available for selected saved driver");
-            for(int i=0;i<6;++i)menu.Navigate(1);
+            for(int i=0;i<3;++i)menu.Navigate(1);
             // Hidden diagnostic windows do not receive IMGUI repaint events.
             // Exercise the real menu's navigation/action; capture native screens below.
             menu.Activate();yield return Frames(8);

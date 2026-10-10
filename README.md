@@ -9,20 +9,20 @@ JOIN DISCORD: https://discord.gg/mJCZ5AvBb
 
 ## Play
 
-1. Download the Windows game ZIP from **Releases**.
-2. Extract the entire archive into a folder.
+1. Download `Initial-D-Setup-0.3.95.46.zip` from **Releases**.
+2. Extract it and run `Install Initial D.cmd`. It downloads and verifies the game and additional courses into a new folder.
 3. Put your original **Initial D Arcade Stage 3 GDS-0033** dump in a `rom` folder beside `InitialDUnity.exe`.
 4. Run `InitialDUnity.exe`. Keep its data folders and DLLs beside it.
 
 Use `rom/gds-0033.chd`, or the complete set `rom/gds-0033.cue`, `rom/gds-0033-track1.bin`, `rom/gds-0033-track2.bin` and `rom/gds-0033-track3.bin`. The game validates the supported dump before gameplay; a filename alone is insufficient. It creates `rom/README.txt` on first launch when needed. Updates and Full Repair preserve your ROM files and do not replace a missing or invalid dump.
 
-The download includes the runtime assets but no original ROM. You do not need Unity to play. Source-code ZIPs are the development project; use the Windows game ZIP for the playable build.
+The download includes the runtime assets but no original ROM. You do not need Unity to play. For a manual installation, extract both the `Windows-x64.zip` and the matching `Initial-D-Additional-Courses` ZIP into the same folder. Source-code ZIPs are the development project, not the playable build.
 
-**Current release:** `0.3.95-community-replays.38` · **Platform:** Windows x64 / Direct3D 11
+**Current release:** `0.3.95-community-replays.46` · **Platform:** Windows x64 / Direct3D 11
 
-**Latest update:** `0.3.95-community-replays.38 adds rear-view mirrors to every racing mode and camera, corrects Tsubaki guardrail collision and wet-road shadows, restores tachometer colors, improves controller recovery and separate pedal/shifter support, and fixes Sound Room fonts and linked-folder updates. This version is required for new community Time Attack submissions. Existing records and replay downloads remain available.
+**Latest update:** `.46` includes scenery and installed-size optimizations, Japanese arcade text and separate Japanese/Chinese custom menus, replay freecam and night-battle HUD fixes, corrected Odawara direction labels, and backed-up local Gunsai/Odawara record migration. Existing community records are retained. Both online drivers must update; this build is required for new community Time Attack submissions.
 
-If an older updater reports **"An update path resolves through a link"**, close the game and extract the full Windows game ZIP over the existing installation, replacing game files. Personal saves, settings, replays and custom music are preserved. Normal updates use a smaller changed-file patch when one is available for the installed version. Installer speed improvements take effect once `.27` or newer is installed; the first update from an older version still uses your previous updater.
+If an older updater reports **"An update path resolves through a link"**, close the game and extract both release ZIPs over the existing installation, replacing game files. Personal saves, settings, replays and custom music are preserved. Normal updates use one smaller changed-file patch that includes all required courses. Full Repair in `.44` or newer fetches both parts automatically; if an older updater falls back to its full download, the new game prompts for Full Repair to finish installing missing courses.
 
 Optional [Discord Rich Presence](docs/discord/README.md) shows **Initial D Arcade Stage 3**, the game logo, and your current race, menu, or replay activity. Toggle it under **Options > Gameplay > Discord Rich Presence**.
 
@@ -30,7 +30,7 @@ Optional [Discord Rich Presence](docs/discord/README.md) shows **Initial D Arcad
 
 - GitHub update checks with small changed-file patches, full repair, installation and restart.
 - Time Attack, Legend of the Streets, Bunta Challenge and online battles.
-- Original course and car selections, plus Hakone, Sadamine, Enna Skyline, Momiji Line and the longer Special Stage layouts of Myogi and Usui.
+- Original course and car selections, plus Hakone, Sadamine, Enna Skyline, Momiji Line, Tsubaki Line, Gunsai, Odawara and the longer Special Stage layouts of Myogi and Usui.
 - Special Stage courses support Time Attack rankings, replays and online battles, with downhill/uphill and dry/wet options at night.
 - Day, night and weather conditions supported by each course.
 - Controller, keyboard and supported wheel input.
@@ -61,7 +61,7 @@ The repository includes the runtime assets in `Native/data` and `RuntimeAssets`,
 | `Assets` | Unity scripts, shaders, resources, scenes and native plugins |
 | `Native/src` | Native gameplay, asset loading, menus, audio and renderer bridge |
 | `Native/data` | Original runtime data used by the game |
-| `RuntimeAssets` | Six additional course packs, including four Special Stage layouts |
+| `RuntimeAssets` | Nine additional course packs, including four Special Stage layouts |
 | `Native/tests` | Native regression tests and isolated gameplay fixtures |
 | `Tools` | Local build, staging and asset utilities |
 | `Leaderboard` | Community leaderboard service, migrations and tests |

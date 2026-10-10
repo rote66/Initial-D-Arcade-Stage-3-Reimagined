@@ -28,6 +28,9 @@ public sealed class Idas3ArcadeHud : IDisposable
         public Texture mask;public Matrix4x4 maskTransform;public Vector4 radial;
         // XY scroll, Z rotation in turns, W repeat (otherwise transparent outside).
         public Vector4 sampleMotion;
+        // Inverse retainer homography in normalized texture coordinates.
+        // A zero third row disables it for ordinary meter layers.
+        public Vector4 projective0,projective1,projective2;
         public int materialEffect;
         public Texture effectTex1,effectTex2,effectTex3;
         public Vector4 effectParams,effectParams2;
@@ -233,6 +236,7 @@ public sealed class Idas3ArcadeHud : IDisposable
         p.SetVector("_EffectParams",item.effectParams);p.SetVector("_EffectParams2",item.effectParams2);
         p.SetColor("_EffectColor1",item.effectColor1);p.SetColor("_EffectColor2",item.effectColor2);p.SetColor("_EffectColor3",item.effectColor3);
         p.SetVector("_SampleMotion",item.sampleMotion);
+        p.SetVector("_Projective0",item.projective0);p.SetVector("_Projective1",item.projective1);p.SetVector("_Projective2",item.projective2);
         p.SetTexture("_MaskTex",item.mask?item.mask:Texture2D.whiteTexture);p.SetFloat("_MaskEnabled",item.mask?1:0);p.SetVector("_Radial",item.radial);
         p.SetVector("_MaskTransform0",new Vector4(item.maskTransform.m00,item.maskTransform.m01,item.maskTransform.m03,0));
         p.SetVector("_MaskTransform1",new Vector4(item.maskTransform.m10,item.maskTransform.m11,item.maskTransform.m13,0));
@@ -257,8 +261,8 @@ public sealed class Idas3ArcadeHud : IDisposable
         if(Event.current.type!=EventType.Repaint)return;
         if(previewLabel==null){previewLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontSize=17,normal={textColor=Color.white}};previewName=new GUIStyle(previewLabel){fontStyle=FontStyle.Bold};}
         bool prepared=PreparePreview(options,seconds);
-        if(options.hudMeterStyle==0){Idas3Localization.Label(area,"ORIGINAL ARCADE STAGE 3 HUD",previewLabel);return;}
-        if(!prepared){Idas3Localization.Label(area,"Meter artwork unavailable",previewLabel);return;}
+        if(options.hudMeterStyle==0){Idas3MenuLocalization.Label(area,"ORIGINAL ARCADE STAGE 3 HUD",previewLabel);return;}
+        if(!prepared){Idas3MenuLocalization.Label(area,"Meter artwork unavailable",previewLabel);return;}
         var content=Idas3MeterLayoutBounds.Get(options.hudMeterStyle);var size=content.size;float h=size.y+(options.hudNameplateStyle==1?72:0),scale=Mathf.Min(area.width/size.x,area.height/h),shift=options.hudNameplateStyle==1?72:0;
         Vector2 origin=new Vector2(area.center.x-size.x*scale*.5f,area.center.y-h*scale*.5f);
         var matrix=GUI.matrix;var color=GUI.color;
@@ -295,6 +299,7 @@ public sealed class Idas3ArcadeHud : IDisposable
         previewMaterial.SetVector("_EffectParams",item.effectParams);previewMaterial.SetVector("_EffectParams2",item.effectParams2);
         previewMaterial.SetColor("_EffectColor1",item.effectColor1);previewMaterial.SetColor("_EffectColor2",item.effectColor2);previewMaterial.SetColor("_EffectColor3",item.effectColor3);
         previewMaterial.SetVector("_SampleMotion",item.sampleMotion);
+        previewMaterial.SetVector("_Projective0",item.projective0);previewMaterial.SetVector("_Projective1",item.projective1);previewMaterial.SetVector("_Projective2",item.projective2);
         previewMaterial.SetTexture("_MaskTex",item.mask?item.mask:Texture2D.whiteTexture);previewMaterial.SetFloat("_MaskEnabled",item.mask?1:0);previewMaterial.SetVector("_Radial",item.radial);
         previewMaterial.SetVector("_MaskTransform0",new Vector4(item.maskTransform.m00,item.maskTransform.m01,item.maskTransform.m03,0));
         previewMaterial.SetVector("_MaskTransform1",new Vector4(item.maskTransform.m10,item.maskTransform.m11,item.maskTransform.m13,0));

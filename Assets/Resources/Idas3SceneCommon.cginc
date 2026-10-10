@@ -14,11 +14,23 @@
     float fog=saturate((distance-start)/max(range,.001));
     return lerp(color,fogColor,fog*fog);
    }
+   float _IdasTrackLighting,_TrackSurface;
+   // A small, hue-preserving exposure shoulder brings out shaded scenery
+   // without raising black, clipping highlights, or relighting baked meshes.
+   // Apply before fog, and never to skies or multiplicative light/shadow passes.
+   float3 idasTrackPresentation(float3 color,float night){
+    float gain=lerp(.22,.14,saturate(night))*saturate(_IdasTrackLighting);
+    float peak=max(color.r,max(color.g,color.b));
+    return color*(1+gain)/(1+gain*saturate(peak));
+   }
    #if defined(IDAS_IMPORTED_COURSE)
    Texture2D _ImportedShadowTex; SamplerState sampler_ImportedShadowTex;
    float _ImportedSponsorSigns;
    float _ImportedCoverage,_ImportedCutoff,_ImportedHasShadow,_ImportedSky,_ImportedNight;
-   float _ImportedShadowOnly,_ImportedShadowUv;
+   float _ImportedShadowOnly,_ImportedShadowUv,_ImportedAuthoredNormals;
+   float4 _ImportedAreaFog,_ImportedAreaFogColor;
+   float _ImportedPs2Lighting;
+   float4 _ImportedNightAmbient;
    float4 _ImportedUntexturedShadow;
    float4 _ImportedSunDirection,_ImportedFogColor,_ImportedFogRange;
    #endif
@@ -131,18 +143,24 @@ float sourceFogCoefficient(float reciprocalDepth){
 struct V{float3 p:POSITION;float3 n:NORMAL;float4 c:COLOR0;float2 uv:TEXCOORD0;float4 offsetColor:TEXCOORD1;float2 treeFace:TEXCOORD2;
 #if defined(SHADER_API_METAL) && !defined(IDAS_IMPORTED_COURSE)
  float3 flatPosition:TEXCOORD3;float3 flatNormal:TEXCOORD4;float4 flatColor:TEXCOORD5;float4 flatOffset:TEXCOORD6;float3 sourceFace:TEXCOORD7;
-#elif defined(SHADER_API_METAL)
- float3 sourceFace:TEXCOORD3;
+#elif defined(IDAS_IMPORTED_COURSE) && defined(IDAS_IMPORTED_VERTEX_FACES)
+ float4 facePlane:TEXCOORD3;
 #endif
  UNITY_VERTEX_INPUT_INSTANCE_ID};
 struct P{float4 p:SV_POSITION;float3 world:TEXCOORD0;float3 n:NORMAL;float4 c:COLOR0;float2 uv:TEXCOORD1;float4 offsetColor:COLOR1;noperspective float reciprocalDepth:TEXCOORD2;float treeFace:TEXCOORD3;float sponsorAxis:TEXCOORD4;
+#if defined(IDAS_IMPORTED_COURSE) && defined(IDAS_IMPORTED_VERTEX_FACES)
 #if defined(SHADER_API_METAL)
+ float faceVisibility:TEXCOORD5;
+#else
+ float faceVisibility:SV_CullDistance0;
+#endif
+#elif defined(SHADER_API_METAL)
  float3 sourceFace:TEXCOORD5;
 #endif
 };
 Texture2D _MainTex;SamplerState sampler_MainTex;
 P sceneVertex(V v){P o;o.treeFace=v.treeFace.x;o.sponsorAxis=v.treeFace.y;
-#if defined(SHADER_API_METAL)
+#if defined(SHADER_API_METAL) && !defined(IDAS_IMPORTED_COURSE)
  o.sourceFace=v.sourceFace;
 #endif
 #if defined(IDAS_IMPORTED_COURSE)
@@ -153,10 +171,14 @@ P sceneVertex(V v){P o;o.treeFace=v.treeFace.x;o.sponsorAxis=v.treeFace.y;
  o.p.z=_IdasDepthProjection.w!=0?_IdasDepthProjection.x-_IdasDepthProjection.y*o.p.w:o.p.w-o.p.z;
 #endif
  o.n=mul((float3x3)unity_ObjectToWorld,v.n);o.c=v.c;o.uv=v.uv;
-#if defined(SHADER_API_METAL)
- o.sourceFace=mul(transpose((float3x3)unity_WorldToObject),v.sourceFace);
-#endif
  o.offsetColor=v.offsetColor;o.reciprocalDepth=1/o.p.w;
+#if defined(IDAS_IMPORTED_VERTEX_FACES)
+ // Source paired faces have different UVs/colors on each side. Their three
+ // vertices carry the same geometric plane, separate from lighting normals.
+ // Reject only the hidden paired side, in object space, before rasterization.
+ // This also works with the mirror's projection and reflected view convention.
+ o.faceVisibility=v.treeFace.x>.5&&dot(v.facePlane,float4(mul(unity_WorldToObject,float4(eye.xyz,1)).xyz,1))<=0?-1:1;
+#endif
  return o;
 #else
  o.p=mul(float4(v.p,1),viewProjection);o.world=v.p;o.n=v.n;o.c=v.c;o.uv=v.uv;o.offsetColor=v.offsetColor;
@@ -263,7 +285,9 @@ void showroomGeometry(triangle P input[3],inout TriangleStream<P> stream){
 #endif
 float4 mainPS(P v):SV_TARGET{
 #if defined(SHADER_API_METAL) && defined(IDAS_IMPORTED_COURSE)
- if(v.treeFace>.5&&dot(v.sourceFace,eye.xyz-v.world)<=0)discard;
+ #if defined(IDAS_IMPORTED_VERTEX_FACES)
+ clip(v.faceVisibility);
+ #endif
 #endif
 #if defined(SHADER_API_METAL) && !defined(IDAS_IMPORTED_COURSE)
  if(original!=0&&courseCullMode>=2){
@@ -282,7 +306,7 @@ float4 mainPS(P v):SV_TARGET{
  float4 color=_MainTex.Sample(sampler_MainTex,v.uv);
  // Stage 8 type-6 atlases encode visibility, not black-overlay opacity.
  // The standalone road-shadow pass must invert the same mask as UV2 shadows.
- if(_ImportedShadowOnly!=0)color.a=1-color.a;
+ if(_ImportedShadowOnly!=0)color.a=(1-color.a)*_ImportedShadowOnly;
  if(_ImportedCoverage!=0){
   // Derivative-scaled coverage stays approximately one pixel wide while the
   // camera moves. MSAA resolves that coverage instead of binary leaf flicker.
@@ -298,21 +322,39 @@ float4 mainPS(P v):SV_TARGET{
   // lamp response instead of leaving the original baked road unlit.
   float3 normal=dot(v.n,v.n)>.01?normalize(v.n):normalize(cross(ddy(v.world),ddx(v.world)));
   if(dot(normal,v.world-eye.xyz)>0)normal=-normal;
-  tint=max(tint,idasNativeNightAmbient())+idasCourseLampLight(v.world,normal);
+  float3 ambient=_ImportedPs2Lighting!=0?_ImportedNightAmbient.rgb:idasNativeNightAmbient();
+  tint=max(tint,ambient)+idasCourseLampLight(v.world,normal);
  }
  color.rgb*=tint;
  // PCT meshes already contain baked lighting. Only authored normal-bearing
  // geometry uses directional lighting, avoiding double-darkened foliage.
  if(_ImportedSky==0 && _ImportedNight==0 && dot(v.n,v.n)>.01)
-  color.rgb*=idasNativeDiffuse(v.n,v.world,_WorldSpaceCameraPos,_ImportedSunDirection.xyz);
+  color.rgb*=_ImportedAuthoredNormals!=0
+   ?.32+.68*saturate(dot(normalize(v.n),normalize(_ImportedSunDirection.xyz)))
+   :idasNativeDiffuse(v.n,v.world,_WorldSpaceCameraPos,_ImportedSunDirection.xyz);
  float4 shadow=_ImportedShadowTex.Sample(sampler_ImportedShadowTex,shadowUv);
  color.rgb*=lerp(1,.32+.68*shadow.rgb,(1-shadow.a)*_ImportedHasShadow);
+ if(_TrackSurface!=0&&_ImportedSky==0&&_ImportedShadowOnly==0)
+  color.rgb=idasTrackPresentation(color.rgb,_ImportedNight);
  if(_ImportedSky==0){
+  float distance=length(v.world-eye.xyz);
+  if(_ImportedPs2Lighting!=0){
+   // Special Stage exports start/end distances, not the D3 fog range.
+   // Its dry and wet conditions have distinct, authored linear fog.
+   float fog=saturate((distance-_ImportedFogRange.x)/max(.001,_ImportedFogRange.y-_ImportedFogRange.x));
+   color.rgb=lerp(color.rgb,_ImportedFogColor.rgb,fog);
+  }else{
   // Night source Mie coefficients are not RGB fog (several are white/0.4).
   // Reuse D3's native night atmosphere instead of turning the horizon white.
   color.rgb=_ImportedNight!=0
-   ?idasNativeAtmosphere(color.rgb,atmosphere.rgb,length(v.world-eye.xyz),85,410)
-   :idasNativeAtmosphere(color.rgb,_ImportedFogColor.rgb,length(v.world-eye.xyz),_ImportedFogRange.x,_ImportedFogRange.y);
+   ?idasNativeAtmosphere(color.rgb,atmosphere.rgb,distance,85,410)
+   :idasNativeAtmosphere(color.rgb,_ImportedFogColor.rgb,distance,_ImportedFogRange.x,_ImportedFogRange.y);
+  }
+ }
+ if(_ImportedAreaFog.z>0){
+  float areaFog=saturate((length(v.world-eye.xyz)-_ImportedAreaFog.x)/max(_ImportedAreaFog.y-_ImportedAreaFog.x,.001));
+  areaFog=_ImportedSky!=0?1:1-(1-areaFog)*(1-areaFog);
+  color.rgb=lerp(color.rgb,_ImportedAreaFogColor.rgb,_ImportedAreaFog.z*areaFog);
  }
  return color;
 #else
@@ -366,6 +408,7 @@ float4 mainPS(P v):SV_TARGET{
   float3 streetLight=idasCourseLampLight(v.world,normal);
   color.rgb*=min(idasNativeNightAmbient()+illumination*float3(.94,.86,.70)+streetLight,float3(1.30,1.24,1.16));
  }
+ if(_TrackSurface!=0&&showroomLight.w==0)color.rgb=idasTrackPresentation(color.rgb,atmosphere.w);
  if(sourceVertexFogColorEnabled.w!=0&&original!=0){
   uint fogMode=(tsp>>22)&3;
   if(fogMode==0)color.rgb=lerp(color.rgb,sourceFogColorDensity.rgb,sourceFogCoefficient(v.reciprocalDepth));

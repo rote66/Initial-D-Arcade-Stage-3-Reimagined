@@ -62,6 +62,26 @@ int main(int argc,char** argv)try{
     Course mapCourse;mapCourse.name="Akina";mapCourse.length=1000;mapCourse.points={{0,0,0},{0,0,1000}};
     mapCourse.left={{-5,0,0},{-5,0,1000}};mapCourse.right={{5,0,0},{5,0,1000}};mapCourse.cumulative={0,1000};
     online.course=&mapCourse;VehicleState rival=car;rival.position={0,0,25};online.rival=&rival;
+    // Exercise the actual compositor and capture boundary: selecting the cup
+    // replaces the map in editable group5; Off submits neither one. Painting
+    // repeatedly must not advance the60Hz water animation.
+    Idas3UiEnable(1);
+    for(int display=0;display<3;++display){
+        hud.setMapDisplay(display);hud.resetWaterCup();
+        for(int tick=0;tick<5;++tick)hud.advanceWaterCup(.1f,{});
+        Idas3UiBeginFrame(w,h);const auto p=hud.paint(online);
+        std::vector<std::uint32_t> pixels(p,p+n);unityUiSubmit(p,w,h,false,false,false);
+        UnityUiFrame frame{sizeof(UnityUiFrame)};require(Idas3UiGetFrame(&frame)==1,"No minimap display capture");
+        std::vector<UnityUiDraw> draws(frame.drawCount);Idas3UiCopyDraws(draws.data(),int(draws.size()));
+        const auto group5=std::count_if(draws.begin(),draws.end(),[](const auto& d){return ((d.flags>>8)&15)==5;});
+        require((group5>0)==(display!=2),"Map/cup/off lost its editable HUD group");
+        require((hud.lastBattlePresentation().localMapMarkers!=0)==(display==0),"Cup or Off retained map markers");
+        require(std::equal(pixels.begin(),pixels.end(),hud.paint(online)),"Cup advanced during repaint");
+        Idas3UiEnable(0);const auto software=hud.paint(online);
+        save(output/("minimap-display-"+std::to_string(display)+".bmp"),std::vector<std::uint32_t>(software,software+n),w,h);
+        Idas3UiEnable(1);
+    }
+    hud.setMapDisplay(0);Idas3UiEnable(0);
     RaceClock onlineClock=race;onlineClock.sector=2;onlineClock.sectionCapacity=4;onlineClock.sectionTimes6000={6000,18000,0,0};onlineClock.elapsed6000=30000;online.race=&onlineClock;
     if(argc>3&&std::string(argv[3])=="--group-only"){
         Idas3UiEnable(1);
@@ -107,8 +127,39 @@ int main(int argc,char** argv)try{
             if(gap==25.f)save(output/("online-hud-"+std::to_string(ww)+"x"+std::to_string(hh)+".bmp"),actual,ww,hh);
         }
     }
-    hud.resize(w,h);peer.frame=42;std::swap(peer.playerName,peer.rivalName);std::swap(peer.playerCar,peer.rivalCar);hud.paint(online);
+    // The same received opponent headlight state serves Steam/LAN and replay
+    // presentation. Check the production compositor, including option changes
+    // without advancing the simulation and missing-packet validity.
+    hud.resize(w,h);peer.frame=42;peer.advantage=25.f;
+    for(bool night:{false,true})for(bool hide:{false,true})for(bool lights:{false,true})for(bool received:{false,true}){
+        online.night=night;peer.opponentHeadlights=lights;peer.rivalPositionFraction=received?.25f:-1.f;
+        hud.setLightsOffAdvantage(hide);
+        const auto p=hud.paint(online);const std::vector<std::uint32_t> actual(p,p+n);
+        require(hud.lastBattlePresentation().advantageHidden==(night&&hide&&!lights),"Lights-off gap applied outside night/opponent/option condition");
+        require(hud.lastBattlePresentation().signedAdvantage==25.f,"Hiding advantage modified race distance");
+        OriginalBattleHudState expected;expected.flags104=0x001fffff;expected.profileMode0C31C99C=3;expected.frame204=42;
+        expected.validity96=night&&hide&&!lights?-1.f:peer.rivalPositionFraction;expected.signedAdvantage100=25.f;
+        OriginalBattleHudAnimation animation;std::vector<std::uint32_t> expectedPixels(n);
+        battleBank.paintGame2d(expectedPixels,w,h,drawOriginalBattleHud(expected,animation),true);
+        nameBank.paintOnline(expectedPixels,w,h,peer.playerName,peer.rivalName,peer.playerCar,peer.rivalCar);
+        const float fit=float(h)/480;
+        for(int y=0;y<int(160*fit);++y)for(int x=int(w-150*fit);x<w;++x)
+            require(actual[std::size_t(y)*w+x]==expectedPixels[std::size_t(y)*w+x],"Night gap pixels do not match original available/unavailable artwork");
+        if(night&&hide&&received)save(output/(lights?"online-night-lights-on.bmp":"online-night-lights-off.bmp"),actual,w,h);
+    }
+    online.night=false;peer.opponentHeadlights=true;peer.rivalPositionFraction=.25f;hud.setLightsOffAdvantage(true);
+    std::swap(peer.playerName,peer.rivalName);std::swap(peer.playerCar,peer.rivalCar);hud.paint(online);
     require(hud.lastBattlePresentation().playerName=="SMOKE JOIN"&&hud.lastBattlePresentation().playerCarCode=="BNR34"&&hud.lastBattlePresentation().rivalName=="SMOKE HOST","Guest HUD must use local DRIVER independent of pre-race grid slot");
+    const auto driving=hud.paint(online);std::vector<std::uint32_t> beforeFinish(driving,driving+n);
+    onlineClock.phase=RacePhase::Finished;online.message="Waiting for verified result";
+    const auto pendingFinish=hud.paint(online);
+    for(int y=110;y<515;++y)for(int x=391;x<875;++x)
+        require(pendingFinish[y*w+x]==beforeFinish[y*w+x],"Online result wait drew the placeholder finish/status panel");
+    save(output/"online-pending-result.bmp",std::vector<std::uint32_t>(pendingFinish,pendingFinish+n),w,h);
+    auto offlineFinish=online;offlineFinish.multiplayer=false;offlineFinish.onlineBattleHud.active=false;
+    const auto fallback=hud.paint(offlineFinish);
+    require(fallback[184*w+415]!=beforeFinish[184*w+415],"Offline fallback finish panel was removed");
+    online.message.clear();
     online.finishBanner=OriginalHudState::FinishBanner::win;hud.paint(online);
     require(!hud.lastBattlePresentation().online&&!hud.lastBattlePresentation().game2dCommands&&!hud.lastBattlePresentation().playerGlyphs,"Finish announcement retained racing HUD snapshot");
     hud.paint(s);require(hud.lastBattlePresentation().portraitCommands==1&&!hud.lastBattlePresentation().online,"Returning from online changed offline portrait branch");

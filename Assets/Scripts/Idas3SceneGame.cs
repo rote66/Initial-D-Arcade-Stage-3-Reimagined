@@ -18,6 +18,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
     [SerializeField] private float simulationAndSubmissionMs;
     private bool ready, stopping;
     private string failure;
+    private string failureReport, failureReportPath, failureTitle;
+    private Vector2 failureScroll;
     private Idas3SceneRenderer scene;
     private Idas3UnityUi ui;
     private Idas3UnityAudio sound;
@@ -146,6 +148,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 ? Path.GetFullPath(Path.Combine(Application.dataPath, "../Native"))
                 : Path.Combine(Idas3AssetPaths.Root, "IDAS3");
             string saves = Path.Combine(Application.persistentDataPath, "userdata-unity-scene");
+            Idas3MenuLocalization.SetLanguage(Idas3MenuLocalization.LoadLanguage(saves));
+            if(Idas3Native.Idas3SceneSetCustomMenuLanguage(Idas3MenuLocalization.Language)!=1)throw new InvalidOperationException(Idas3Native.Error());
             var hakone=FindAnyObjectByType<Idas8HakoneCourse>();
             var enna=FindAnyObjectByType<IdasSpecialStageEnnaCourse>();
             bool ennaTest=enna!=null&&enna.testBuild;
@@ -199,7 +203,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 }
             }
             Directory.CreateDirectory(saves);
-            Idas3Localization.Initialize();Idas3UnityUi.ConfigureLocalization();
+            if (Idas3Native.Idas3SceneConfigureLanguage(Idas3GameOptions.LoadArcadeTextLanguage(saves)) != 1)
+                throw new InvalidOperationException(Idas3Native.Error());
             if (Idas3SceneInitialize(assets, saves, renderWidth, renderHeight) != 1)
                 throw new InvalidOperationException(Idas3Native.Error());
             ready = true;
@@ -255,6 +260,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             multiplayerMenu.MusicSelectionRequested += () => OpenRaceMusic(1);
             multiplayer.RaceDisconnected += ShowDisconnectedFinish;
             multiplayer.ReturnedToLobby += ShowReturnedLobby;
+            multiplayer.ReturnedToMode += ShowReturnedLobby;
             challenger=gameObject.AddComponent<Idas3ChallengerOverlay>();
             challenger.Initialize(this,multiplayer);
             Idas3MultiplayerSmoke.Attach(this, multiplayer);
@@ -267,6 +273,12 @@ public sealed class Idas3SceneGame : MonoBehaviour
             Idas3OnlineControllerSmoke.Attach(this);
             Idas3RaceMusicSmoke.Attach(this);
             Idas3AttractOptionsSmoke.Attach(this);
+            foreach(string idZeroCourse in new[]{"GUNSAI","ODAWARA"}){
+                string idZeroPack=Path.Combine(Idas3AssetPaths.Root,idZeroCourse);
+                if(!File.Exists(Path.Combine(idZeroPack,"menu.idastex")))continue;
+                if(Idas3Native.Idas3SceneRegisterImportedCourse(idZeroPack)!=1)throw new InvalidOperationException(Idas3Native.Error());
+                if(hakone==null)hakone=new GameObject("Imported courses").AddComponent<Idas8HakoneCourse>();
+            }
             string sadaminePack=Path.Combine(Idas3AssetPaths.Root,"SADAMINE");
             string ennaPack=Path.Combine(Idas3AssetPaths.Root,"ENNA");
             if(File.Exists(Path.Combine(ennaPack,"menu.idastex"))){
@@ -562,6 +574,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private void ApplyNativeOptions(Idas3GameOptions.Values values) => ApplyNativeOptions(values, true);
     private void ApplyNativeOptions(Idas3GameOptions.Values values, bool changeCamera)
     {
+        if(Idas3Native.Idas3SceneSetCustomMenuLanguage(values.customMenuLanguage)!=1)throw new InvalidOperationException(Idas3Native.Error());
         if (!ready || stopping) return;
         if(Idas3ReplayLibrary.Idas3ReplayRecordingOptions(Idas3ReplayLibrary.RecordingFlags(values))!=1)throw new InvalidOperationException("Could not apply replay recording options.");
         var options = Idas3Native.ReadOptions();
@@ -584,12 +597,18 @@ public sealed class Idas3SceneGame : MonoBehaviour
             throw new InvalidOperationException("Could not apply steering smoothing. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetPerformance(values.rainDetail) != 1)
             throw new InvalidOperationException("Could not apply performance options. " + Idas3Native.Error());
+        if (Idas3Native.Idas3SceneSetSunGlare(values.sunGlare?1:0) != 1)
+            throw new InvalidOperationException("Could not apply sun glare option. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetAiDifficulty(values.aiDifficulty) != 1)
             throw new InvalidOperationException("Could not apply AI difficulty. " + Idas3Native.Error());
+        if (Idas3Native.Idas3SceneSetMapDisplay(values.minimapDisplay) != 1)
+            throw new InvalidOperationException(Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetMapZoom(values.minimapZoom) != 1)
             throw new InvalidOperationException("Could not apply minimap zoom. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetMapSize(values.minimapSize) != 1)
             throw new InvalidOperationException("Could not apply minimap size. " + Idas3Native.Error());
+        if (Idas3Native.Idas3SceneSetLightsOffAdvantage(values.hideLightsOffAdvantage?1:0) != 1)
+            throw new InvalidOperationException(Idas3Native.Error());
         if(scene!=null)scene.HudOptions=values.Clone();
         if(timeAttackGhost!=null)timeAttackGhost.ShowGhost=values.timeAttackGhost;
         wheelFeedback?.Stop();
@@ -907,7 +926,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     }
     private static void NeutralizeControls(ref Idas3Native.FrameInput frame)
     {
-        frame.flags |= 2u; // Reset native steering smoothing while gameplay controls are blocked.
+        frame.flags = (frame.flags & ~0x700u) | 2u; // Reset native steering smoothing while gameplay controls are blocked.
         frame.key0 = frame.key1 = frame.key2 = frame.key3 = frame.key4 = frame.key5 = frame.key6 = frame.key7 = 0;
         frame.padButtons = frame.leftTrigger = frame.rightTrigger = frame.padConnected = 0;
         frame.thumbLX = frame.thumbLY = frame.thumbRX = frame.thumbRY = 0;
@@ -1071,12 +1090,47 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private void Fail(string message)
     {
         failure = message;
+        failureTitle = ready ? "The game stopped" : "The game could not start";
+        failureReport = "Initial D error report\n" + DateTime.UtcNow.ToString("u") +
+            "\nVersion: " + Application.version + "\nPlatform: " + Application.platform +
+            "\nSystem: " + SystemInfo.operatingSystem + "\nGraphics: " + SystemInfo.graphicsDeviceName +
+            " / " + SystemInfo.graphicsDeviceType + "\nStage: " + stage +
+            "\nGame data: " + Application.dataPath + "\n\n" + message;
+        // A screenshot previously clipped long paths and the actual exception.
+        // Keep a small standalone report alongside Player.log for support.
+        try
+        {
+            string path = Path.Combine(Application.persistentDataPath, "last-error.txt");
+            Directory.CreateDirectory(Application.persistentDataPath);
+            File.WriteAllText(path, failureReport);
+            failureReportPath = path;
+        }
+        catch (Exception error) { Debug.LogWarning("Could not save error report: " + error.Message); }
         Debug.LogError(message);
-        StopNative();
+        try { StopNative(); }
+        catch (Exception error) { Debug.LogError("Error while stopping the failed game: " + error); }
     }
     private void OnGUI()
     {
-        if (failure != null) GUI.Box(new Rect(16,16,Math.Min(Screen.width-32,1000),220),Idas3Localization.Text("The game could not start.")+"\n\n"+Idas3Localization.Text(failure),Idas3Localization.Style(GUI.skin.box));
+        if (failure == null) return;
+        float width = Mathf.Max(240, Mathf.Min(Screen.width - 32, 1100));
+        float height = Mathf.Max(200, Mathf.Min(Screen.height - 32, 650));
+        Rect panel = new Rect((Screen.width-width)*.5f, (Screen.height-height)*.5f, width, height);
+        GUI.Box(panel, GUIContent.none);
+        var title = new GUIStyle(GUI.skin.label) { fontSize=24, wordWrap=true };
+        var body = new GUIStyle(GUI.skin.label) { fontSize=16, wordWrap=true, alignment=TextAnchor.UpperLeft };
+        GUILayout.BeginArea(new Rect(panel.x+20, panel.y+16, width-40, height-32));
+        Idas3MenuGui.Label(failureTitle, title);
+        GUILayout.Space(8);
+        failureScroll = GUILayout.BeginScrollView(failureScroll);
+        GUILayout.Label(failureReport ?? failure, body);
+        GUILayout.EndScrollView();
+        GUILayout.Space(8);
+        if (!string.IsNullOrEmpty(failureReportPath))
+            Idas3MenuGui.Label(Idas3MenuLocalization.Format("Error report saved to: {0}", failureReportPath), body);
+        if (Idas3MenuGui.Button("COPY ERROR DETAILS", GUILayout.Height(38)))
+            GUIUtility.systemCopyBuffer = failureReport ?? failure;
+        GUILayout.EndArea();
     }
     public void StopNative()
     {

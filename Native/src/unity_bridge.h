@@ -37,7 +37,7 @@ IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SharedSetRecords(const int32_t* val
 #pragma pack(push,8)
 typedef struct Idas3UnityInput {
     uint32_t size;                 //sizeof(Idas3UnityInput),88 bytes
-    uint32_t flags;                //bit0 focused, bit1 host driving controls blocked; other bits reserved
+    uint32_t flags;                //bit0 focused, bit1 controls blocked; bits8..10 requested gear (0 none,1..6)
     double deltaSeconds;           //unscaled Unity frame delta
     uint32_t keys[8];              //held Windows virtual-key bits,0..255
     uint32_t padButtons;           //XInput button bits
@@ -143,6 +143,9 @@ typedef void (IDAS3_UNITY_EVENT *Idas3UnityRenderEvent)(int eventId);
 IDAS3_UNITY_EXPORT uint32_t IDAS3_UNITY_CALL Idas3UnityVersion(void);
 // Scene port: synchronous simulation/presentation data on Unity's main thread.
 // No graphics device, external texture, render callback, or waveOut output.
+// 0 = English, 1 = original Japanese UI artwork. Call before scene initialization.
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneConfigureLanguage(int language);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetCustomMenuLanguage(int language);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneInitialize(
     const char* assetRootUtf8,const char* saveRootUtf8,int width,int height);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneStep(const Idas3UnityInput* input);
@@ -214,7 +217,12 @@ IDAS3_UNITY_EXPORT float IDAS3_UNITY_CALL Idas3SceneGetSteeringDeadzone();
 // Invalid/nonfinite values leave the setting unchanged; uninitialized getter=-1.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetSteeringSmoothing(float value);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetPerformance(int rainDetail);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetSunGlare(int enabled);
+// Replay-only world camera, applied by ReplayPose cameraMode4 before culling.
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3ReplayFreeCamera(float x,float y,float z,float tx,float ty,float tz);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetMapSize(int size);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetLightsOffAdvantage(int hide);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetMapDisplay(int display);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetMapZoom(int zoom);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetAiDifficulty(int difficulty);
 IDAS3_UNITY_EXPORT float IDAS3_UNITY_CALL Idas3SceneGetSteeringSmoothing();
@@ -250,9 +258,17 @@ IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerCurrentGear(void);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerStartSaved(const Idas3MultiplayerConfig* config,int selection,const uint32_t* local,const uint32_t* remote,uint32_t count);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerReadRaceCar(int side,uint32_t* words,uint32_t count);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerSetGo(int released);
-// Settled protocol winner: -1 both time-up,0 host,1 guest,2 draw. Audio only;
-// the race must already be finished. An identical repeat is a no-op.
+// Settled protocol winner: -1 both time-up,0 host,1 guest,2 draw. Commits
+// selected-car rewards and starts original menus after authority validation.
+// An identical repeat is a no-op.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerSetResult(int winner);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerPointsEarned(void);
+// Local original-menu presentation. These calls do not award or alter results.
+// Input flags: 1 blocked, 2 peer left, 4 peer ready, 8 record save failed.
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerResultScreen(int field);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerResultInput(int confirm,int cancel,int direction,unsigned flags);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerResultRecord(int points,unsigned level);
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerResultHit(float x,float y);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerGetLocalSnapshot(Idas3MultiplayerSnapshot* snapshot);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerApplyRemoteSnapshot(const Idas3MultiplayerSnapshot* snapshot);
 // Experimental version2 input authority. Call Enable while StartSaved is held.
