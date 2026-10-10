@@ -36,9 +36,9 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     private struct SceneVertex { public Vector3 position, normal; public Vector4 color; public Vector2 uv; public Vector4 offset; }
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     private struct SceneTexture { public uint width, height; public ulong pixelCount; public IntPtr argb; }
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)]
     private static extern int Idas3SceneGetFrame(ref SceneFrame frame);
-    [DllImport("Idas3Unity", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr Idas3SceneGetGeometryIds(ulong generation, uint rangeCount);
 
     public SceneFrame CurrentFrame { get; private set; }
@@ -61,6 +61,9 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     public int UploadedTextureCount => textureCache.Count;
     private Camera main, mirror, backdrop, canvasClear;
     private Shader sceneShader, directSceneShader, opaqueAlphaDepthShader;
+    private bool metalGeometry;
+    private VertexAttributeDescriptor[] meshLayout;
+    private struct MetalVertex { public Vector3 position,normal; public Vector4 color,offset; public Vector3 face; }
     private bool geometryStageBaseline;
     private bool rangeReuseBaseline;
     private CommandBuffer opaqueAlphaDepth, mirrorAlphaDepth;
@@ -139,12 +142,12 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
 
     public void Initialize(Camera camera)
     {
-        rangeCacheOff = Array.IndexOf(Environment.GetCommandLineArgs(), "-idas3-range-cache-off") >= 0;
+        rangeCacheOff = Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-range-cache-off") >= 0;
         if (initialized) throw new InvalidOperationException("Scene renderer is already initialized.");
         if (Marshal.SizeOf<SceneFrame>() != 256 || Marshal.SizeOf<SceneCamera>() != 72 || Marshal.SizeOf<SceneRange>() != 64 || Marshal.SizeOf<SceneVertex>() != 64)
             throw new InvalidOperationException("Unity scene ABI mismatch.");
         main = camera != null ? camera : throw new ArgumentNullException(nameof(camera));
-        string[] arguments = Environment.GetCommandLineArgs();
+        string[] arguments = Idas3LaunchArguments.GetArguments();
         geometryIdsOff = Array.IndexOf(arguments, "-idas3-geometry-ids-off") >= 0;
         validateGeometryIds = Array.IndexOf(arguments, "-idas3-validate-geometry-ids") >= 0;
         diagnosticFlipDepth = Array.IndexOf(arguments, "-idas3-scene-depth-test-flip") >= 0;
@@ -161,13 +164,24 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         diagnosticViewCullingBaseline = Array.IndexOf(arguments, "-idas3-scene-view-culling-baseline") >= 0;
         if (diagnosticFlipDepth || diagnosticNoCull)
             Debug.Log("IDAS3 scene diagnostics: depthTestFlip=" + diagnosticFlipDepth + ", noCull=" + diagnosticNoCull);
-        sceneShader = Shader.Find("IDAS3/Original Scene Material");
+        metalGeometry=SystemInfo.graphicsDeviceType==GraphicsDeviceType.Metal;
+        sceneShader = metalGeometry ? Resources.Load<Shader>("Idas3SceneDirect") : Shader.Find("IDAS3/Original Scene Material");
         if (sceneShader == null || !sceneShader.isSupported) throw new InvalidOperationException("Original Unity scene shader is unavailable.");
+        meshLayout=layout;
+        if(metalGeometry){
+            var attributes=new List<VertexAttributeDescriptor>(layout);
+            attributes.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord3,VertexAttributeFormat.Float32,3,1));
+            attributes.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord4,VertexAttributeFormat.Float32,3,1));
+            attributes.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord5,VertexAttributeFormat.Float32,4,1));
+            attributes.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord6,VertexAttributeFormat.Float32,4,1));
+            attributes.Add(new VertexAttributeDescriptor(VertexAttribute.TexCoord7,VertexAttributeFormat.Float32,3,1));
+            meshLayout=attributes.ToArray();
+        }
         directSceneShader = Resources.Load<Shader>("Idas3SceneDirect");
         if (directSceneShader == null || !directSceneShader.isSupported) throw new InvalidOperationException("Direct Unity scene shader is unavailable.");
         geometryStageBaseline = Array.IndexOf(arguments, "-idas3-geometry-stage-baseline") >= 0;
         rangeReuseBaseline = Array.IndexOf(arguments, "-idas3-range-reuse-baseline") >= 0;
-        opaqueAlphaDepthShader = Shader.Find("Hidden/IDAS3/Opaque Alpha Depth");
+        opaqueAlphaDepthShader = metalGeometry ? Resources.Load<Shader>("Idas3OpaqueAlphaDepthDirect") : Shader.Find("Hidden/IDAS3/Opaque Alpha Depth");
         if (opaqueAlphaDepthShader == null || !opaqueAlphaDepthShader.isSupported) throw new InvalidOperationException("Original opaque-alpha depth shader is unavailable.");
         // This component shares the host camera GameObject. Captured vertices
         // already contain their complete world transform, so their identity
@@ -325,7 +339,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                 if (item.count != range.count)
                 {
                     if (item.vertexCache.IsCreated) item.vertexCache.Dispose();
-                    item.mesh.Clear(); item.mesh.SetVertexBufferParams((int)range.count, layout);
+                    item.mesh.Clear(); item.mesh.SetVertexBufferParams((int)range.count, meshLayout);
                     item.mesh.SetIndexBufferParams((int)range.count, IndexFormat.UInt32);
                     var indices = new NativeArray<uint>((int)range.count, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                     for (int j = 0; j < indices.Length; ++j) indices[j] = (uint)j;
@@ -349,6 +363,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                     UnsafeUtility.MemCmp(rangeVertices, NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(item.vertexCache), vertexBytes) != 0);
                 if (geometryChanged) {
                     item.mesh.SetVertexBufferData(source, (int)range.first, 0, (int)range.count, 0, UploadFlags);
+                    if(metalGeometry)UploadMetalVertices(item.mesh,rangeVertices,(int)range.count);
                     UploadedVertexCount += (int)range.count; ++GeometryUploadCount;
                     var first = source[(int)range.first];
                     Vector3 low = billboard ? first.normal : first.position, high = low;
@@ -592,6 +607,20 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         a.first=b.first=0;a.sourceIndex=b.sourceIndex=0;
         return UnsafeUtility.MemCmp(&a, &b, 64) == 0;
     }
+    private static unsafe void UploadMetalVertices(Mesh mesh,SceneVertex* vertices,int count)
+    {
+        if(count%3!=0)throw new InvalidOperationException("Native scene ranges must contain complete triangles.");
+        var data=new NativeArray<MetalVertex>(count,Allocator.Temp,NativeArrayOptions.UninitializedMemory);
+        try{
+            for(int i=0;i<count;i+=3){
+                var last=vertices[i+2];
+                var triangle=new MetalVertex{position=last.position,normal=last.normal,color=last.color,offset=last.offset,
+                    face=Vector3.Cross(vertices[i+1].position-vertices[i].position,last.position-vertices[i].position)};
+                data[i]=data[i+1]=data[i+2]=triangle;
+            }
+            mesh.SetVertexBufferData(data,0,0,count,1,UploadFlags);
+        }finally{data.Dispose();}
+    }
     private void ConfigureMaterial(Material m, SceneRange r, int queue)
     {
         bool original = (r.flags & 1) != 0;
@@ -601,7 +630,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         // The geometry stage only rejects authored backfaces or selects the
         // final vertex's flat colors. When neither operation applies its output
         // is exactly the vertex shader's output, including both camera views.
-        Shader wanted = !geometryStageBaseline && cullMode < 2 && (!original || (r.pcw & 2) != 0)
+        Shader wanted = metalGeometry ? directSceneShader : !geometryStageBaseline && cullMode < 2 && (!original || (r.pcw & 2) != 0)
             ? directSceneShader : sceneShader;
         if (m.shader != wanted) m.shader = wanted;
         m.renderQueue = queue;
@@ -711,7 +740,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     // authored foliage can be compared without moving the physics actor.
     public void SetDiagnosticCameraPose(Vector3 eye, Vector3 target)
     {
-        var args = Environment.GetCommandLineArgs();
+        var args = Idas3LaunchArguments.GetArguments();
         if (Array.IndexOf(args, "-idas3-scene-cull-check") < 0 &&
             Array.IndexOf(args, "-idas3-scene-intro-check") < 0 &&
             Array.IndexOf(args, "-idas3-scene-car-door-check") < 0 &&
@@ -724,7 +753,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     public void ClearDiagnosticCameraPose() { diagnosticCameraPose=false; }
     public void SetDiagnosticCourseLampVisibility(bool enabled,bool carOnly=false)
     {
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-smoke")<0)
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-smoke")<0)
             throw new InvalidOperationException("Lamp capture requires the isolated Hakone smoke check.");
         if(enabled){framesBuffer.SetData(frameVectors);return;}
         var sample=(Vector4[])frameVectors.Clone();

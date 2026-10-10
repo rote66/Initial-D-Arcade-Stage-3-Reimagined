@@ -14,7 +14,7 @@ Shader "Idas3/Original UI"
    sampler2D _MainTex;
    float4 _MainTex_TexelSize, _Canvas, _Clip, _Tint;
    float _Opacity;
-   uint _Tsp, _Pcw, _Original, _SourceIsOne;
+   uint _Tsp, _Pcw, _Original, _SourceIsOne, _FontAtlas;
    struct Input { float4 position:POSITION; float2 uv:TEXCOORD0; float4 color:COLOR; float4 offset:TEXCOORD1; };
    struct Output { float4 position:SV_POSITION; float2 uv:TEXCOORD0; float4 color:COLOR; float4 offset:TEXCOORD1; float2 pixel:TEXCOORD2; };
    Output vert(Input i) { Output o; o.position=float4(2*i.position.x/_Canvas.x-1,1-2*i.position.y/_Canvas.y,0,1); o.position.y*=_ProjectionParams.x;
@@ -27,7 +27,7 @@ Shader "Idas3/Original UI"
    float4 frag(Output i):SV_TARGET {
     clip(i.pixel-_Clip.xy); clip(_Clip.zw-i.pixel);
     float2 uv=float2(coord(i.uv.x,_MainTex_TexelSize.z,(_Tsp&(1u<<16))!=0,(_Tsp&(1u<<18))!=0),coord(i.uv.y,_MainTex_TexelSize.w,(_Tsp&(1u<<15))!=0,(_Tsp&(1u<<17))!=0));
-    float4 sample=tex2Dlod(_MainTex,float4(uv,0,0)); if(_Tsp&(1u<<19))sample.a=1;
+    float4 sample=tex2Dlod(_MainTex,float4(uv,0,0)); if(_FontAtlas)sample.rgb=1; if(_Tsp&(1u<<19))sample.a=1;
     float4 vertex=i.color;if(_Original && !(_Tsp&(1u<<20)))vertex.a=1;
     float4 value=vertex;
     if(_Pcw&8) { uint env=(_Tsp>>6)&3;

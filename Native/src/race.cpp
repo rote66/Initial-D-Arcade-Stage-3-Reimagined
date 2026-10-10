@@ -7,6 +7,9 @@
 #include <limits>
 #include <bit>
 #include <charconv>
+#if defined(__APPLE__)
+#include <locale.h>
+#endif
 
 namespace idas3 {
 void RaceClock::start(float totalLength) {
@@ -79,7 +82,16 @@ bool Replay::save(const std::string& filename) const {
     // once for last_run and once for a new personal-best ghost.
     std::array<char,65536> buffer;char* cursor=buffer.data();
     const auto integer=[&](auto value){cursor=std::to_chars(cursor,buffer.data()+buffer.size(),value).ptr;};
-    const auto scalar=[&](float value){cursor=std::to_chars(cursor,buffer.data()+buffer.size(),value,std::chars_format::general,9).ptr;};
+    const auto scalar=[&](float value){
+#if defined(__APPLE__)
+        // Floating-point to_chars requires iOS 16.3. Use an explicit C locale
+        // on iOS 15 while preserving nine significant round-trip digits.
+        static locale_t replayLocale=newlocale(LC_NUMERIC_MASK,"C",nullptr);
+        cursor+=snprintf_l(cursor,32,replayLocale,"%.9g",double(value));
+#else
+        cursor=std::to_chars(cursor,buffer.data()+buffer.size(),value,std::chars_format::general,9).ptr;
+#endif
+    };
     for(const auto& f:frames) {
         if(buffer.data()+buffer.size()-cursor<512){out.write(buffer.data(),cursor-buffer.data());cursor=buffer.data();}
         integer(f.tick);*cursor++=',';scalar(f.speed);*cursor++=',';scalar(f.yaw);*cursor++=',';

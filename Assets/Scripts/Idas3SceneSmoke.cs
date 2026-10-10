@@ -22,15 +22,15 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     private bool perfCheck, perfLegend, perfNight, perfWet;
     private bool perfFullDrive,perfReverse;
     private readonly float[] driveTelemetry=new float[12];
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneCourseDriveDiagnostic(int enabled,[Out] float[] values,int count);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneCourseDriveDiagnostic(int enabled,[Out] float[] values,int count);
     private bool rivalCheck, rivalPostResult, rivalFastForward, retireCheck;
     private int rivalRecord;
     private Idas3RivalAudioProbe rivalAudio;
     private readonly List<RivalObservation> rivalObservations=new List<RivalObservation>();
     private int perfCourse=3,perfWarmup=180,perfFrames=600,perfMainRenders,perfAllRenders;
     private int PerformanceCourse => (host.Status.flags&IdasSpecialStageEnnaCourse.SceneFlag)!=0 ? IdasSpecialStageEnnaCourse.CourseId(host.Status.flags) : (host.Status.flags&16384u)!=0 ? Idas8HakoneCourse.CourseId(host.Status.flags) : host.Status.course;
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneReplayCaptureDiagnostic(int enabled);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneReplayCaptureDiagnostic(int enabled);
     private Camera perfMainCamera;
     private Vector3 diagnosticPoseTarget;
     private ulong introFirstRenderedFrame;
@@ -79,7 +79,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         public uint legendActive,choiceVisible,choiceKind,selectedIndex,musicCue,musicPlaying;
         public ulong musicSamplePosition;
     }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
     private static extern int Idas3SceneGetRivalStatus(ref RivalStatus status);
     private RivalStatus ReadRivalStatus(){
         var result=new RivalStatus{size=(uint)Marshal.SizeOf<RivalStatus>()};
@@ -156,7 +156,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     }
     internal static bool Configure(Idas3SceneGame host, ref string saves)
     {
-        var args=Environment.GetCommandLineArgs();
+        var args=Idas3LaunchArguments.GetArguments();
         int index=Array.IndexOf(args,"-idas3-scene-smoke");
         if(index<0)return false;
         if(index+1>=args.Length)throw new ArgumentException("Scene smoke requires a NEW output directory.");
@@ -312,9 +312,9 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             record.diagnosticCameraOverride=diagnosticPoseActive;
             record.cameraTarget=diagnosticPoseActive?diagnosticPoseTarget:source.mainCamera.target;
             record.cameraUp=diagnosticPoseActive?camera.transform.up:source.mainCamera.up;
-            record.introFoliageBaseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-intro-foliage-baseline")>=0;
-            record.depthCancellationBaseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-depth-cancellation-baseline")>=0;
-            record.cullingMode=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-cull-baseline")>=0?"baseline-cull-off":"source-culling";
+            record.introFoliageBaseline=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-intro-foliage-baseline")>=0;
+            record.depthCancellationBaseline=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-depth-cancellation-baseline")>=0;
+            record.cullingMode=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-cull-baseline")>=0?"baseline-cull-off":"source-culling";
             record.screenFadeArgb=source.screenFadeArgb;record.targetAntialiasing=target!=null?target.antiAliasing:QualitySettings.antiAliasing;
             record.nativeVerticesSha256=PointerSha256(source.vertices,checked((int)source.vertexCount*64));
             record.nativeRangesSha256=PointerSha256(source.ranges,checked((int)source.rangeCount*64));
@@ -342,15 +342,15 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
                     Check(record.snowFlakes>0,"Akina Snow submitted no snowfall.");
                     if(name.StartsWith("depth-driving-",StringComparison.Ordinal)&&s.speedMetresPerSecond>2)
                         Check(record.snowPowder>0,"Moving car submitted no tire snow powder.");
-                    bool reduced=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-weather-reduced")>=0;
+                    bool reduced=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-weather-reduced")>=0;
                     Check(record.snowFlakes+record.snowPowder<=(reduced?88:352),"Snow exceeded its particle budget.");
                 }
-                if(depthCheck&&s.course!=8&&Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-depth-wet")>=0){
+                if(depthCheck&&s.course!=8&&Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-depth-wet")>=0){
                     record.rainTrails=Idas3SceneModeFlowValue(57);
                     if(name=="depth-driving-00"&&s.speedMetresPerSecond>2)
                         Check(record.rainTrails>0,"Moving wet car submitted no road-contact tire trails.");
                 }
-                if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-depth-dump")>=0&&
+                if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-depth-dump")>=0&&
                     (name=="depth-driving-11"||name=="depth-camera-static")){
                     DumpPointer(name+".vertices.bin",source.vertices,checked((int)source.vertexCount*64));
                     DumpPointer(name+".ranges.bin",source.ranges,checked((int)source.rangeCount*64));
@@ -453,7 +453,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         if(introCheck){yield return IntroCheck();yield break;}
         if(depthCheck){yield return DepthCheck();yield break;}
         if(cullCheck){yield return CullCheck();yield break;}
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-resolution-check")>=0)
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-resolution-check")>=0)
         {
             yield return Key(116);held=87;yield return Frames(180);held=0;
             yield return Key(67);yield return Frames(20);yield return Key(27);yield return Frames(3);
@@ -493,7 +493,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             File.WriteAllText(Path.Combine(root,"audio-realtime.json"),"{\"produced\":"+produced+",\"consumed\":"+consumed+",\"underrun\":"+(after.underrunFrames-before.underrunFrames)+",\"elapsedSeconds\":"+(Time.realtimeSinceStartupAsDouble-start).ToString(System.Globalization.CultureInfo.InvariantCulture)+"}");
             yield return Capture("race-bumper",true);Finish(true,null);yield break;
         }
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-render-check")>=0)
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-render-check")>=0)
         {
             yield return Key(116);held=87;yield return Frames(360);held=0;
             yield return Capture("race-bumper",true);
@@ -809,7 +809,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     }
     private static Vector3 DiagnosticVector(string option,Vector3 fallback)
     {
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,option);
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,option);
         if(at<0)return fallback;
         if(at+1>=args.Length)throw new ArgumentException(option+" requires x,y,z.");
         var values=args[at+1].Split(',');
@@ -848,7 +848,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         // The original first camera cuts fall at188 and374; headlights and
         // their light effects change at500 and535. Consecutive samples expose
         // unstable body surfaces without conflating them with a camera cut.
-        bool extended=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-intro-extended")>=0;
+        bool extended=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-intro-extended")>=0;
         int[] samples=extended?new[]{24,90,180,186,188,190,250,372,374,376,480,481,482,483,499,500,501,534,535,536,600,750,752,900,1295,1420}:
             new[]{90,180,190,250,480,481,482,535,600,900};
         foreach(int sample in samples){
@@ -960,14 +960,14 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         var scene=host.GetComponent<Idas3SceneRenderer>();var ui=host.GetComponent<Idas3UnityUi>();
         perfMainCamera=host.GetComponent<Camera>();
         Check(perfMainCamera.targetTexture==null,"Performance benchmark must use normal window rendering.");
-        bool captureScreens=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-perf-no-captures")<0;
+        bool captureScreens=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-perf-no-captures")<0;
         yield return Frames(8);
         Check(Screen.width==2560&&Screen.height==1080&&host.Status.width==2560&&host.Status.height==1080,
             "Performance window did not reach 2560x1080.");
-        int diagnosticAa=DiagnosticInt(Environment.GetCommandLineArgs(),"-idas3-perf-aa",4,0,8);
+        int diagnosticAa=DiagnosticInt(Idas3LaunchArguments.GetArguments(),"-idas3-perf-aa",4,0,8);
         QualitySettings.antiAliasing=diagnosticAa;
-        bool offscreen=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-perf-offscreen")>=0;
-        bool manualRender=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-perf-manual-render")>=0;
+        bool offscreen=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-perf-offscreen")>=0;
+        bool manualRender=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-perf-manual-render")>=0;
         if(offscreen){
             hires=new RenderTexture(2560,1080,24,RenderTextureFormat.ARGB32){name="Performance target",antiAliasing=diagnosticAa};
             Check(hires.Create(),"Performance target creation");perfMainCamera.targetTexture=hires;
@@ -975,9 +975,9 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         if(manualRender){Check(offscreen,"Manual performance rendering needs its private target");perfMainCamera.enabled=false;}
         Check(QualitySettings.antiAliasing==diagnosticAa&&QualitySettings.vSyncCount==0&&Application.targetFrameRate==-1,
             "Performance benchmark must retain AA4 with uncapped diagnostic presentation.");
-        bool aiCheck=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-ai-difficulty-check")>=0;
+        bool aiCheck=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-ai-difficulty-check")>=0;
         if(aiCheck){host.GameOptions.BeginEdit();host.GameOptions.Draft.aiDifficulty=2;Check(host.GameOptions.ApplyDraft(),"Could not select Expert AI");}
-        bool captureEnabled=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-perf-replay-off")<0;
+        bool captureEnabled=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-perf-replay-off")<0;
         Check(Idas3SceneReplayCaptureDiagnostic(captureEnabled?1:0)==1,"Private capture comparison switch");
         yield return Key(116);yield return Frames(20);
         int startWait=0;
@@ -1025,7 +1025,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             Check(Idas3SceneModeFlowValue(34)==0&&Idas3SceneModeFlowValue(35)==(perfLegend?2:0),"Difficulty must stay fixed until the next battle");
             yield return Frames(600);Check(host.Ready,"Expert AI race failed");yield return Capture("ai-race",true);Finish(true,null);yield break;
         }
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-group-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-group-check")>=0){
             yield return Frames(240);
             if(perfLegend){
                 for(int view=0;view<4&&!scene.MirrorCamera.enabled;++view){yield return Key(67);yield return Frames(4);}
@@ -1053,7 +1053,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             }
             Finish(true,null);yield break;
         }
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-map-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-map-check")>=0){
             for(int size=0;size<3;++size){
                 host.GameOptions.BeginEdit();host.GameOptions.Draft.minimapSize=size;
                 Check(host.GameOptions.ApplyDraft(),"Minimap size apply failed");
@@ -1067,7 +1067,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             Finish(true,null);yield break;
         }
         if(perfFullDrive){
-            Check(Idas3SceneCourseDriveDiagnostic(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-perf-timer-grace")>=0?2:1,driveTelemetry,12)==1,"Isolated full-course driver unavailable");
+            Check(Idas3SceneCourseDriveDiagnostic(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-perf-timer-grace")>=0?2:1,driveTelemetry,12)==1,"Isolated full-course driver unavailable");
             Check((driveTelemetry[8]!=0)==perfReverse,"Wrong driving direction selected");
         }
         if(perfLegend){
@@ -1084,7 +1084,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             settings=File.ReadAllText(Path.Combine(root,"userdata","settings.txt")).Trim(),
             commandLine=Environment.CommandLine,course=perfCourse,warmupFrames=perfWarmup,sampleFrames=perfFrames,
             width=Screen.width,height=Screen.height,antialiasing=QualitySettings.antiAliasing,vSync=QualitySettings.vSyncCount,
-            targetFrameRate=Application.targetFrameRate,baseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-perf-baseline")>=0,
+            targetFrameRate=Application.targetFrameRate,baseline=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-perf-baseline")>=0,
             nightRequested=perfNight,wetRequested=perfWet,frameTimingEnabled=timingEnabled,mirrorEnabled=scene.MirrorCamera.enabled,
             samples=samples,gcCollections=new int[GC.MaxGeneration+1]};
         report.fullDrive=perfFullDrive;report.reverseRequested=perfReverse;
@@ -1098,8 +1098,8 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         }
         if(captureScreens&&perfLegend)yield return Capture("legend-mirror-start",true);
         if(captureScreens&&manualRender&&!perfWet&&!perfLegend)yield return Capture("dry-race-start",true);
-        int frameCap=DiagnosticInt(Environment.GetCommandLineArgs(),"-idas3-perf-frame-cap",0,0,360);
-        bool legacyCap=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-perf-legacy-cap")>=0;
+        int frameCap=DiagnosticInt(Idas3LaunchArguments.GetArguments(),"-idas3-perf-frame-cap",0,0,360);
+        bool legacyCap=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-perf-legacy-cap")>=0;
         if(frameCap>0){
             Check(!manualRender&&!offscreen,"Frame pacing must measure normal automatic rendering.");
             Idas3FramePacingChecks.Run();
@@ -1235,7 +1235,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         for(int choice=0;(host.Status.flags&1)!=0&&choice<6;++choice){
             Check(host.Status.frontendStage>=6&&host.Status.frontendStage<=9,
                 "Depth setup reached an unexpected Time Attack selection stage.");
-            var selections=Environment.GetCommandLineArgs();
+            var selections=Idas3LaunchArguments.GetArguments();
             if((host.Status.frontendStage==7&&Array.IndexOf(selections,"-idas3-scene-depth-reverse")>=0)||
                (host.Status.frontendStage==8&&Array.IndexOf(selections,"-idas3-scene-depth-wet")>=0)||
                (host.Status.frontendStage==9&&Array.IndexOf(selections,"-idas3-scene-depth-night")>=0)){
@@ -1249,7 +1249,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         startWait=0;
         while(host.Status.racePhase!=2&&startWait++<1800)yield return Frames(1);
         Check(host.Status.racePhase==2,"Depth setup did not finish the selected course showcase/countdown.");
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-weather-reduced")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-weather-reduced")>=0){
             Check(Idas3Native.Idas3SceneSetPerformance(1)==1,"Reduced weather setting failed.");yield return Frames(4);
         }
         yield return Capture("depth-timeattack-bumper",true);
@@ -1261,14 +1261,14 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             yield return Frames(120);
             Check((host.Status.flags&1)==0&&host.Status.course==depthCourse,"Depth drive left the selected race.");
             yield return Capture("depth-driving-"+i.ToString("00"),true);
-            if(i==2&&Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-depth-wet")>=0){
+            if(i==2&&Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-depth-wet")>=0){
                 held=0;pause.SetOpen(true);yield return Frames(4);
                 yield return Capture("wet-paused-a",true);yield return Frames(60);yield return Capture("wet-paused-b",true);
                 pause.SetOpen(false);yield return Frames(6);yield return Key(67);yield return Frames(12);held=87;
             }
         }
         held=0;
-        var args=Environment.GetCommandLineArgs();
+        var args=Idas3LaunchArguments.GetArguments();
         bool hasEye=Array.IndexOf(args,"-idas3-scene-cull-eye")>=0;
         bool hasTarget=Array.IndexOf(args,"-idas3-scene-cull-target")>=0;
         if(hasEye||hasTarget){
@@ -1298,7 +1298,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     private IEnumerator CullCheck()
     {
         var scene=host.GetComponent<Idas3SceneRenderer>();var main=host.GetComponent<Camera>();
-        bool noMsaa=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-scene-cull-no-msaa")>=0;
+        bool noMsaa=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-cull-no-msaa")>=0;
         hires=new RenderTexture(2560,1080,24,RenderTextureFormat.ARGB32){name="Culling regression 2560x1080",antiAliasing=noMsaa?1:Mathf.Max(1,QualitySettings.antiAliasing)};
         Check(hires.Create(),"Culling verification render target could not be created.");
         main.targetTexture=hires;yield return Frames(4);

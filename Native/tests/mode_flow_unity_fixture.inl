@@ -2,6 +2,25 @@
 // separate regression in mode_flow_app_tests.inl; these select authored scenes
 // quickly for Unity rendering and controller-route verification.
 void prepareModeFlowFixture(App& app,unsigned scene){
+    if(scene==425||scene==426){
+        app.validationMode=false;app.returnToCourseSelection(true);
+        app.fullTuneActive=app.fullTuneSelecting=false;app.menu=true;app.paused=false;
+        auto& f=app.frontend;f.car=0;f.battleProfile=original::makeOriginalFreshBattleProfile();
+        f.battleProfile.setu(1180,1);f.stage=FrontendStage::Rival;
+        f.gameMode=original::OriginalGameMode::LegendOfTheStreets;
+        original::selectOriginalRival(f.battleProfile,0);f.course=original::originalRival(0).course;
+        if(scene==425){
+            if(!app.beginPreRaceDialogue())throw std::runtime_error("Mobile fixture could not begin source story");
+        }else{
+            f.selectSavedCarTuningCourse();f.advance(1);app.menuTexturesLoaded=false;
+        }
+        app.input={};return;
+    }
+    if(scene==427){
+        prepareModeFlowFixture(app,140);app.frontend.stage=FrontendStage::Mode;app.fullTuneSelecting=true;
+        app.beginSelectedFullTune();prepareModeFlowFixture(app,141);
+        app.resultSelectionAxis=1;app.input={};return;
+    }
     if(scene==400){
         if(app.multiplayer.active)app.leaveMultiplayer();
         app.validationMode=true;app.menu=true;app.paused=false;app.replayPlaybackActive=false;

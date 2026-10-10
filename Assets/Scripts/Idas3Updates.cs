@@ -25,8 +25,9 @@ public sealed class Idas3Updates : MonoBehaviour
     public string AvailableVersion {get;private set;}
     public string Message {get;private set;}="Check GitHub for the latest Windows release.";
     public string ReleaseUrl {get;private set;}
-    public bool CanCheck=>!Busy&&Time.realtimeSinceStartupAsDouble>=nextCheck;
-    public bool CanActivate=>State==CheckState.Available||State==CheckState.Current&&fullUrl!=null||CanCheck;
+    public static bool FeatureEnabled=>Application.platform!=RuntimePlatform.IPhonePlayer;
+    public bool CanCheck=>FeatureEnabled&&!Busy&&Time.realtimeSinceStartupAsDouble>=nextCheck;
+    public bool CanActivate=>FeatureEnabled&&(State==CheckState.Available||State==CheckState.Current&&fullUrl!=null||CanCheck);
     public string ButtonLabel=>Busy?"PLEASE WAIT…":State==CheckState.Available?"INSTALL UPDATE":State==CheckState.Current?"UPDATES / REPAIR":"CHECK FOR UPDATES";
     public bool WindowVisible {get;private set;}
     private bool Busy=>State==CheckState.Checking||State==CheckState.Downloading||State==CheckState.Preparing;
@@ -55,13 +56,14 @@ public sealed class Idas3Updates : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap(){
         Instance=null;StartupFinished=true;
+        if(Application.platform==RuntimePlatform.IPhonePlayer)return;
         if(Application.isEditor)return;
         bool diagnostic=false;
-        foreach(string arg in Environment.GetCommandLineArgs())
+        foreach(string arg in Idas3LaunchArguments.GetArguments())
             if((arg.StartsWith("-idas3-",StringComparison.Ordinal)&&arg!="-idas3-skip-update-once")||arg.StartsWith("-hakone-",StringComparison.Ordinal))diagnostic=true;
         if(!diagnostic)StartCacheCleanup();
-        bool startupTest=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-updates-startup-check")>=0&&Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-attract-options-smoke")>=0;
-        foreach(string arg in Environment.GetCommandLineArgs())if(!startupTest&&(arg.StartsWith("-idas3-",StringComparison.Ordinal)||arg.StartsWith("-hakone-",StringComparison.Ordinal)))return;
+        bool startupTest=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-updates-startup-check")>=0&&Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-attract-options-smoke")>=0;
+        foreach(string arg in Idas3LaunchArguments.GetArguments())if(!startupTest&&(arg.StartsWith("-idas3-",StringComparison.Ordinal)||arg.StartsWith("-hakone-",StringComparison.Ordinal)))return;
         var go=new GameObject("Game updates");DontDestroyOnLoad(go);
         Instance=go.AddComponent<Idas3Updates>();StartupFinished=false;
         Instance.StartCoroutine(Instance.StartAfterRomCheck());
@@ -84,9 +86,11 @@ public sealed class Idas3Updates : MonoBehaviour
 
     public void Initialize(bool checkOnStartup=true){
         InstalledVersion=Application.version;
+        if(Application.platform==RuntimePlatform.IPhonePlayer){Message="Install a newer IPA to update this iOS build.";return;}
         if(checkOnStartup){StartupFinished=false;startupWindow=true;ShowWindow();CheckNow();}
     }
     public void Activate(){
+        if(Application.platform==RuntimePlatform.IPhonePlayer)return;
         if(State==CheckState.Available||State==CheckState.Current&&fullUrl!=null)ShowWindow();
         else if(CanCheck){ShowWindow();CheckNow();}
     }
@@ -100,6 +104,7 @@ public sealed class Idas3Updates : MonoBehaviour
         Cursor.visible=previousCursor;Cursor.lockState=previousLock;
     }
     public void CheckNow(){
+        if(Application.platform==RuntimePlatform.IPhonePlayer)return;
         if(!CanCheck)return;
         nextCheck=Time.realtimeSinceStartupAsDouble+60;
         State=CheckState.Checking;Message="Checking GitHub for updates…";
@@ -195,6 +200,7 @@ public sealed class Idas3Updates : MonoBehaviour
     internal void AcceptUpdate(){BeginInstall(false);}
     internal void AcceptRepair(){BeginInstall(true);}
     private void BeginInstall(bool full){
+        if(!FeatureEnabled)return;
         if(State!=CheckState.Available&&!(full&&State==CheckState.Current))return;
         if(fullUrl==null||!TryCompareVersions(AvailableVersion,InstalledVersion,out int order)||order<0)return;
         repair=full;SelectDownload(full);

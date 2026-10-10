@@ -15,9 +15,9 @@ public sealed class Idas8HakoneRaceSmoke : MonoBehaviour
         start=host.GetComponent<Camera>().transform.position;
         var options=new Idas3Native.Options{size=(uint)Marshal.SizeOf<Idas3Native.Options>()};Idas3Native.Idas3SceneGetOptions(ref options);options.cameraView=1;
         Idas3Native.Idas3SceneApplyOptions(ref options);
-        menuMode=Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-menu-smoke")>=0;
+        menuMode=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-menu-smoke")>=0;
         if(menuMode){
-            string pack=Path.Combine(Application.streamingAssetsPath,"HAKONE");
+            string pack=Path.Combine(Idas3AssetPaths.Root,"HAKONE");
             if(Idas3Native.Idas3SceneStartImportedCourseConditions(pack,0,0,0)!=1||Idas3Native.Idas3SceneShowImportedCourseMenu(pack)!=1)throw new Exception(Idas3Native.Error());
         }else BeginScenario();
     }
@@ -39,7 +39,7 @@ public sealed class Idas8HakoneRaceSmoke : MonoBehaviour
             if(menuMode){CheckMenu();return;}
             maximumSpeed=Mathf.Max(maximumSpeed,host.Status.speedMetresPerSecond);maximumRpm=Mathf.Max(maximumRpm,host.Status.rpm);
             frames++;
-            if(frames==10&&scenario==1&&Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-menu-art")>=0)
+            if(frames==10&&scenario==1&&Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-menu-art")>=0)
                 Capture("hakone-menu-background",true);
             if(frames==10){
                 var source=host.GetComponent<Idas3SceneRenderer>();
@@ -96,7 +96,7 @@ public sealed class Idas8HakoneRaceSmoke : MonoBehaviour
         if(++scenario==3){Debug.Log("HAKONE MENU PASS");Application.Quit(0);enabled=false;active=null;}
     }
     void BeginScenario(){
-        if(Idas3Native.Idas3SceneStartImportedCourseConditions(Path.Combine(Application.streamingAssetsPath,"HAKONE"),scenario%2,scenario>=4?1:0,scenario/2%2)!=1)throw new Exception(Idas3Native.Error());
+        if(Idas3Native.Idas3SceneStartImportedCourseConditions(Path.Combine(Idas3AssetPaths.Root,"HAKONE"),scenario%2,scenario>=4?1:0,scenario/2%2)!=1)throw new Exception(Idas3Native.Error());
         frames=0;maximumSpeed=maximumRpm=0;start=host.GetComponent<Camera>().transform.position;
     }
     static int Changed(Color32[] on,Color32[] off){

@@ -30,6 +30,7 @@ Shader "IDAS3/Original Scene Material"
    Blend [_SrcBlend] [_DstBlend], [_SrcBlendAlpha] [_DstBlendAlpha]
    HLSLPROGRAM
    #pragma target 5.0
+   #pragma exclude_renderers metal
    #pragma vertex mainVS
    #pragma geometry showroomGeometry
    #pragma fragment mainPS

@@ -36,7 +36,7 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
         try {
             host=FindAnyObjectByType<Idas3SceneGame>();view=Idas3ReplayViewer.Instance != null ? Idas3ReplayViewer.Instance.View : host.GetComponent<Camera>();
             if((SceneFlags&16384u)!=0&&(SceneFlags&IdasSpecialStageEnnaCourse.SceneFlag)==0)LoadVariant(Variant(SceneFlags));
-            if(testBuild&&(Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-smoke")>=0||Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-menu-smoke")>=0))gameObject.AddComponent<Idas8HakoneRaceSmoke>();
+            if(testBuild&&(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-smoke")>=0||Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-menu-smoke")>=0))gameObject.AddComponent<Idas8HakoneRaceSmoke>();
         } catch(Exception e) {Debug.LogException(e);Application.Quit(1);}
     }
     void LateUpdate(){
@@ -57,7 +57,7 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
     }
     void LoadVariant(string selected){
         ClearScene();
-        LoadedCourse=CourseName(SceneFlags);root=Path.Combine(Application.streamingAssetsPath,LoadedCourse);
+        LoadedCourse=CourseName(SceneFlags);root=Path.Combine(Idas3AssetPaths.Root,LoadedCourse);
         if(selected!="day_dry")root=Path.Combine(root,selected);
         data=JsonUtility.FromJson<Manifest>(File.ReadAllText(Path.Combine(root,"scene.json")));
         LoadRoad();LoadScene();
@@ -99,7 +99,16 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
         // visibility in alpha (white = lit), interpreted by the material shader.
         // A8 needs black RGB, just like the source DXT5 shadow atlases.
         int mipCount=Math.Max(1,BitConverter.ToInt32(bytes,28));
-        var t=new Texture2D(width,height,alphaOnly?TextureFormat.RGBA32:fourcc=="DXT1"?TextureFormat.DXT1:TextureFormat.DXT5,mipCount,false);
+        var format=alphaOnly?TextureFormat.RGBA32:fourcc=="DXT1"?TextureFormat.DXT1:TextureFormat.DXT5;
+        if(!alphaOnly&&!SystemInfo.SupportsTextureFormat(format)){
+            var decoded=new Texture2D(width,height,TextureFormat.RGBA32,mipCount,false);
+            int offset=128;
+            for(int mip=0;mip<mipCount;++mip)
+                decoded.SetPixels32(Idas3DxtTexture.DecodeMip(bytes,ref offset,Math.Max(1,width>>mip),Math.Max(1,height>>mip),fourcc=="DXT5"),mip);
+            decoded.Apply(false,true);decoded.name=name;decoded.anisoLevel=8;decoded.filterMode=FilterMode.Trilinear;
+            return decoded;
+        }
+        var t=new Texture2D(width,height,format,mipCount,false);
         byte[] payload=new byte[(bytes.Length-128)*(alphaOnly?4:1)];
         if(alphaOnly){for(int i=128;i<bytes.Length;i++)payload[(i-128)*4+3]=bytes[i];}
         else Buffer.BlockCopy(bytes,128,payload,0,payload.Length);
@@ -107,9 +116,9 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
         return t;
     }
     void LoadScene() {
-        var shader=Resources.Load<Shader>("Idas3Scene"); if(shader==null || !shader.isSupported) throw new InvalidOperationException("Shared scene shader missing or unsupported");
-        bool roadsideBaseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-roadside-foliage-baseline")>=0&&
-            Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-sadamine-boundary-check")>=0;
+        var shader=Resources.Load<Shader>(SystemInfo.supportsGeometryShaders?"Idas3Scene":"Idas3SceneDirect"); if(shader==null || !shader.isSupported) throw new InvalidOperationException("Shared scene shader missing or unsupported");
+        bool roadsideBaseline=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-roadside-foliage-baseline")>=0&&
+            Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-sadamine-boundary-check")>=0;
         materials=new Material[data.materials.Length];
         for(int i=0;i<materials.Length;i++) {
             var s=data.materials[i]; var m=new Material(shader){name=s.name}; materials[i]=m;
@@ -117,7 +126,7 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
             m.SetFloat("_ImportedSponsorSigns",(LoadedCourse=="TSUBAKI"?IsTsubakiSignAtlas(s):IsSponsorMaterial(LoadedCourse,s.name))?1:0);
             // Repeated cutout trees share meshes/materials. Instance their
             // world transforms; blended road shadows retain their draw order.
-            m.enableInstancing=s.kind=="tree"&&Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-imported-instancing-off")<0;
+            m.enableInstancing=s.kind=="tree"&&Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-imported-instancing-off")<0;
             // The existing D3 scene starts at queue 1000. Imported ground must
             // precede its projected headlights, contact shadows, cars and rain.
             m.renderQueue=900;
@@ -165,7 +174,7 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
                     else PairedRoadsideTriangles+=paired;
                 }
                 var mesh=new Mesh{name="Hakone original shape "+shape,indexFormat=IndexFormat.UInt32};
-                mesh.vertices=vertices; mesh.normals=normals; mesh.uv=uv; mesh.uv2=uv2; mesh.colors32=colors; if(treeFaces!=null)mesh.uv3=treeFaces; mesh.triangles=indices; mesh.RecalculateBounds(); mesh.UploadMeshData(true);
+                mesh.vertices=vertices; mesh.normals=normals; mesh.uv=uv; mesh.uv2=uv2; mesh.colors32=colors; if(treeFaces!=null)mesh.uv3=treeFaces; mesh.triangles=indices; Idas3MetalMesh.PrepareImported(mesh); mesh.RecalculateBounds(); mesh.UploadMeshData(true);
                 sourceMeshes[shape]=mesh; sourceMaterials[shape]=mat;
                 if(data.materials[mat].kind=="tree" || data.materials[mat].kind=="gallery") continue;
                 var go=new GameObject(materials[mat].name+" "+shape); go.transform.SetParent(transform,false);

@@ -16,9 +16,9 @@ public sealed class Idas3ArcadeHud : IDisposable
         public float speedKmh,rpm,revLimit,throttle,brake;
         public float driftOpacity;
     }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
     static extern int Idas3SceneGetHudTelemetry(ref Telemetry value);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
     static extern int Idas3SceneCopyHudDriverName([Out] byte[] destination,int capacity);
     internal struct Sprite {
         public Texture texture;public Rect rect,uv;public Color color;
@@ -257,8 +257,8 @@ public sealed class Idas3ArcadeHud : IDisposable
         if(Event.current.type!=EventType.Repaint)return;
         if(previewLabel==null){previewLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontSize=17,normal={textColor=Color.white}};previewName=new GUIStyle(previewLabel){fontStyle=FontStyle.Bold};}
         bool prepared=PreparePreview(options,seconds);
-        if(options.hudMeterStyle==0){GUI.Label(area,"ORIGINAL ARCADE STAGE 3 HUD",previewLabel);return;}
-        if(!prepared){GUI.Label(area,"Meter artwork unavailable",previewLabel);return;}
+        if(options.hudMeterStyle==0){Idas3Localization.Label(area,"ORIGINAL ARCADE STAGE 3 HUD",previewLabel);return;}
+        if(!prepared){Idas3Localization.Label(area,"Meter artwork unavailable",previewLabel);return;}
         var content=Idas3MeterLayoutBounds.Get(options.hudMeterStyle);var size=content.size;float h=size.y+(options.hudNameplateStyle==1?72:0),scale=Mathf.Min(area.width/size.x,area.height/h),shift=options.hudNameplateStyle==1?72:0;
         Vector2 origin=new Vector2(area.center.x-size.x*scale*.5f,area.center.y-h*scale*.5f);
         var matrix=GUI.matrix;var color=GUI.color;

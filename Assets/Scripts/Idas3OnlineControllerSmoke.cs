@@ -15,7 +15,7 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
 {
     private static string pendingRoot;
     private static bool pendingSteam,pendingRequirePhysical;
-    private static bool InputOnly=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-input-check-no-captures")>=0;
+    private static bool InputOnly=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-input-check-no-captures")>=0;
     private static int pendingPhysicalSlot=-1;
     private static Idas3OnlineControllerSmoke active;
     private Idas3SceneGame host;
@@ -72,7 +72,7 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
 
     public static bool Configure(ref string saves)
     {
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-online-controller-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-online-controller-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Online controller diagnostic needs a fresh output directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);pendingSteam=Array.IndexOf(args,"-idas3-online-controller-steam")>=0;
         pendingRequirePhysical=Array.IndexOf(args,"-idas3-online-controller-require-physical")>=0;pendingPhysicalSlot=-1;
@@ -367,7 +367,7 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
         CensusInputs("after-online-close-recovery");CheckPhysicalEndpoints("after-online-close-recovery");Check(!host.MultiplayerSession.InLobby&&!host.MultiplayerSession.IsRacing,"Diagnostic unexpectedly entered an online room/race");
         if(physicalSlot<0&&!steam){
             yield return ReconnectControls();
-            if(!InputOnly){yield return ControllerMenus();if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-online-menu-screens")>=0)yield return Idas3.Multiplayer.Idas3OnlineMenuScreens.Run(root);yield return WheelMenus();}
+            if(!InputOnly){yield return ControllerMenus();if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-online-menu-screens")>=0)yield return Idas3.Multiplayer.Idas3OnlineMenuScreens.Run(root);yield return WheelMenus();}
         }
         Pad();yield return Frames(3);Observe("complete");Finish(true,null);
     }

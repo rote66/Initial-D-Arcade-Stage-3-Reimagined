@@ -9,10 +9,10 @@ using UnityEngine;
 // binding owner; the source attract frontend is never replaced with a fixture.
 public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
 {
-    private static bool ReportsCheck => Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-reports-check")>=0;
-    private static bool PointerCheck => Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-pointer-live-check")>=0;
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowFixture(int scene);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
+    private static bool ReportsCheck => Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-reports-check")>=0;
+    private static bool PointerCheck => Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-pointer-live-check")>=0;
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowFixture(int scene);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
     private static string pendingRoot;
     private static Idas3AttractOptionsSmoke active;
     private Idas3SceneGame host;
@@ -24,10 +24,10 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
     private bool padConnected,finished,heldAccelerator,heldSteering;
     private byte throttle;
     private short steeringAxis;
-    private static bool OptionsExitCheck=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-options-exit-check")>=0;
-    private static bool UpdatesCheck=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-updates-check")>=0;
-    private static bool HudCustomizationCheck=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-customization-check")>=0;
-    private static bool HudEdgePlacementCheck=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-edge-placement-check")>=0;
+    private static bool OptionsExitCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-options-exit-check")>=0;
+    private static bool UpdatesCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-updates-check")>=0;
+    private static bool HudCustomizationCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-customization-check")>=0;
+    private static bool HudEdgePlacementCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-edge-placement-check")>=0;
     private int pulse,checks;
     private double began;
     private double presentationDelta;
@@ -49,7 +49,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
         public void Apply(Idas3GameOptions.Values previous,Idas3GameOptions.Values next,bool displayChanged){}
     }
     public static bool Configure(ref string saves){
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-attract-options-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-attract-options-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Attract options diagnostic needs a fresh output directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);
         if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a new attract options diagnostic directory.");
@@ -156,9 +156,9 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
         buttons=0;yield return Frames(5);
         yield return HeldAcceleratorRegression();
         File.WriteAllText(Path.Combine(root,"ISOLATED_MODE_FLOW_TEST.txt"),"Private report regression fixture permission. No normal saves.\n");
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-presentation-check")>=0)yield return FrameCounterCheck();
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-presentation-check")>=0)yield return FrameCounterCheck();
         Check(Idas3SceneModeFlowFixture(-1)==1,"Native completed section/timeout regression: "+Idas3Native.Error());
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-presentation-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-presentation-check")>=0){
             for(int course=0;course<9;++course){
                 Check(Idas3SceneModeFlowFixture(21+course)==1,"Conquered fixture: "+Idas3Native.Error());
                 yield return Frames(2);yield return SceneCapture("conquered-"+course);
@@ -296,7 +296,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
         Check(updates.State==Idas3Updates.CheckState.Current,"Live GitHub Windows release parsed: "+updates.Message);
         observations.Add("Live anonymous GitHub latest release: "+updates.AvailableVersion);
         Check(!updates.CanCheck,"Manual recheck cooldown enforced");
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-updates-download-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-updates-download-check")>=0){
             // Exercise the real download/hash/helper failure path using the
             // public 128-byte checksum file as an intentionally invalid ZIP.
             // This cannot pass the helper's archive preflight or replace files.
@@ -754,7 +754,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
         Check(host.ControllerDevices.Select("keyboard"),"Could not isolate physical-input injection");yield return Release();
         if(HudEdgePlacementCheck){menu.OpenAttractOptions();yield return HudEdgePlacementRegression(false);menu.SetOpen(false);Finish(true,null);yield break;}
         if(HudCustomizationCheck){yield return HudCustomizationRegression();yield break;}
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-ai-options-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-ai-options-check")>=0){
             Check(options.Current.aiDifficulty==0,"Default AI must remain Normal");
             Check(Idas3GameOptions.Normalize(new Idas3GameOptions.Values{aiDifficulty=-1}).aiDifficulty==0,"Negative AI setting");
             Check(Idas3GameOptions.Normalize(new Idas3GameOptions.Values{aiDifficulty=99}).aiDifficulty==2,"AI setting cap");
@@ -768,7 +768,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
             yield return Frames(3);
             observations.Add("AI capture: open="+menu.IsOpen+" attract="+menu.AttractOptions+" updates="+(menu.Updates!=null&&menu.Updates.WindowVisible)+" repaints="+menu.DiagnosticRepaints);
             Check(menu.IsOpen,"AI settings closed before capture");
-            if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-ai-no-capture")<0){
+            if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-ai-no-capture")<0){
             var testCamera=host.GetComponent<Camera>();var previousTarget=testCamera.targetTexture;
             var testTarget=new RenderTexture(Screen.width,Screen.height,24);testTarget.Create();testCamera.targetTexture=testTarget;
             try{yield return Capture("ai-gameplay-options");}finally{testCamera.targetTexture=previousTarget;testTarget.Release();Destroy(testTarget);}
@@ -776,7 +776,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
             menu.NavigateHorizontal(1);Check(options.Draft.aiDifficulty==0,"Expert should wrap to Normal");menu.Back();menu.Back();
             Check(options.Current.aiDifficulty==2,"Cancel changed saved difficulty");Finish(true,null);yield break;
         }
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-editor-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-editor-check")>=0){
             menu.OpenAttractOptions();menu.SelectTab(7);menu.Navigate(1);menu.Activate();yield return Frames(3);
             var editor=menu.HudEditor;Check(editor!=null&&editor.IsOpen,"Live editor did not open from HUD settings");
             Check(editor.Draft.HudGroupScale(0)==1&&editor.Draft.HudOffset(0)==Vector2.zero,"Race announcements must remain fixed");
@@ -813,7 +813,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
             Check(editor.Draft.HudOffset(2)==expected.HudOffset(2),"Panel reset moved speedometer");editor.Close(false);
             menu.SetOpen(false);Finish(true,null);yield break;
         }
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-options-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-options-check")>=0){
             Check(options.Current.minimapSize==0&&options.Current.minimapZoom==2,"Existing/default settings must retain original map");
             var oldHud=new Idas3GameOptions.Values();JsonUtility.FromJsonOverwrite("{\"version\":1,\"minimapSize\":1}",oldHud);Check(oldHud.minimapZoom==2&&oldHud.hudTimerSize==2&&oldHud.hudSpeedometerSize==2&&oldHud.hudOnlineSize==2,"Old settings must retain original zoom and independent HUD sizes");
             Check(Idas3GameOptions.Normalize(new Idas3GameOptions.Values{minimapZoom=-1}).minimapZoom==0,"Negative zoom not clamped");
@@ -834,7 +834,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
             menu.Navigate(1);menu.Navigate(1);menu.Activate();Check(options.Current.HudSizePercent(5)==102&&options.Current.minimapZoom==0,"HUD Apply lost map settings");
             var hudReloaded=new Idas3GameOptions(new OptionsTestPlatform());hudReloaded.Initialize(Path.GetDirectoryName(options.FilePath));
             foreach(int group in sizeGroups)Check(hudReloaded.Current.HudSizePercent(group)==101,"Independent HUD setting did not survive reload: "+group);
-            if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-options-no-capture")<0)yield return Capture("hud-settings");
+            if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-hud-options-no-capture")<0)yield return Capture("hud-settings");
             menu.SelectTab(7);menu.Navigate(1);menu.Navigate(1);
             options.Draft.SetHudSizePercent(5,150);menu.NavigateHorizontal(1);Check(options.Draft.HudSizePercent(5)==150,"Size wrapped at the upper bound");
             menu.NavigateHorizontal(-1);Check(options.Draft.HudSizePercent(5)==149,"Reverse size selection did not decrease one percent");
@@ -845,9 +845,9 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
         if(OptionsExitCheck){yield return OptionsExitRegression();yield break;}
         if(ReportsCheck){yield return ReportsRegression();yield break;}
         if(UpdatesCheck){yield return UpdatesRegression();yield break;}
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-discord-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-discord-check")>=0){
             Idas3DiscordChecks.Run(Check);
-            if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-discord-live-check")>=0){
+            if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-discord-live-check")>=0){
                 using(var rpc=new DiscordRPC.DiscordRpcClient(Idas3DiscordPresence.ApplicationId,autoEvents:false)){
                     bool connected=false,accepted=false;rpc.OnReady+=(s,m)=>connected=true;rpc.OnPresenceUpdate+=(s,m)=>accepted=true;
                     Check(rpc.Initialize(),"Discord transport initialized in Unity player");
@@ -974,7 +974,7 @@ public sealed class Idas3AttractOptionsSmoke : MonoBehaviour
         if(HudCustomizationCheck)report.scope="Standalone player with private saves: actual OnGUI "+Idas3ArcadeMeterCatalog.Count+"-entry meter and "+Idas3OrnamentCatalog.Count+"-entry ornament pickers, initial/scrolled/final rows, recovered artwork/3D preview pixel checks, high-ID Apply/reload and Cancel, Original HUD compatibility, Stuttgart layout move/resize, small/ultrawide captures, and live native quick-race telemetry including Season 5 meters and ornaments. Actual ornament mesh parts, transparent render target, screen-top bounds, movement-responsive swing, and Off resource release are checked. Programmatic normal menu navigation and synthetic keyboard driving; no physical controller or every-car validation.";
         if(HudEdgePlacementCheck)report.scope="Hidden standalone Unity player with private saves: actual HUD editor and composed Youmu bounds, edge placement in both directions, visible reachability, movement back from edges and Cancel preservation. No OnGUI pixel capture or OS mouse input.";
         if(OptionsExitCheck)report.scope="Actual Unity host with private saves and injected keyboard/controller input: attract options apply/close with held axis, keyboard Start, race options apply/back/resume with held throttle/steering, and music visibility close callback. No physical wheel or menu pixel verification.";
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-discord-check")>=0)report.scope="Discord activity state mapping, native snapshot, UTF8 limits, replay descriptions, settings persistence and controller navigation; actual Gameplay captures at 640x480 and 1280x720. Optional live flag checks Discord READY and activity acknowledgement from this Unity player.";
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-discord-check")>=0)report.scope="Discord activity state mapping, native snapshot, UTF8 limits, replay descriptions, settings persistence and controller navigation; actual Gameplay captures at 640x480 and 1280x720. Optional live flag checks Discord READY and activity acknowledgement from this Unity player.";
         if(UpdatesCheck)report.scope="GitHub release/version/checksum validation, live anonymous latest-release request, request cooldown, controlled offline/newer-release responses, keyboard/controller/wheel access to Update / Full Repair / Later, same-version repair and patch/full fallback state transitions with controlled transfer failures, options/title captures, and return to game. Installation intercepted here and tested separately by installer fixtures. Private saves only.";
         File.WriteAllText(Path.Combine(root,"report.json"),JsonUtility.ToJson(report,true));Debug.Log((report.passed?"PASS":"FAIL")+" attract options "+error);
 #if UNITY_EDITOR

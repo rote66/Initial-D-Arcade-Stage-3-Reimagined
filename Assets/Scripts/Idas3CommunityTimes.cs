@@ -36,11 +36,11 @@ public sealed class Idas3CommunityTimes : MonoBehaviour
     private long responseCode;private string responseText;
     internal int PendingCount=>pending.runs.Count;
     private readonly byte[] finishBuffer=new byte[4096];
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SharedReadFinish([Out] byte[] buffer,int capacity);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern void Idas3SharedAckFinish();
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SharedReadReplay([Out] byte[] buffer,int capacity);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SharedSetRecords(int[] values,int count,int enabled);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SharedReadFinish([Out] byte[] buffer,int capacity);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern void Idas3SharedAckFinish();
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SharedReadReplay([Out] byte[] buffer,int capacity);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SharedSetRecords(int[] values,int count,int enabled);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
     public void Initialize(Idas3SceneGame owner,Idas3GameOptions settings,Idas3PauseMenu view,string diagnosticStorage=null,bool diagnosticOffline=false){
         host=owner;options=settings;menu=view;folder=Path.Combine(Application.persistentDataPath,"community-times");
         if(diagnosticOffline&&diagnosticStorage==null)throw new InvalidOperationException("Offline diagnostic requires isolated storage.");

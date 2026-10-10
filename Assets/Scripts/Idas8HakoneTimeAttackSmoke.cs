@@ -6,15 +6,15 @@ using UnityEngine;
 
 // Explicit isolated integration test; never uses the player's test-build save.
 public sealed class Idas8HakoneTimeAttackSmoke : MonoBehaviour {
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneHakoneTimeAttackTest([MarshalAs(UnmanagedType.LPUTF8Str)] string pack);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneModeFlowValue(int field);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneGetPreRaceStatus(ref Idas3PreRaceSmoke.PreRaceStatus status);
-    static bool IntroCameraCheck => Array.IndexOf(Environment.GetCommandLineArgs(),"-imported-intro-camera-check")>=0;
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneHakoneTimeAttackTest([MarshalAs(UnmanagedType.LPUTF8Str)] string pack);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneModeFlowValue(int field);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] static extern int Idas3SceneGetPreRaceStatus(ref Idas3PreRaceSmoke.PreRaceStatus status);
+    static bool IntroCameraCheck => Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-imported-intro-camera-check")>=0;
     static bool SpecialStage=>Array.IndexOf(Idas3CourseCatalog.Packs,packName)>=2&&Array.IndexOf(Idas3CourseCatalog.Packs,packName)<=5;
     static string output,packName="HAKONE";static Idas8HakoneTimeAttackSmoke active;
     Idas3SceneGame host;int pulse;bool accelerate;
     public static bool Configure(ref string saves){
-        var args=Environment.GetCommandLineArgs();int tsubaki=Array.IndexOf(args,"-tsubaki-ta-smoke");if(tsubaki>=0){packName="TSUBAKI";args=(string[])args.Clone();args[tsubaki]="-hakone-ta-smoke";}int at=Array.IndexOf(args,"-enna-ta-smoke");if(at>=0)packName="ENNA";else{at=Array.IndexOf(args,"-sadamine-ta-smoke");if(at>=0)packName="SADAMINE";else at=Array.IndexOf(args,"-hakone-ta-smoke");}if(at<0){at=Array.IndexOf(args,"-special-stage-ta-smoke");if(at<0)return false;if(at+2>=args.Length)throw new ArgumentException("Supply a pack and diagnostic directory");packName=args[++at];if(Array.IndexOf(Idas3CourseCatalog.Packs,packName)<3)throw new ArgumentException("Unknown Special Stage pack");}
+        var args=Idas3LaunchArguments.GetArguments();int tsubaki=Array.IndexOf(args,"-tsubaki-ta-smoke");if(tsubaki>=0){packName="TSUBAKI";args=(string[])args.Clone();args[tsubaki]="-hakone-ta-smoke";}int at=Array.IndexOf(args,"-enna-ta-smoke");if(at>=0)packName="ENNA";else{at=Array.IndexOf(args,"-sadamine-ta-smoke");if(at>=0)packName="SADAMINE";else at=Array.IndexOf(args,"-hakone-ta-smoke");}if(at<0){at=Array.IndexOf(args,"-special-stage-ta-smoke");if(at<0)return false;if(at+2>=args.Length)throw new ArgumentException("Supply a pack and diagnostic directory");packName=args[++at];if(Array.IndexOf(Idas3CourseCatalog.Packs,packName)<3)throw new ArgumentException("Unknown Special Stage pack");}
         if(at+1>=args.Length)throw new ArgumentException("Supply a new Hakone TA diagnostic directory");
         output=Path.GetFullPath(args[at+1]);if(Directory.Exists(output))throw new IOException("Diagnostic directory must be new");
         Directory.CreateDirectory(output);saves=Path.Combine(output,"userdata");Directory.CreateDirectory(saves);
@@ -81,15 +81,15 @@ public sealed class Idas8HakoneTimeAttackSmoke : MonoBehaviour {
         yield return Until(()=>(host.Status.flags&1024u)==0,600,"Imported loading complete");
     }
     IEnumerator Run(){
-        bool performance=Array.IndexOf(Environment.GetCommandLineArgs(),"-imported-scenery-performance-check")>=0;
-        bool trees=Array.IndexOf(Environment.GetCommandLineArgs(),"-imported-trees-check")>=0;
+        bool performance=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-imported-scenery-performance-check")>=0;
+        bool trees=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-imported-trees-check")>=0;
         if(trees)Idas8ImportedTreeChecks.Run();
         yield return Frames(3);
         if(!SpecialStage&&!FindAnyObjectByType<Idas8HakoneCourse>().testBuild){
             if(host.Status.frontendStage!=0||(host.Status.flags&16385u)!=1u)throw new Exception("Main build must retain normal title startup");
             yield return Capture("main-build-title");
         }
-        if(Idas3SceneHakoneTimeAttackTest(Path.Combine(Application.streamingAssetsPath,packName))!=1)throw new Exception(Idas3Native.Error());
+        if(Idas3SceneHakoneTimeAttackTest(Path.Combine(Idas3AssetPaths.Root,packName))!=1)throw new Exception(Idas3Native.Error());
         yield return Frames(30);
         if(SpecialStage){
             string recordings=Path.Combine(output,"userdata/replays");
@@ -108,7 +108,7 @@ public sealed class Idas8HakoneTimeAttackSmoke : MonoBehaviour {
         if(Idas3SceneModeFlowValue(1)!=2)throw new Exception("Missing Hakone ranking");
         yield return Frames(50);yield return Capture("hakone-ranking");yield return Key(13);
         yield return Until(()=>Idas3SceneModeFlowValue(1)==3,120,"Ranking to Continue");yield return Frames(10);yield return Capture("hakone-continue");
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-presentation-check")>=0){
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-presentation-check")>=0){
             Screen.SetResolution(2552,1077,FullScreenMode.Windowed);yield return Frames(12);
             yield return CaptureScreen("continue-ultrawide");
             Screen.SetResolution(1280,720,FullScreenMode.Windowed);yield return Frames(12);
@@ -146,7 +146,7 @@ public sealed class Idas8HakoneTimeAttackSmoke : MonoBehaviour {
         if(performance)FindAnyObjectByType<Idas8HakoneCourse>().CheckSceneryPerformance(output,"race",true);
         for(int condition=0;condition<8;condition++){
             if(SpecialStage&&condition<4)continue;
-            if(Idas3Native.Idas3SceneStartImportedCourseConditions(Path.Combine(Application.streamingAssetsPath,packName),condition&1,(condition>>2)&1,(condition>>1)&1)!=1)throw new Exception(Idas3Native.Error());
+            if(Idas3Native.Idas3SceneStartImportedCourseConditions(Path.Combine(Idas3AssetPaths.Root,packName),condition&1,(condition>>2)&1,(condition>>1)&1)!=1)throw new Exception(Idas3Native.Error());
             yield return Frames(35);
             var scenery=FindAnyObjectByType<Idas8HakoneCourse>();
             if(SpecialStage){
@@ -158,7 +158,7 @@ public sealed class Idas8HakoneTimeAttackSmoke : MonoBehaviour {
             if(performance)scenery.CheckSceneryPerformance(output,"condition-"+condition,false);
             yield return Capture("condition-"+condition);
             if(IntroCameraCheck){
-                if(Idas3Native.Idas3SceneShowImportedCourseMenu(Path.Combine(Application.streamingAssetsPath,packName))!=1)throw new Exception(Idas3Native.Error());
+                if(Idas3Native.Idas3SceneShowImportedCourseMenu(Path.Combine(Idas3AssetPaths.Root,packName))!=1)throw new Exception(Idas3Native.Error());
                 yield return Frames(25);yield return SelectImportedRace();
                 yield return CheckIntroCamera("condition-"+condition);
             }

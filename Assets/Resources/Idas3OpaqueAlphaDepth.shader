@@ -7,6 +7,7 @@ Shader "Hidden/IDAS3/Opaque Alpha Depth"
    Blend Off
    HLSLPROGRAM
    #pragma target 5.0
+   #pragma exclude_renderers metal
    #pragma vertex mainVS
    #pragma geometry showroomGeometry
    #pragma fragment opaqueAlphaDepthPS

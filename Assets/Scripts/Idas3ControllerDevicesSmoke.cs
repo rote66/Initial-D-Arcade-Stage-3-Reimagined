@@ -78,7 +78,7 @@ public sealed class Idas3ControllerDevicesSmoke : MonoBehaviour
     };
     public static bool Configure(ref string saves)
     {
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-controller-devices-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-controller-devices-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Controller device check requires a fresh output directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a new diagnostic directory.");
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
@@ -92,7 +92,7 @@ public sealed class Idas3ControllerDevicesSmoke : MonoBehaviour
     }
     internal static Idas3ControllerDevices CreateProvider()
     {
-        if (pendingRoot == null || Array.IndexOf(Environment.GetCommandLineArgs(), "-idas3-controller-devices-smoke") < 0)
+        if (pendingRoot == null || Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-controller-devices-smoke") < 0)
             throw new InvalidOperationException("Isolated controller discovery requires the configured controller-device diagnostic.");
         // Do not remove, disable or send state to the user's real devices.
         // This provider merely excludes them from the private diagnostic's
@@ -338,7 +338,7 @@ public sealed class Idas3ControllerDevicesSmoke : MonoBehaviour
     }
     private IEnumerator Capture(string name)
     {
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-input-check-no-captures")>=0)yield break;
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-input-check-no-captures")>=0)yield break;
         // Capture the real camera/UI passes offscreen, as in ControlsSmoke;
         // a hidden player's desktop backbuffer need not have usable pixels.
         var camera=host.GetComponent<Camera>();var scene=host.GetComponent<Idas3SceneRenderer>();var ui=host.GetComponent<Idas3UnityUi>();var menu=host.PauseMenu;

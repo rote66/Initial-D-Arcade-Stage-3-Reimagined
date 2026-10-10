@@ -163,7 +163,7 @@ void destroyApp(UnityRuntime& r,bool save){
     if(saveError)std::rethrow_exception(saveError);
 }
 #if defined(IDAS3_PORTABLE_SCENE)
-void initialize(UnityRuntime&,const UnityCommand&){throw std::runtime_error("Android requires the Unity scene API");}
+void initialize(UnityRuntime&,const UnityCommand&){throw std::runtime_error("This platform requires the Unity scene API");}
 #else
 void initialize(UnityRuntime& r,const UnityCommand& command){
     destroyApp(r,true);r.sceneMode=false;r.frames=r.ticks=0;
@@ -928,8 +928,13 @@ int IDAS3_UNITY_CALL Idas3SceneSetPreRaceNames(const char* localUtf8,const char*
             throw std::logic_error("Set online names after loading and before releasing the start");
         const auto parse=[](const char* text){
             if(!text)throw std::invalid_argument("A driver name is required");
+#if defined(IDAS3_PORTABLE_SCENE)
+            const auto length=strnlen(text,129);
+            if(!length||length>128)
+#else
             const auto length=strnlen_s(text,129);
             if(!length||length>128||MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,text,int(length),nullptr,0)<=0)
+#endif
                 throw std::invalid_argument("Driver names must be valid UTF8 up to128bytes");
             for(std::size_t i=0;i<length;++i)if(static_cast<unsigned char>(text[i])<32)
                 throw std::invalid_argument("Driver names cannot contain control characters");
@@ -1214,6 +1219,15 @@ int IDAS3_UNITY_CALL Idas3SceneGetGhostState(Idas3GhostState* out){
     out->yaw=pose.yaw;out->pitch=pose.detail.pitch;out->roll=pose.detail.roll;
     return 1;
 }
+int IDAS3_UNITY_CALL Idas3SceneFlushSaves(){
+    auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);
+    try{
+        if(!r.sceneMode||!r.app)throw std::logic_error("Scene is not initialized");
+        if(!r.app->replayPlaybackActive)r.app->saveSettings();
+        return 1;
+    }catch(const std::exception& e){unityError(e.what());return 0;}
+    catch(...){unityError("Unknown save flush error");return 0;}
+}
 int IDAS3_UNITY_CALL Idas3SceneSetPaused(int paused){
     auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);
     try{
@@ -1395,12 +1409,14 @@ int IDAS3_UNITY_CALL Idas3MultiplayerAuthorityPacket(uint8_t* bytes,uint32_t cap
         auto packet=r.app->authorityLink->packet();if(packet.size()>capacity)throw std::invalid_argument("Authority output buffer too small");
         std::copy(packet.begin(),packet.end(),bytes);return int(packet.size());
     }catch(const std::exception& e){unityError(e.what());return -1;}
+    catch(...){unityError("Authority packet generation failed");return -1;}
 }
 int IDAS3_UNITY_CALL Idas3MultiplayerAuthorityReceive(const uint8_t* bytes,uint32_t count){
     auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);
     try{if(!r.app||r.app->multiplayerDisconnected()||!bytes||count>1064)throw std::invalid_argument("Invalid authority input");
         r.app->receiveAuthority({bytes,count});return 1;
     }catch(const std::exception& e){unityError(e.what());return 0;}
+    catch(...){unityError("Authority input history rejected");return 0;}
 }
 int IDAS3_UNITY_CALL Idas3MultiplayerSetRemoteHeadlights(uint64_t sequence,uint32_t enabled){
     auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);

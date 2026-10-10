@@ -2,7 +2,7 @@
 #include "renderer.h"
 #include "unity_ui_capture.h"
 #if defined(IDAS3_PORTABLE_SCENE)
-#include "../android/scene_matrix.h"
+#include "scene_matrix.h"
 #else
 #include <DirectXMath.h>
 #endif

@@ -33,7 +33,7 @@ public sealed class Idas3Game : MonoBehaviour
     private static void Bootstrap()
     {
         // The old framebuffer host remains an explicit comparison mode only.
-        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-idas3-legacy-host") < 0) return;
+        if (Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-legacy-host") < 0) return;
         if (FindAnyObjectByType<Idas3Game>() != null) return;
         var game = new GameObject("Initial D — native game host");
         game.AddComponent<Camera>();
@@ -73,7 +73,7 @@ public sealed class Idas3Game : MonoBehaviour
                 throw new InvalidOperationException("Native plugin ABI mismatch. Run Build Native.cmd.");
             assetRoot = Application.isEditor
                 ? Path.GetFullPath(Path.Combine(Application.dataPath, "../Native"))
-                : Path.Combine(Application.streamingAssetsPath, "IDAS3");
+                : Path.Combine(Idas3AssetPaths.Root, "IDAS3");
             saveRoot = Path.Combine(Application.persistentDataPath, "userdata");
             Idas3RomGateSmoke.Configure(ref saveRoot);
             Idas3Smoke.Configure(this, ref saveRoot);

@@ -25,7 +25,7 @@ public sealed class Idas3MenuFontSmoke : MonoBehaviour
 
     private void Start()
     {
-        var args=Environment.GetCommandLineArgs();
+        var args=Idas3LaunchArguments.GetArguments();
         if(Array.IndexOf(args,"-idas3-updater-flow-smoke")>=0){enabled=false;gameObject.AddComponent<Idas3UpdaterFlowSmoke>();return;}
         int at=Array.IndexOf(args,"-idas3-menu-font-smoke");
         if(at<0||at+1>=args.Length){Application.Quit(2);return;}
@@ -73,7 +73,7 @@ public sealed class Idas3MenuFontSmoke : MonoBehaviour
         Check(font!=null&&font==Resources.Load<Font>("Fonts/NotoSansJP-Regular"),"Menu did not load the bundled font.");report.font=font.name;
         foreach(string text in new[]{"SOUNDROOM","ロキ初音ミク","↑↓←→★☆▶Ⅱ×–—›‹"})
             Check(CountGlyphs(font,text)==text.Length,"Missing bundled glyph: "+text);
-        var catalog=JsonUtility.FromJson<Catalog>(File.ReadAllText(Path.Combine(Application.streamingAssetsPath,"SoundRoom","catalog.json")));
+        var catalog=JsonUtility.FromJson<Catalog>(File.ReadAllText(Path.Combine(Idas3AssetPaths.Root,"SoundRoom","catalog.json")));
         Check(catalog?.tracks!=null&&catalog.tracks.Length>0,"Packaged song catalog is missing.");
         var glyphs=new HashSet<char>();
         foreach(var track in catalog.tracks)foreach(char c in track.title+track.artist+track.collection)

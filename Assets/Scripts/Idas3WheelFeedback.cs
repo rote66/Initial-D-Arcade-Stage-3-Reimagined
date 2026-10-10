@@ -33,6 +33,13 @@ public sealed class Idas3WheelFeedback : IDisposable
     }
     private sealed class NativeBackend : IBackend
     {
+#if UNITY_IOS
+        public List<DeviceChoice> Discover()=>new List<DeviceChoice>();
+        public bool Send(string id,CabinetRequest request)=>false;
+        public void Stop(){}
+        public void Shutdown(){}
+        public string Status=>"Wheel force feedback is unavailable on iOS.";
+#else
         private const string Library="Idas3WheelFeedback";
         [StructLayout(LayoutKind.Sequential)] private struct NativeDevice {
             public uint size;
@@ -81,6 +88,7 @@ public sealed class Idas3WheelFeedback : IDisposable
         public void Stop()=>Idas3WheelStop();
         public void Shutdown()=>Idas3WheelShutdown();
         public string Status {get{var bytes=new byte[1024];Idas3WheelCopyStatus(bytes,bytes.Length);return Utf8(bytes);}}
+#endif
     }
 
     // Packs one frame of telemetry. Nothing here shapes a force; it only refuses
@@ -118,7 +126,11 @@ public sealed class Idas3WheelFeedback : IDisposable
     private double tickChangedAt,nextScan,retryAt,lastSendAt;
     public IReadOnlyList<DeviceChoice> Choices=>choices;
     public string StatusText {get;private set;}="Force feedback is off.";
+#if UNITY_IOS
+    public Idas3WheelFeedback(bool disableOutput=false):this(new NativeBackend(),true){}
+#else
     public Idas3WheelFeedback(bool disableOutput=false):this(disableOutput?(IBackend)new NativeBackend():new QueuedBackend(new NativeBackend()),disableOutput){}
+#endif
     internal Idas3WheelFeedback(IBackend backend,bool disableOutput=false){
         this.backend=backend??throw new ArgumentNullException(nameof(backend));this.disableOutput=disableOutput;
         choices.Add(new DeviceChoice{id="",name="AUTOMATIC (ACTIVE WHEEL)"});

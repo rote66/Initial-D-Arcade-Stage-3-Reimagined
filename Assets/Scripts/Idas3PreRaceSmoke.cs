@@ -52,12 +52,12 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
         public uint[] phases;
         public int[] countdownDigits;
     }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetPreRaceStatus(ref PreRaceStatus status);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneCopyPreRaceName(int side,[Out] byte[] destination,int capacity);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRivalStatus(ref RivalStatus status);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRaceAudioStatus(ref RaceAudioStatus status);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneSetPaused(int paused);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneReturnToCourse();
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetPreRaceStatus(ref PreRaceStatus status);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneCopyPreRaceName(int side,[Out] byte[] destination,int capacity);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRivalStatus(ref RivalStatus status);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRaceAudioStatus(ref RaceAudioStatus status);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneSetPaused(int paused);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneReturnToCourse();
     private static string pendingRoot;
     private static Idas3PreRaceSmoke active;
     private Idas3SceneGame host;
@@ -77,14 +77,14 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
     private RenderTexture target;
 
     public static bool Configure(ref string saves){
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-pre-race-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-pre-race-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Pre-race diagnostic requires a NEW output directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a NEW pre-race diagnostic directory.");
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
         File.WriteAllText(Path.Combine(saves,"settings.txt"),"0 0 0 0 0 1 1 0\n");
         File.WriteAllText(Path.Combine(saves,"native_selection.txt"),"0 0\n");
         File.WriteAllText(Path.Combine(saves,"game-options.json"),JsonUtility.ToJson(new Idas3GameOptions.Values{defaultCamera=0}));
-        string assets=Application.isEditor?Path.GetFullPath(Path.Combine(Application.dataPath,"../Native")):Path.Combine(Application.streamingAssetsPath,"IDAS3");
+        string assets=Application.isEditor?Path.GetFullPath(Path.Combine(Application.dataPath,"../Native")):Path.Combine(Idas3AssetPaths.Root,"IDAS3");
         SeedProfile(saves,File.ReadAllBytes(Path.Combine(assets,"data/original_frontend/name_entry.bin")));
         File.WriteAllText(Path.Combine(pendingRoot,"ISOLATED_PRE_RACE_TEST.txt"),"Private checksummed CHRIS profile. No ordinary saves loaded.\n");
         Screen.SetResolution(1280,720,FullScreenMode.Windowed);AudioListener.volume=0;return true;

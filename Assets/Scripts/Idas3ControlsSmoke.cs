@@ -28,7 +28,7 @@ public sealed class Idas3ControlsSmoke : MonoBehaviour
     [Serializable] private class Report {public bool passed,shutdownComplete;public int checks;public string error,scope;public string[] captures;}
     public static bool Configure(ref string saves)
     {
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-controls-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-controls-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Controls diagnostic needs a new output directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a fresh controls diagnostic directory.");
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
@@ -394,7 +394,7 @@ public sealed class Idas3ControlsSmoke : MonoBehaviour
     }
     private IEnumerator Capture(string name)
     {
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-input-check-no-captures")>=0)yield break;
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-input-check-no-captures")>=0)yield break;
         var camera=host.GetComponent<Camera>();var scene=host.GetComponent<Idas3SceneRenderer>();var ui=host.GetComponent<Idas3UnityUi>();var menu=host.PauseMenu;var previous=camera.targetTexture;
         var target=new RenderTexture(Screen.width,Screen.height,24,RenderTextureFormat.ARGB32){antiAliasing=1};Check(target.Create(),"Capture target creation failed");
         camera.targetTexture=target;scene.ApplyFrame();ui.ApplyFrame();var cameras=new List<Camera>();

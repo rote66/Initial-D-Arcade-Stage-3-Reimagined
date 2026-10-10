@@ -25,6 +25,11 @@
 *.log
 __pycache__/
 *.pyc
+.DS_Store
+
+# Rebuilt by the iOS build entry points; preserve their Unity importer metadata.
+/Assets/Plugins/iOS/libIdas3Unity.a
+/Assets/Resources/Idas3LanBuildIdentity.txt
 
 # Personal data and service credentials never belong in this repository
 **/userdata-unity-scene/

@@ -100,12 +100,20 @@ internal static class Idas3WheelFeedbackChecks
             scanFailure.discoveryFailure=false;state.simulationTicks++;output.Update(settings,input,state,7,true,4.2);
             Check(scanFailure.sends==3,"Successful rediscovery did not recover output");
         }
+#if !UNITY_IOS
         QueuedChecks(Check);
+#endif
         var diagnostic=new Backend();using(var output=new Idas3WheelFeedback(diagnostic,true)){
             output.Update(settings,input,state,7,true,0);Check(diagnostic.sends==0,"Automated diagnostic enabled physical output");
         }
         File.WriteAllText(Path.Combine(root,"wheel-feedback-model-report.json"),JsonUtility.ToJson(new Report{
-            passed=true,physicalOutputSent=false,checks=checks,scope="Managed wheel owner and queued worker with fake drivers: blocked discovery does not stall caller updates, newest-only mailbox, stop cancellation, stale-request expiry, worker shutdown, no periodic scan during healthy output, telemetry validation, lifecycle, identity and retry guards. No physical wheel or hardware FPS verification."},true));
+            passed=true,physicalOutputSent=false,checks=checks,scope=
+#if UNITY_IOS
+            "Managed telemetry, lifecycle, identity and retry checks with fake drivers. Windows force-feedback worker checks are excluded on iOS; production iOS hardware feedback is disabled. No physical wheel output."
+#else
+            "Managed wheel owner and queued worker with fake drivers: blocked discovery does not stall caller updates, newest-only mailbox, stop cancellation, stale-request expiry, worker shutdown, no periodic scan during healthy output, telemetry validation, lifecycle, identity and retry guards. No physical wheel or hardware FPS verification."
+#endif
+            },true));
     }
     private sealed class SlowBackend : Idas3WheelFeedback.IBackend {
         internal readonly ManualResetEvent entered=new ManualResetEvent(false),release=new ManualResetEvent(false),stopped=new ManualResetEvent(false);

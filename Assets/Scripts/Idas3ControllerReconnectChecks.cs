@@ -10,7 +10,7 @@ public static class Idas3ControllerReconnectChecks
     [Serializable] private sealed class Report { public bool passed;public int checks;public string[] failures; }
     public static void Run()
     {
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-reconnect-check-output");
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-reconnect-check-output");
         if(at<0||at+1>=args.Length)throw new ArgumentException("A fresh reconnect diagnostic output folder is required.");
         string root=Path.GetFullPath(args[at+1]);
         if(Directory.Exists(root)||File.Exists(root))throw new IOException("Do not overwrite reconnect evidence.");

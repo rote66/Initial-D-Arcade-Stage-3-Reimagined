@@ -22,7 +22,7 @@ public sealed class Idas3UpdaterFlowSmoke : MonoBehaviour
     private IEnumerator Run()
     {
         try{
-            var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-updater-flow-smoke");
+            var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-updater-flow-smoke");
             if(at<0||at+1>=args.Length)throw new ArgumentException("Updater fixture configuration missing.");
             string configPath=Path.GetFullPath(args[at+1]);reportPath=Path.Combine(Path.GetDirectoryName(configPath),"unity-flow.json");
             if(File.Exists(reportPath))throw new IOException("Do not overwrite updater flow evidence.");

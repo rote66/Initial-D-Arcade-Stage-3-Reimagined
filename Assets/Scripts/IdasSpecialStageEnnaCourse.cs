@@ -19,7 +19,7 @@ public sealed class IdasSpecialStageEnnaCourse : MonoBehaviour
     [Serializable] sealed class ScenerySection { public string model;public int firstNode,lastNode; }
     [Serializable] sealed class Lighting { public float[] ambient,direction,directionalColor,fogColor;public float fogStart,fogEnd;public string sky;public bool skyFollowsCameraXZ; }
     [Serializable] sealed class Manifest { public string geometry;public string[] textureNames,oneSidedTextures; public Tree[] trees;public Spectator[] spectators;public GateSet[] gateSets;public Lighting lighting,wetLighting;public ScenerySection[] scenerySections; }
-    [System.Runtime.InteropServices.DllImport("Idas3Unity",CallingConvention=System.Runtime.InteropServices.CallingConvention.Cdecl)]
+    [System.Runtime.InteropServices.DllImport(Idas3Native.Library,CallingConvention=System.Runtime.InteropServices.CallingConvention.Cdecl)]
     static extern int Idas3SceneImportedSourceNode();
     readonly List<(ScenerySection section,GameObject model)> scenerySections=new List<(ScenerySection,GameObject)>();
     int sceneryNode=-1;
@@ -86,7 +86,7 @@ public sealed class IdasSpecialStageEnnaCourse : MonoBehaviour
     static bool IsPairedTexture(Manifest manifest,string name)=>IsPairedGateTexture(name)||
         (manifest.oneSidedTextures!=null&&Array.IndexOf(manifest.oneSidedTextures,name)>=0);
     void Load(int courseId){
-        var root=Path.Combine(Application.streamingAssetsPath,Idas3CourseCatalog.Packs[courseId-9]);
+        var root=Path.Combine(Idas3AssetPaths.Root,Idas3CourseCatalog.Packs[courseId-9]);
         var manifest=JsonUtility.FromJson<Manifest>(File.ReadAllText(Path.Combine(root,"manifest.json")));
         Require(manifest.textureNames.Length>0&&manifest.textureNames.Length<1024&&manifest.trees.Length<10000,"Enna manifest");
         Require(manifest.spectators!=null&&manifest.spectators.Length<1000&&manifest.gateSets?.Length==2&&manifest.lighting!=null,"Enna presentation metadata");
@@ -95,10 +95,10 @@ public sealed class IdasSpecialStageEnnaCourse : MonoBehaviour
         Require(manifest.wetLighting!=null&&manifest.wetLighting.fogEnd>manifest.wetLighting.fogStart,"Enna wet lighting missing");
         weatherLighting=new[]{lighting,manifest.wetLighting};
         Require(lighting.fogEnd>lighting.fogStart&&lighting.fogStart>=0,"Enna fog range");
-        var shader=Resources.Load<Shader>("Idas3Scene");Require(shader!=null&&shader.isSupported,"D3 scene shader unavailable");
+        var shader=Resources.Load<Shader>(SystemInfo.supportsGeometryShaders?"Idas3Scene":"Idas3SceneDirect");Require(shader!=null&&shader.isSupported,"D3 scene shader unavailable");
         var directShader=Resources.Load<Shader>("Idas3SceneDirect");Require(directShader!=null&&directShader.isSupported,"Direct D3 scene shader unavailable");
-        bool gateBaseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-enna-gates-baseline")>=0;
-        bool geometryBaseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-geometry-stage-baseline")>=0;
+        bool gateBaseline=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-enna-gates-baseline")>=0;
+        bool geometryBaseline=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-geometry-stage-baseline")>=0;
         foreach(var name in manifest.textureNames){
             Require(Path.GetFileName(name)==name,"Enna texture name");
             var texture=new Texture2D(2,2,TextureFormat.RGBA32,true);textures.Add(texture);
@@ -149,7 +149,7 @@ public sealed class IdasSpecialStageEnnaCourse : MonoBehaviour
                     if((flags&2)!=0||IsPairedTexture(manifest,manifest.textureNames[material])&&!(gateBaseline&&IsPairedGateTexture(manifest.textureNames[material])))
                         for(int v=0;v<nv;++v)faceFlags[v]=Vector2.right;
                     mesh.uv3=faceFlags;
-                    mesh.triangles=indices;mesh.RecalculateBounds();mesh.UploadMeshData(true);
+                    mesh.triangles=indices;Idas3MetalMesh.PrepareImported(mesh);mesh.RecalculateBounds();mesh.UploadMeshData(true);
                     if(flags!=0){
                         int key=material*4+flags;
                         if(!partMaterials.TryGetValue(key,out int variant)){

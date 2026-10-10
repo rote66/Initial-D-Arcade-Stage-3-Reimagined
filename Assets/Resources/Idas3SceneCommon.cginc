@@ -128,10 +128,23 @@ float sourceFogCoefficient(float reciprocalDepth){
  uint pair=_IdasFogWords[2+(index>>2)][index&3];
  return lerp(float(pair>>8),float(pair&255),fraction)/255.0;
 }
-struct V{float3 p:POSITION;float3 n:NORMAL;float4 c:COLOR0;float2 uv:TEXCOORD0;float4 offsetColor:TEXCOORD1;float2 treeFace:TEXCOORD2;UNITY_VERTEX_INPUT_INSTANCE_ID};
-struct P{float4 p:SV_POSITION;float3 world:TEXCOORD0;float3 n:NORMAL;float4 c:COLOR0;float2 uv:TEXCOORD1;float4 offsetColor:COLOR1;noperspective float reciprocalDepth:TEXCOORD2;float treeFace:TEXCOORD3;float sponsorAxis:TEXCOORD4;};
+struct V{float3 p:POSITION;float3 n:NORMAL;float4 c:COLOR0;float2 uv:TEXCOORD0;float4 offsetColor:TEXCOORD1;float2 treeFace:TEXCOORD2;
+#if defined(SHADER_API_METAL) && !defined(IDAS_IMPORTED_COURSE)
+ float3 flatPosition:TEXCOORD3;float3 flatNormal:TEXCOORD4;float4 flatColor:TEXCOORD5;float4 flatOffset:TEXCOORD6;float3 sourceFace:TEXCOORD7;
+#elif defined(SHADER_API_METAL)
+ float3 sourceFace:TEXCOORD3;
+#endif
+ UNITY_VERTEX_INPUT_INSTANCE_ID};
+struct P{float4 p:SV_POSITION;float3 world:TEXCOORD0;float3 n:NORMAL;float4 c:COLOR0;float2 uv:TEXCOORD1;float4 offsetColor:COLOR1;noperspective float reciprocalDepth:TEXCOORD2;float treeFace:TEXCOORD3;float sponsorAxis:TEXCOORD4;
+#if defined(SHADER_API_METAL)
+ float3 sourceFace:TEXCOORD5;
+#endif
+};
 Texture2D _MainTex;SamplerState sampler_MainTex;
-P mainVS(V v){UNITY_SETUP_INSTANCE_ID(v);P o;o.treeFace=v.treeFace.x;o.sponsorAxis=v.treeFace.y;
+P sceneVertex(V v){P o;o.treeFace=v.treeFace.x;o.sponsorAxis=v.treeFace.y;
+#if defined(SHADER_API_METAL)
+ o.sourceFace=v.sourceFace;
+#endif
 #if defined(IDAS_IMPORTED_COURSE)
  o.world=mul(unity_ObjectToWorld,float4(v.p,1)).xyz;
  // Imported geometry shares the D3 camera's clip/depth convention with cars.
@@ -140,6 +153,9 @@ P mainVS(V v){UNITY_SETUP_INSTANCE_ID(v);P o;o.treeFace=v.treeFace.x;o.sponsorAx
  o.p.z=_IdasDepthProjection.w!=0?_IdasDepthProjection.x-_IdasDepthProjection.y*o.p.w:o.p.w-o.p.z;
 #endif
  o.n=mul((float3x3)unity_ObjectToWorld,v.n);o.c=v.c;o.uv=v.uv;
+#if defined(SHADER_API_METAL)
+ o.sourceFace=mul(transpose((float3x3)unity_WorldToObject),v.sourceFace);
+#endif
  o.offsetColor=v.offsetColor;o.reciprocalDepth=1/o.p.w;
  return o;
 #else
@@ -199,6 +215,18 @@ P mainVS(V v){UNITY_SETUP_INSTANCE_ID(v);P o;o.treeFace=v.treeFace.x;o.sponsorAx
  return o;
 #endif
 }
+P mainVS(V v){
+ UNITY_SETUP_INSTANCE_ID(v);
+ P o=sceneVertex(v);
+#if defined(SHADER_API_METAL) && !defined(IDAS_IMPORTED_COURSE)
+ if(original!=0&&(pcw&2)==0){
+  V last=v;last.p=v.flatPosition;last.n=v.flatNormal;last.c=v.flatColor;last.offsetColor=v.flatOffset;
+  P lit=sceneVertex(last);o.c=lit.c;o.offsetColor=lit.offsetColor;
+ }
+#endif
+ return o;
+}
+#if !defined(SHADER_API_METAL)
 // ELAN flat shading uses the final source strip vertex after lighting. D3D's
 // default provoking vertex differs, so select the recovered final vertex
 // explicitly for showroom and course GLM passes.
@@ -232,7 +260,17 @@ void showroomGeometry(triangle P input[3],inout TriangleStream<P> stream){
  }
 #endif
 }
+#endif
 float4 mainPS(P v):SV_TARGET{
+#if defined(SHADER_API_METAL) && defined(IDAS_IMPORTED_COURSE)
+ if(v.treeFace>.5&&dot(v.sourceFace,eye.xyz-v.world)<=0)discard;
+#endif
+#if defined(SHADER_API_METAL) && !defined(IDAS_IMPORTED_COURSE)
+ if(original!=0&&courseCullMode>=2){
+  float facing=dot(v.sourceFace,eye.xyz-v.world);
+  if((courseCullMode==2&&facing>=0)||(courseCullMode==3&&facing<=0))discard;
+ }
+#endif
 #if defined(IDAS_IMPORTED_COURSE)
  float2 shadowUv=_ImportedShadowUv==0?v.uv:v.offsetColor.xy;
  if(_ImportedUntexturedShadow.a>.5)return float4(_ImportedUntexturedShadow.rgb,1);

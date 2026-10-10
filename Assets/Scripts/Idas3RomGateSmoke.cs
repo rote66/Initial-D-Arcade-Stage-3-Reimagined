@@ -19,7 +19,7 @@ internal sealed class Idas3RomGateSmoke : MonoBehaviour
 
     private static string Output()
     {
-        var args = Environment.GetCommandLineArgs();
+        var args = Idas3LaunchArguments.GetArguments();
         int at = Array.IndexOf(args, "-idas3-rom-smoke");
         if (at < 0) return null;
         if (at + 1 >= args.Length) throw new ArgumentException("ROM smoke requires a fresh output folder.");
@@ -43,7 +43,7 @@ internal sealed class Idas3RomGateSmoke : MonoBehaviour
         Directory.CreateDirectory(output);
         var probe = new GameObject("ROM startup observation").AddComponent<Idas3RomGateSmoke>();
         probe.root = output;
-        var args = Environment.GetCommandLineArgs();
+        var args = Idas3LaunchArguments.GetArguments();
         int at = Array.IndexOf(args, "-idas3-rom-expect");
         probe.expectation = at >= 0 && at + 1 < args.Length ? args[at + 1] : "blocked";
         probe.began = Time.realtimeSinceStartupAsDouble;

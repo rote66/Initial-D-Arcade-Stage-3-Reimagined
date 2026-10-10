@@ -25,7 +25,7 @@ public sealed class Idas3RomGate : MonoBehaviour
 
     internal void RequestDiagnosticCapture(RenderTexture target)
     {
-        if (Verified || target == null || Array.IndexOf(Environment.GetCommandLineArgs(), "-idas3-rom-smoke") < 0)
+        if (Verified || target == null || Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-rom-smoke") < 0)
             throw new InvalidOperationException("ROM capture requires the blocked startup diagnostic.");
         diagnosticTarget = target; DiagnosticCaptureReady = false;
     }
@@ -36,13 +36,18 @@ public sealed class Idas3RomGate : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
     {
+#if IDAS3_DISABLE_ROM_VALIDATION
+        Verified = true;
+        return;
+#else
         // Deliberately applies to editor play, diagnostic flags, replay viewing,
         // legacy host and -idas3-skip-update-once as well as ordinary startup.
         Verified = false;
         var go = new GameObject("GDS-0033 startup check");
         DontDestroyOnLoad(go);
         Instance = go.AddComponent<Idas3RomGate>();
-        Instance.gameRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        Instance.gameRoot = Application.platform == RuntimePlatform.IPhonePlayer
+            ? Application.persistentDataPath : Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
         Instance.background = go.AddComponent<Camera>();
         Instance.background.clearFlags = CameraClearFlags.SolidColor;
         Instance.background.backgroundColor = Color.black;
@@ -52,6 +57,7 @@ public sealed class Idas3RomGate : MonoBehaviour
         Instance.background.allowMSAA = false;
         Application.runInBackground = true;
         Instance.CheckAgain();
+#endif
     }
 
     internal void CheckAgain()

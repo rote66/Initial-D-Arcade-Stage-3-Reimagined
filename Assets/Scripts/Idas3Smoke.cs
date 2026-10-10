@@ -50,7 +50,7 @@ public sealed class Idas3Smoke : MonoBehaviour
     // Hook in Idas3Game.Awake, before creating saves or queueing native Init.
     internal static void Configure(Idas3Game game, ref string saveRoot)
     {
-        var args = Environment.GetCommandLineArgs();
+        var args = Idas3LaunchArguments.GetArguments();
         for (int i = 0; i < args.Length; ++i)
         {
             if (args[i] != "-idas3-smoke") continue;

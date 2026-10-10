@@ -19,9 +19,9 @@ public sealed class Idas3MultiplayerHudSmoke
         [MarshalAs(UnmanagedType.ByValArray,SizeConst=4)] public uint[] cumulativeSections;
         [MarshalAs(UnmanagedType.ByValArray,SizeConst=4)] public uint[] renderedSectionDurations;
     }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
     private static extern int Idas3MultiplayerGetHudStatus(ref HudStatus status);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
     private static extern int Idas3MultiplayerCopyHudText(int side,StringBuilder destination,int capacity);
     [Serializable] private sealed class Capture
     {
@@ -46,13 +46,13 @@ public sealed class Idas3MultiplayerHudSmoke
     private string root,role;
     private readonly List<Capture> captures=new List<Capture>();
     private readonly Report report=new Report();
-    private static bool Enabled=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-multiplayer-hud-check")>=0;
+    private static bool Enabled=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-multiplayer-hud-check")>=0;
     private static string Arg(string[] args,string key){int i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:null;}
     private static bool SamePath(string a,string b)=>string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),StringComparison.OrdinalIgnoreCase);
     private static Idas3MultiplayerHudSmoke Ensure(string directory,string role)
     {
         if(!Enabled)return null;
-        var args=Environment.GetCommandLineArgs();string actualRoot=Arg(args,"-idas3-multiplayer-smoke");
+        var args=Idas3LaunchArguments.GetArguments();string actualRoot=Arg(args,"-idas3-multiplayer-smoke");
         if(string.IsNullOrEmpty(actualRoot)||!SamePath(directory,actualRoot)||Arg(args,"-idas3-multiplayer-role")!=role||
             (role!="host"&&role!="join")||Array.IndexOf(args,"-idas3-multiplayer-showcase-check")<0||
             Array.IndexOf(args,"-idas3-multiplayer-steam-check")>=0||Array.IndexOf(args,"-idas3-multiplayer-quick-check")>=0||

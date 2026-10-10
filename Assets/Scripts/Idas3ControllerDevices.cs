@@ -238,7 +238,11 @@ public sealed class Idas3ControllerDevices : IDisposable
             if (!input.added || !input.enabled || (discoveryFilter != null && !discoveryFilter(input)) || !GamingDevice(input)) continue;
             // Windows Input System mirrors the same XInput ports. The native
             // API is authoritative for these four pads and preserves every bit.
-            if (rawConnected && (input is XInputControllerWindows || string.Equals(input.description.interfaceName, "XInput", StringComparison.OrdinalIgnoreCase))) continue;
+            bool windowsXinput=string.Equals(input.description.interfaceName,"XInput",StringComparison.OrdinalIgnoreCase);
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+            windowsXinput|=input is XInputControllerWindows;
+#endif
+            if(rawConnected&&windowsXinput)continue;
             if (!unityDevices.TryGetValue(input.deviceId, out var device))
             {
                 device = CreateDevice(input);

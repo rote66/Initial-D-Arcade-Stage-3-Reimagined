@@ -22,14 +22,14 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
     private bool finished,ownsPlayer;
     private double started;
     private readonly List<string> captures=new List<string>();
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetPreRaceStatus(ref Idas3PreRaceSmoke.PreRaceStatus status);
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRaceAudioStatus(ref Idas3PreRaceSmoke.RaceAudioStatus status);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetPreRaceStatus(ref Idas3PreRaceSmoke.PreRaceStatus status);
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRaceAudioStatus(ref Idas3PreRaceSmoke.RaceAudioStatus status);
     [Serializable] private class AudioObservation {public uint phase;public int selected,active;public Idas3PreRaceSmoke.RaceAudioStatus audio;}
     [Serializable] private class CountdownReport {public bool passed;public string scope;public int expected;public AudioObservation[] observations;}
     [Serializable] private class Report {public bool passed,shutdownComplete;public int checks,selectedIndex,activeIndex;public string applicationVersion=Application.version,error,scope;public string[] captures;}
     public static bool Configure(ref string saves)
     {
-        var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-race-music-smoke");if(at<0)return false;
+        var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-race-music-smoke");if(at<0)return false;
         if(at+1>=args.Length)throw new ArgumentException("Music diagnostic needs a new directory.");
         pendingRoot=Path.GetFullPath(args[at+1]);if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a fresh music diagnostic directory.");
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
@@ -89,8 +89,8 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         yield return Hold(KeyCode.C,.8);Check(!host.RaceMusicMenu.IsOpen,"Removed Camera key still opened picker");
         yield return Hold(KeyCode.L,.85);Check(host.RaceMusicMenu.IsOpen,"Held mapped Camera did not open picker");
         Check(host.Status.frontendStage==10&&host.RaceMusic.State.opponentEligible!=0,"Picker input confirmed opponent underneath");
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-custom-music-check")>=0){yield return CheckCustomMusic();Finish(true,null);yield break;}
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-sound-room-check")>=0){yield return CheckSoundRoom();Finish(true,null);yield break;}
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-custom-music-check")>=0){yield return CheckCustomMusic();Finish(true,null);yield break;}
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-sound-room-check")>=0){yield return CheckSoundRoom();Finish(true,null);yield break;}
         yield return Capture("opponent-picker");yield return CheckStageFilters();
         int previous=host.RaceMusic.State.activeIndex;
         for(int track=102;track<=116;++track){
@@ -109,7 +109,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         Check(ReadPresentation().phase==1,"Selected Special Stage race did not reach the first car showcase");
         yield return CheckCountdownAudio(116,"singleplayer");Finish(true,null);
     }
-    private bool ReturnCheck=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-music-return-check")>=0;
+    private bool ReturnCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-music-return-check")>=0;
     private IEnumerator CheckSoundRoom()
     {
         var menu=host.RaceMusicMenu;yield return MusicIdle();
@@ -276,7 +276,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         HighlightTrack(CustomId("Imported MP3"));menu.Activate();yield return Frames(3);host.RaceMusic.Refresh();
         Check(!menu.IsOpen&&host.RaceMusic.State.selectedIndex==-2&&library.SelectedTitle=="Imported MP3","Surviving custom song could not be selected after deletion");
         yield return Hold(KeyCode.L,.85);Check(menu.IsOpen,"Surviving custom selection could not reopen picker");yield return MusicIdle();menu.ShowCustom();yield return Capture("custom-music-picker");
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-music-no-capture")<0)Check(menu.DiagnosticStageLabelsFit,"Sound Room sidebar labels clip");menu.Back();yield return Frames(5);
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-music-no-capture")<0)Check(menu.DiagnosticStageLabelsFit,"Sound Room sidebar labels clip");menu.Back();yield return Frames(5);
         yield return Pulse(13);double deadline=Time.realtimeSinceStartupAsDouble+45;
         for(int frame=0;ReadPresentation().phase==0&&Time.realtimeSinceStartupAsDouble<deadline;++frame){if(frame%12==0)padPulse=0x10;yield return null;}
         Check(ReadPresentation().phase==1,"Custom music race did not reach showcase");
@@ -433,7 +433,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
     {
         // Hidden standalone windows do not receive IMGUI repaint events.
         // Keep navigation/playback checks usable without claiming visual QA.
-        if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-music-no-capture")>=0){yield return Frames(2);yield break;}
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-music-no-capture")>=0){yield return Frames(2);yield break;}
         var music=host.RaceMusicMenu;var lobby=host.GetComponent<Idas3MultiplayerMenu>();
         bool drawMusic=music.IsOpen||music.HintVisible,drawLobby=lobby!=null&&lobby.IsOpen,expectPicker=music.IsOpen;
         int oldAa=QualitySettings.antiAliasing;RenderTexture target=null;Texture2D window=null,picture=null;
@@ -483,7 +483,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
     private void WriteReport(string file,bool passed,string error,bool stopped)
     {
         var state=host.RaceMusic.State;File.WriteAllText(Path.Combine(root,file),JsonUtility.ToJson(new Report{passed=passed,shutdownComplete=stopped,checks=checks,error=error,captures=captures.ToArray(),selectedIndex=state.selectedIndex,activeIndex=state.activeIndex,
-            scope=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-music-no-capture")>=0?"Hidden private-save Unity/native player: production controller/key routing, tab order, song choices and countdown playback checked; screenshots and IMGUI appearance not validated.":ReturnCheck?"Private-save actual Unity/native player: first/second car showcase and running-race returns, held View Change routed through production bindings, picker eligibility/visibility/open and native selection checked; hidden test has no IMGUI screenshot validation.":"Private-save actual Unity/native player. Injected physical key reaches production bindings and held-View-Change router; captures are actual scene and OnGUI, with AA1 readback only."},true));
+            scope=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-music-no-capture")>=0?"Hidden private-save Unity/native player: production controller/key routing, tab order, song choices and countdown playback checked; screenshots and IMGUI appearance not validated.":ReturnCheck?"Private-save actual Unity/native player: first/second car showcase and running-race returns, held View Change routed through production bindings, picker eligibility/visibility/open and native selection checked; hidden test has no IMGUI screenshot validation.":"Private-save actual Unity/native player. Injected physical key reaches production bindings and held-View-Change router; captures are actual scene and OnGUI, with AA1 readback only."},true));
     }
     private void Finish(bool passed,string error)
     {

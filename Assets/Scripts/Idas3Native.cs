@@ -4,11 +4,17 @@ using System.Text;
 
 internal static class Idas3Native
 {
+    [DllImport(Library,CallingConvention=CallingConvention.Cdecl)]
+    internal static extern int Idas3SceneFlushSaves();
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int Idas3SceneSaveMenuPointer(float x, float y, int width, int height, int click);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int Idas3SceneSetSaveCarLevels([In] uint[] levels, int count);
-    private const string Library = "Idas3Unity";
+    #if UNITY_IOS && !UNITY_EDITOR
+    internal const string Library = "__Internal";
+#else
+    internal const string Library = "Idas3Unity";
+#endif
     [StructLayout(LayoutKind.Sequential, Pack=8)]
     internal struct GhostState {
         public uint size,version,flags,finishTicks6000,car;

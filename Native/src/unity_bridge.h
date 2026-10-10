@@ -226,6 +226,8 @@ IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneCopyHudDriverName(char* destin
 // Online pause requests return0; unpause is always allowed. Restart/return
 // reject online and inactive race owners; use MultiplayerLeave for a peer exit.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetPaused(int paused);
+// Mobile background termination may not call Shutdown; flush before suspension.
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneFlushSaves(void);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneRestart(void);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneShowImportedCourseMenu(const char* root);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneRegisterImportedCourse(const char* root);
