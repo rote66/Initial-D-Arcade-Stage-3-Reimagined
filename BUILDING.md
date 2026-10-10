@@ -1,9 +1,11 @@
 # Building the game
 
+For iOS 15 ARM64, run `./build-ios.sh --mode full`, `--mode core-full`, or `--mode core-small` (default). Both data variants use the same universal core IPA. See [iOS build instructions](docs/ios15-test-build.md) for parameters, virtual controls and signing.
+
 ## Toolchain
 
 - Windows x64.
-- Unity **6000.6.0f1**, with Windows Mono build support.
+- Unity **6000.6.4f1**, with Windows Mono build support.
 - Visual Studio C++ build tools, including the Windows SDK.
 - CMake **3.24 or newer**, available on PATH.
 - Git, if cloning rather than downloading the source archive.
