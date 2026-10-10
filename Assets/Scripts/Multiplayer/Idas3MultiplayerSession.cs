@@ -208,7 +208,7 @@ namespace Idas3.Multiplayer
         public Idas3CarSnapshot LocalSnapshot { get; private set; }
         public Idas3CarSnapshot RemoteSnapshot { get; private set; }
         public IReadOnlyList<Idas3Room> Rooms => transport?.Rooms ?? emptyRooms;
-        public bool EnnaAvailable { get; } = File.Exists(Path.Combine(Application.streamingAssetsPath,"ENNA/menu.idastex"));
+        public bool EnnaAvailable { get; } = File.Exists(Path.Combine(Idas3AssetPaths.Root,"ENNA/menu.idastex"));
         public int AvailableCourseCount { get {int count=0;for(int i=0;i<Idas3CourseCatalog.Count;++i)if(Idas3CourseCatalog.Available(i))++count;return count;} }
         public IReadOnlyList<Idas3PlayerInfo> Players { get { UpdatePlayers(); return players; } }
         public static readonly string[] CarNames = {
@@ -236,6 +236,9 @@ namespace Idas3.Multiplayer
         }
         public void InitializeOnlinePresence()
         {
+#if UNITY_IOS
+            TransportIndex = 1;
+#endif
             if(DisconnectedFinish)return;
             if (transport == null) SetTransport(TransportIndex == 0 ? (IIdas3Transport)new Idas3SteamTransport() : new Idas3TcpTransport());
             if (transport is IIdas3MatchmakingTransport matchmaking) matchmaking.BuildCompatibility=Idas3BuildCompatibility.ForMatchmaking(Compatibility())+matchmakingTestScope;
@@ -249,6 +252,9 @@ namespace Idas3.Multiplayer
         }
         public void SelectTransport(int index)
         {
+#if UNITY_IOS
+            if(index != 1)return;
+#endif
             if (nativeRace || DisconnectedFinish || InLobby || Busy || index < 0 || index > 1) return;
             if (TransportIndex == index && Available) return;
             TransportIndex = index;
@@ -257,7 +263,7 @@ namespace Idas3.Multiplayer
         public void ConfigureLocalTest(int port, string name)
         {
             TransportIndex = 1;
-            SetTransport(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-multiplayer-challenger-check")>=0?
+            SetTransport(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-multiplayer-challenger-check")>=0?
                 (IIdas3Transport)new Idas3ChallengerTestTransport(port,name):new Idas3TcpTransport(port,true,name)); OpenMenu();
         }
         public void HostRoom()
@@ -288,7 +294,7 @@ namespace Idas3.Multiplayer
         }
         internal void ConfigureQuickMatchSmokeScope()
         {
-            if(InLobby||Busy||Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-multiplayer-quick-check")<0)
+            if(InLobby||Busy||Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-multiplayer-quick-check")<0)
                 throw new InvalidOperationException("Quick Match test scope requires an idle diagnostic session.");
             // An isolated build key prevents automated tests from joining or
             // advertising to any real player's compatible room search.
@@ -352,14 +358,22 @@ namespace Idas3.Multiplayer
         string Compatibility()
         {
             if (compatibility!=null) return compatibility;
-            string path=Path.Combine(Application.dataPath,"Plugins/x86_64/Idas3Unity.dll");
             string complete;
+#if UNITY_IOS || IDAS3_IOS_LAN_PEER
+            // IL2CPP has no managed assembly file. Both iOS architectures use
+            // the build-time source identity, independent of music encoding.
+            var identity=Resources.Load<TextAsset>("Idas3LanBuildIdentity");
+            if(identity==null||identity.text.Trim().Length!=64)throw new InvalidDataException("The iOS LAN build identity is missing. Rebuild the IPA.");
+            complete="idas3-ios-lan1-"+identity.text.Trim();
+#else
+            string path=Path.Combine(Application.dataPath,"Plugins/x86_64/Idas3Unity.dll");
             using(var hash=SHA256.Create()) {
                 using(var file=File.OpenRead(path)) complete="idas3-mp9-"+Convert.ToBase64String(hash.ComputeHash(file));
                 using(var file=File.OpenRead(typeof(Idas3MultiplayerSession).Assembly.Location)) complete+="-"+Convert.ToBase64String(hash.ComputeHash(file));
             }
+#endif
             for(int course=11;course<Idas3CourseCatalog.Count;++course)
-                complete+="-"+course+"-"+SpecialStageFingerprint(Path.Combine(Application.streamingAssetsPath,Idas3CourseCatalog.Packs[course-9]),Idas3CourseCatalog.Slugs[course-9],course>=12&&course<=14,course==15);
+                complete+="-"+course+"-"+SpecialStageFingerprint(Path.Combine(Idas3AssetPaths.Root,Idas3CourseCatalog.Packs[course-9]),Idas3CourseCatalog.Slugs[course-9],course>=12&&course<=14,course==15);
             complete+=ExperimentalAuthority?"-authority1":"-pose1";
             // Never cache an incomplete identity when reading a course fails.
             return compatibility=complete;
@@ -414,7 +428,7 @@ namespace Idas3.Multiplayer
                         Require(sender!=0 && recipient==0,"Invalid handshake.");
                         string build=r.ReadString();bool host=r.ReadBoolean();string name=r.ReadString();int car=r.ReadInt32();
                         uint helloSerial=r.ReadUInt32();var helloChoice=ReadChoice(r);var helloRecord=ReadRecord(r);var helloCar=Idas3OnlineCar.Read(r,car);
-                        Require(build==Compatibility(),"Both drivers need the same game build. Copy the complete Current folder to the other PC.");
+                        Require(build==Compatibility(),"Both drivers need the same game build and course data.");
                         Require(host!=IsHost && name.Length<=128 && car>=0 && car<35,"Invalid driver handshake.");
                         if (HandshakeComplete) { Require(sender==remoteNonce,"Driver session changed unexpectedly."); break; }
                         remoteNonce=sender;remoteName=Clean(name);RemoteSavedCar=helloCar;remoteCar=car;remoteRecord=helloRecord;remotePlayerSerial=helloSerial;RemoteChoice=helloChoice;HandshakeComplete=true;state="Lobby";
@@ -840,4 +854,3 @@ namespace Idas3.Multiplayer
         }
     }
 }
-

@@ -1,24 +1,10 @@
+#if !UNITY_IOS
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Steamworks;
 
 namespace Idas3.Multiplayer {
-    public static class Idas3LobbyNames {
-        public static string ForHost(string host){
-            string name=string.IsNullOrWhiteSpace(host)?"Driver":host.Trim();
-            var chars=name.ToCharArray();for(int i=0;i<chars.Length;++i)if(char.IsControl(chars[i])||chars[i]=='<'||chars[i]=='>')chars[i]=' ';
-            return new string(chars,0,Math.Min(chars.Length,48)).Trim()+" Lobby";
-        }
-    }
-    public struct Idas3OnlineActivity {
-        public int Online,Queuing,Racing;
-        public bool Available,Limited;
-        public double ObservedAt;
-        internal static string StateFor(bool racing,string state,bool quick,bool inLobby,bool connected,bool disconnected)=>
-            disconnected?"online":racing&&state!="Results"&&state!="Returning"?"racing":quick||inLobby&&!connected?"queuing":"online";
-        public string Format(int count)=>Available?count.ToString(CultureInfo.InvariantCulture)+(Limited?"+":""):"—";
-    }
     // A separate invisible lobby per client records presence even in menus and
     // full race rooms. Never count Spacewar's app-wide population or race-lobby
     // members: App 480 is shared, and full lobbies are excluded by Steam search.
@@ -104,3 +90,5 @@ namespace Idas3.Multiplayer {
         public void Dispose(){if(disposed)return;disposed=true;CancelSearch();create?.Dispose();create=null;if(presence.m_SteamID!=0)SteamMatchmaking.LeaveLobby(presence);presence=default;snapshot=default;}
     }
 }
+
+#endif

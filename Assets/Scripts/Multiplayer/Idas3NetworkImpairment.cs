@@ -23,7 +23,7 @@ namespace Idas3.Multiplayer
         }
         static double Argument(string key,double fallback,double maximum)
         {
-            var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,key);if(at<0)return fallback;
+            var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,key);if(at<0)return fallback;
             if(at+1>=args.Length||!double.TryParse(args[at+1],NumberStyles.Float,CultureInfo.InvariantCulture,out double value)||double.IsNaN(value)||value<0||value>maximum)
                 throw new ArgumentException("Invalid network diagnostic value for "+key);
             return value;

@@ -42,7 +42,30 @@ Baseline record(const std::filesystem::path& root,const OnlineRaceSetup& selecte
     }
     result.contacts=sim.contactFrames();return result;
 }
+void wireBackpressure(const std::filesystem::path& root){
+    auto selected=setup(3);OnlineRaceSimulation a(root,selected),b(root,selected);
+    OnlineRaceLink host(a,92,true),client(b,92,false);auto input=neutral();
+    // Deliver guest controls while withholding all host packets/ACKs. The
+    // host can confirm some frames locally but must preserve the peer's ring.
+    for(unsigned f=0;f<OnlineRaceTimeline::capacity;++f){
+        require(host.step(input)&&client.step(input),"Link stalled before its retransmit ring filled");
+        host.receive(client.packet());host.reconcile();
+    }
+    require(host.timeline().confirmed()>0,"Outage fixture did not locally confirm inputs");
+    for(unsigned f=0;f<100;++f){
+        require(!host.step(input),"Host overwrote history that the peer has not acknowledged");
+        require(!host.packet().empty(),"Stalled host could not retransmit retained history");
+    }
+    for(unsigned f=0;f<200;++f){
+        auto h=host.packet(),c=client.packet();host.receive(c);client.receive(h);host.reconcile();client.reconcile();
+        if(host.timeline().frame()<100)host.step(input);
+        if(client.timeline().frame()<100)client.step(input);
+    }
+    require(host.verifiedPeerFrames()==100&&client.verifiedPeerFrames()==100&&a.digest()==b.digest(),"Delayed acknowledgement did not recover to the same confirmed race");
+    std::cout<<"PASS delayed peer ACK: bounded retransmit history, safe stall and complete recovery"<<std::endl;
+}
 void wireContracts(const std::filesystem::path& root){
+    wireBackpressure(root);
     std::array<OriginalRaceRuleState,2> result;
     require(resolveOnlineRaceWinner(result)==-3,"Unfinished race awarded a result");
     for(auto& state:result)state.phase=OriginalRacePhase::Finished;

@@ -239,7 +239,7 @@ namespace Idas3.Multiplayer
         private static string Direction(int course,bool reverse)=>course>=9?(reverse?"UPHILL":"DOWNHILL"):(reverse?"REVERSE":"FORWARD");
         private static string Conditions(int course,bool reverse,bool wet,bool night)=>Direction(course,reverse)+" / "+(course==8?"SNOW":wet?"WET":"DRY")+" / "+(night?"NIGHT":"DAY");
         private static string PickSummary(Idas3RaceChoice c)=>Track(c.Course)+" / "+Conditions(c.Course,c.Reverse,c.Wet,c.Night);
-        private void Text(Rect r,string text,GUIStyle style,Color? color=null){var old=GUI.contentColor;GUI.contentColor=color??(style==small||style==wrapped?Muted:Color.white);GUI.Label(r,text??"",style);GUI.contentColor=old;}
+        private void Text(Rect r,string text,GUIStyle style,Color? color=null){var old=GUI.contentColor;GUI.contentColor=color??(style==small||style==wrapped?Muted:Color.white);Idas3Localization.Label(r,text??"",style);GUI.contentColor=old;}
         private bool ActionButton(Rect r,string text,bool enabled=true,bool primary=false,string identity=null){
             string id=identity??r.x+":"+r.y+":"+text;
             if(enabled&&GUI.enabled&&Event.current.type==EventType.MouseDown&&r.Contains(Event.current.mousePosition))controllerFocus.Pointer(id);
@@ -267,7 +267,7 @@ namespace Idas3.Multiplayer
                     float scale=Mathf.Clamp(Screen.height/900f,.75f,1.25f);
                     GUI.matrix=Matrix4x4.TRS(new Vector3(Screen.width-278*scale,18*scale,0),Quaternion.identity,new Vector3(scale,scale,1));
                     string state=session.IsQuickMatching?" / SEARCHING":session.InLobby?(session.PingMilliseconds>=0?" / "+session.PingMilliseconds+" ms":" / CONNECTED"):"";
-                    if(ActionButton(new Rect(0,0,258,38),"F1  ONLINE BATTLE"+state))SetOpen(true);
+                    if(Application.platform!=RuntimePlatform.IPhonePlayer&&ActionButton(new Rect(0,0,258,38),"F1  ONLINE BATTLE"+state))SetOpen(true);
                     if(session.HasCourseDraw){Fill(new Rect(0,38,258,29),Panel);Text(new Rect(10,43,238,22),"RACE COURSE / "+Track(session.Course),small);}
                     return;
                 }
@@ -276,7 +276,7 @@ namespace Idas3.Multiplayer
                 GUI.matrix=Matrix4x4.TRS(new Vector3((Screen.width-Width*factor)*.5f,(Screen.height-Height*factor)*.5f,0),Quaternion.identity,new Vector3(factor,factor,1));
                 Fill(new Rect(0,0,Width,Height),Ink);Frame(new Rect(0,0,Width,Height),Edge);Fill(new Rect(0,0,Width,4),Red);Fill(new Rect(0,98,Width,1),Edge);
                 string screen=codeEditing||joinEntry?"JOIN A BATTLE":session.StateName=="Returning"||ResultsVisible?"RACE RESULTS":session.IsRacing?"RACE MENU":session.IsQuickMatching?"QUICK MATCH":session.InLobby?session.LobbyName:"ONLINE BATTLE";
-                Text(new Rect(26,18,560,43),screen,title);Text(new Rect(28,69,560,20),"INITIAL D / ONLINE BATTLE",small);HeaderStatus();
+                Text(new Rect(26,18,560,43),screen,title);Text(new Rect(28,69,560,20),Application.platform==RuntimePlatform.IPhonePlayer?"INITIAL D / LAN MULTIPLAYER":"INITIAL D / ONLINE BATTLE",small);HeaderStatus();
                 if(!codeEditing&&!ResultsVisible&&session.StateName!="Returning"&&ActionButton(new Rect(841,26,32,32),"×")){if(joinEntry){joinEntry=false;controllerFocus.Reset();}else SetOpen(false);}
                 if(codeEditing)CodeEntryView();else{
                     if(joinEntry&&!session.InLobby)JoinView();else if(session.IsQuickMatching)SearchView();else if(session.InLobby)RoomView();else BrowserView();
@@ -299,6 +299,15 @@ namespace Idas3.Multiplayer
             Fill(new Rect(26,y+52,848,1),Edge);
         }
         private void BrowserView(){
+            if(Application.platform==RuntimePlatform.IPhonePlayer){
+                Section(new Rect(26,126,848,54),"LAN MULTIPLAYER");
+                if(ActionButton(new Rect(26,215,232,47),"HOST A BATTLE",session.Available&&!session.Busy,true))session.HostRoom();
+                if(ActionButton(new Rect(26,280,232,47),"JOIN WITH ADDRESS",!session.Busy)){joinEntry=true;controllerFocus.Reset();}
+                if(ActionButton(new Rect(26,345,232,47),"BACK TO GAME"))SetOpen(false);
+                Section(new Rect(280,215,594,261),"DIRECT CONNECTION");
+                Text(new Rect(300,281,530,60),"Host a LAN room or enter the host's address.",wrapped);
+                Text(new Rect(300,359,530,85),"Allow Local Network access in iOS Settings. Both devices must use the same Wi-Fi and game build.",wrapped);return;
+            }
             Activity(116);bool steam=session.TransportIndex==0;bool idle=!session.Busy;float x=26,y=190;
             if(ActionButton(new Rect(x,y,232,47),"QUICK MATCH",steam&&session.Available&&idle,true)){session.QuickMatch();if(session.IsQuickMatching)SetOpen(false);}
             if(ActionButton(new Rect(x,y+58,232,47),"HOST A BATTLE",session.Available&&idle))session.HostRoom();
@@ -352,7 +361,7 @@ namespace Idas3.Multiplayer
             Section(new Rect(26,116,848,400),session.TransportIndex==0?"ENTER ROOM CODE":"ENTER HOST ADDRESS");
             // Long addresses remain visible at the insertion point.
             Text(new Rect(48,174,805,35),codeDraft.Length>58?"…"+codeDraft.Substring(codeDraft.Length-58)+"_":codeDraft+"_",heading);
-            const string characters="1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.:/-_";
+            string characters=session.TransportIndex==1?"1234567890.:":"1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.:/-_";
             for(int i=0;i<characters.Length;++i){char c=characters[i];if(ActionButton(new Rect(48+(i%13)*62,224+(i/13)*42,54,34),c.ToString())&&codeDraft.Length<128)codeDraft+=c;}
             if(ActionButton(new Rect(26,558,194,42),"DELETE",codeDraft.Length>0))codeDraft=codeDraft.Substring(0,codeDraft.Length-1);
             if(ActionButton(new Rect(244,558,194,42),"CLEAR",codeDraft.Length>0))codeDraft="";
@@ -427,7 +436,7 @@ namespace Idas3.Multiplayer
             if(joinEntry){if(ActionButton(new Rect(26,570,220,35),"BACK")){joinEntry=false;controllerFocus.Reset();}return;}
             if(session.IsQuickMatching){if(ActionButton(new Rect(26,570,232,35),"CANCEL SEARCH",true,true))session.CancelQuickMatch();if(ActionButton(new Rect(642,570,232,35),"BACK TO GAME"))SetOpen(false);return;}
             if(MusicSelectionAllowed){if(ActionButton(new Rect(26,567,348,35),"MUSIC  / "+SelectedMusicTitle))MusicSelectionRequested?.Invoke();}
-            else Text(new Rect(28,578,370,23),"↑ ↓ SELECT   ENTER / A CONFIRM   ESC / B BACK",small);
+            else Text(new Rect(28,578,370,23),Application.platform==RuntimePlatform.IPhonePlayer?"TAP TO SELECT / CONFIRM":"↑ ↓ SELECT   ENTER / A CONFIRM   ESC / B BACK",small);
             if(!session.InLobby)return;
             if(session.StateName=="Returning"){ActionButton(new Rect(498,567,376,35),"RETURNING TO LOBBY…",false);return;}
             if(ActionButton(new Rect(393,567,126,35),"LEAVE ROOM",!session.Busy))session.LeaveRoom();

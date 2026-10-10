@@ -40,6 +40,12 @@ void OnlineRaceLink::verify(){
 }
 void OnlineRaceLink::reconcile(){timeline_.reconcile();verify();}
 bool OnlineRaceLink::step(const OriginalVehicleInputs& local){
-    reconcile();if(!timeline_.localInput(local))return false;const bool advanced=timeline_.advance();verify();return advanced;
+    reconcile();
+    // Local confirmation alone does not mean the peer received our canonical
+    // history. A slower renderer can still be acknowledging an older frame.
+    // Retain every unacknowledged input until the peer catches up; otherwise
+    // packet() asks for entries already overwritten by the bounded ring.
+    if(timeline_.frame()-peerConfirmed_>=OnlineRaceTimeline::capacity)return false;
+    if(!timeline_.localInput(local))return false;const bool advanced=timeline_.advance();verify();return advanced;
 }
 }

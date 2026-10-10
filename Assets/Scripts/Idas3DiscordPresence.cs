@@ -24,7 +24,7 @@ public sealed class Idas3DiscordPresence : MonoBehaviour
         public bool timed;
         public double elapsedSeconds;
     }
-    [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
     static extern int Idas3SceneReadPresence([Out]byte[] output,int capacity);
     readonly byte[] snapshotBytes=new byte[2048];
     DiscordRpcClient client;
@@ -37,8 +37,9 @@ public sealed class Idas3DiscordPresence : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
+        if(Application.platform==RuntimePlatform.IPhonePlayer)return;
         if(Application.isEditor||FindAnyObjectByType<Idas3DiscordPresence>()!=null)return;
-        foreach(string arg in Environment.GetCommandLineArgs())
+        foreach(string arg in Idas3LaunchArguments.GetArguments())
             if(arg.StartsWith("-idas3-",StringComparison.Ordinal)&&arg!="-idas3-replay-viewer"&&arg!="-idas3-replay-library"&&arg!="-idas3-skip-update-once")return;
         new GameObject("Discord Rich Presence").AddComponent<Idas3DiscordPresence>();
     }

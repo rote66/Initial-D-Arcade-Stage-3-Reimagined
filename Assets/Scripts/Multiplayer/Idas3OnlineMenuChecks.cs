@@ -4,6 +4,7 @@ using UnityEngine;
 namespace Idas3.Multiplayer {
 public static class Idas3OnlineMenuChecks {
     public static void Run(){
+#if !UNITY_IOS
         int checks=0;void Check(bool v,string s){++checks;if(!v)throw new Exception(s);}
         Check(Idas3LobbyNames.ForHost(" Chris ")=="Chris Lobby","Host lobby name");
         Check(Idas3LobbyNames.ForHost(null)=="Driver Lobby","Missing host name");
@@ -32,5 +33,6 @@ public static class Idas3OnlineMenuChecks {
         Check(Idas3OnlineActivity.StateFor(true,"Disconnected",false,false,false,true)=="online","Neutral disconnect is not racing");
         Directory.CreateDirectory("Verification/online-menu-20260922");File.WriteAllText("Verification/online-menu-20260922/unit-checks.txt","PASS "+checks+" online activity, lobby names and scrollbar checks\n");
         Idas3ControllerMenuChecks.Run();
+#endif
     }
 }}

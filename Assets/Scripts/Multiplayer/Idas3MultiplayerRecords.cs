@@ -59,7 +59,7 @@ namespace Idas3.Multiplayer
 
         // The native evaluator owns the original progression arithmetic. This
         // store neither infers levels from win ratio nor awards tuning points.
-        [DllImport("Idas3Unity",CallingConvention=CallingConvention.Cdecl)]
+        [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)]
         private static extern int Idas3MultiplayerNextBattleRecord(ref Idas3BattleRecord before,int won,ref Idas3BattleRecord opponent,uint experience,out Idas3BattleRecord after,out uint nextExperience);
         public static Idas3BattleRecord Next(Idas3BattleRecord before,bool won,Idas3BattleRecord opponent,uint experience,out uint nextExperience)
         {
@@ -139,7 +139,7 @@ namespace Idas3.Multiplayer
 
         internal static void SeedSaveMenuDiagnostic(string saveRoot,int car,Idas3BattleRecord record,uint xp=0)
         {
-            var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-mode-flow-smoke");
+            var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-mode-flow-smoke");
             string absolute=Path.GetFullPath(saveRoot),parent=Path.GetDirectoryName(absolute);
             if(at<0||at+1>=args.Length||Array.IndexOf(args,"-idas3-save-level-check")<0||
                 !string.Equals(absolute,Path.Combine(Path.GetFullPath(args[at+1]),"userdata"),StringComparison.OrdinalIgnoreCase)||
@@ -153,7 +153,7 @@ namespace Idas3.Multiplayer
 
         internal static void SeedDiagnostic(string saveRoot,int car,Idas3BattleRecord record,uint experience=0)
         {
-            var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-multiplayer-smoke");
+            var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-multiplayer-smoke");
             string absolute=Path.GetFullPath(saveRoot),parent=Path.GetDirectoryName(absolute);
             if(at<0||at+1>=args.Length||Array.IndexOf(args,"-idas3-multiplayer-showcase-check")<0||
                 !string.Equals(absolute,Path.Combine(Path.GetFullPath(args[at+1]),"userdata"),StringComparison.OrdinalIgnoreCase)||

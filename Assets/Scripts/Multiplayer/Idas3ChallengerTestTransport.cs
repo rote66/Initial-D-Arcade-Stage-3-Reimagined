@@ -12,7 +12,7 @@ namespace Idas3.Multiplayer
         readonly int port;
         readonly List<Idas3Room> rooms=new List<Idas3Room>();
         public Idas3ChallengerTestTransport(int port,string name){
-            if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-multiplayer-challenger-check")<0)throw new InvalidOperationException("Diagnostic transport requires explicit flag");
+            if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-multiplayer-challenger-check")<0)throw new InvalidOperationException("Diagnostic transport requires explicit flag");
             this.port=port;host=name=="SMOKE HOST";inner=new Idas3TcpTransport(port,true,name);
         }
         public string Kind=>"Private matchmaking diagnostic";

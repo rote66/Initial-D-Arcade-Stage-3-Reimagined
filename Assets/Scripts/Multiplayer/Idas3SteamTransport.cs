@@ -1,3 +1,4 @@
+#if !UNITY_IOS
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -438,3 +439,5 @@ namespace Idas3.Multiplayer
         }
     }
 }
+
+#endif

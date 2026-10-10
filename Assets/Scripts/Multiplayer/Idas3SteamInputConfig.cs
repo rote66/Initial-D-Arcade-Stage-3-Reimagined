@@ -1,3 +1,4 @@
+#if !UNITY_IOS
 using System;
 using System.IO;
 using Steamworks;
@@ -15,7 +16,7 @@ namespace Idas3.Multiplayer
         private Callback<SteamInputConfigurationLoaded_t> configurationLoaded;
         internal void Initialize()
         {
-            var args=Environment.GetCommandLineArgs();
+            var args=Idas3LaunchArguments.GetArguments();
             if(Array.IndexOf(args,"-idas3-online-controller-smoke")>=0 &&
                Array.IndexOf(args,"-idas3-online-controller-steam-baseline")>=0)
             {Debug.Log("IDAS3 Steam Input baseline: bundled mapping intentionally skipped for private diagnostic.");return;}
@@ -42,3 +43,5 @@ namespace Idas3.Multiplayer
         }
     }
 }
+
+#endif

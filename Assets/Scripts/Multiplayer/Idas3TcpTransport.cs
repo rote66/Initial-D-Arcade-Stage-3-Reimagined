@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
 
 namespace Idas3.Multiplayer
@@ -65,7 +67,7 @@ namespace Idas3.Multiplayer
                     throw new ArgumentException("Enter the host's IPv4 address and port, for example 192.168.1.20:27035.");
                 if (parts[0].Equals("localhost", StringComparison.OrdinalIgnoreCase)) parts[0] = "127.0.0.1";
                 if (!IPAddress.TryParse(parts[0], out var address) || address.AddressFamily != AddressFamily.InterNetwork)
-                    throw new ArgumentException("Use an IPv4 address from the host's F1 menu.");
+                    throw new ArgumentException("Use the IPv4 address shown in the host's multiplayer menu.");
                 if (loopbackOnly && !IPAddress.IsLoopback(address)) throw new ArgumentException("This test accepts loopback connections only.");
                 peer = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                 peer.NoDelay = true;
@@ -74,7 +76,7 @@ namespace Idas3.Multiplayer
                 RoomCode = address + ":" + targetPort; Status = "Connecting to " + RoomCode;
             } catch (Exception e) { Fail("LAN connection failed: " + e.Message); }
         }
-        public void Browse() { Status = "For LAN, enter the address shown in the host's F1 menu."; }
+        public void Browse() { Status = "For LAN, enter the address shown in the host's multiplayer menu."; }
         public void Send(byte[] data, bool reliable)
         {
             if (!Connected || data == null) return;
@@ -150,6 +152,10 @@ namespace Idas3.Multiplayer
         public void Dispose() { Leave(); Available = false; }
         static string LanAddress()
         {
+#if UNITY_IOS && !UNITY_EDITOR
+            var address=new StringBuilder(64);
+            return Idas3LanIPv4(address,address.Capacity)>0?address.ToString():"IP unavailable";
+#else
             try {
                 foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()) {
                     if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
@@ -160,6 +166,10 @@ namespace Idas3.Multiplayer
                 }
             } catch { }
             return "127.0.0.1";
+#endif
         }
+#if UNITY_IOS && !UNITY_EDITOR
+        [DllImport("__Internal")] private static extern int Idas3LanIPv4(StringBuilder address,int capacity);
+#endif
     }
 }
