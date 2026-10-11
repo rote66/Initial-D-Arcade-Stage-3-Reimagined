@@ -4,7 +4,7 @@ task_root="$(cd "$(dirname "$0")/.." && pwd)"
 task_unity="${IDAS3_UNITY_EDITOR:-/Applications/Unity/Hub/Editor/6000.6.4f1/Unity.app/Contents/MacOS/Unity}"
 task_mode=core-small
 task_jobs="${IDAS3_BUILD_JOBS:-8}"
-task_build_number="${IDAS3_BUILD_NUMBER:-14}"
+task_build_number="${IDAS3_BUILD_NUMBER:-15}"
 task_keep="${IDAS3_KEEP_BUILD:-0}"
 task_force=0
 task_dry=0
@@ -24,7 +24,7 @@ Modes:
 Options:
   --unity PATH       Unity editor executable (or IDAS3_UNITY_EDITOR).
   --jobs N           Native build parallelism (default 8).
-  --build-number N   iOS build number (default 14, or IDAS3_BUILD_NUMBER).
+  --build-number N   iOS build number (default 15, or IDAS3_BUILD_NUMBER).
   --clean            Clean rebuildable caches and exit; retain IPA/data/saves.
   --keep-build       Keep Xcode exports and DerivedData after success.
   --force-data       Recreate the selected data ZIP even if unchanged.

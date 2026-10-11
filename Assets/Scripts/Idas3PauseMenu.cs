@@ -57,11 +57,6 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     public event Action<bool> OpenChanged;
     public bool IsOpen {get;private set;}
     public bool AttractOptions {get;private set;}
-    public bool GlobalOptions {get;private set;}
-    public void OpenGlobalOptions(bool frontend){
-        if(IsOpen)return;
-        SetOpen(true,frontend);GlobalOptions=true;SelectTab(0);
-    }
     public bool AttractPromptVisible=>attractPromptRequested&&!IsOpen;
     public float AttractHoldProgress {get;private set;}
     public bool BlocksGameInput=>IsOpen||Time.frameCount<=blockThroughFrame;
@@ -130,7 +125,6 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         blockThroughFrame=Time.frameCount+1;if(open==IsOpen)return;
         IsOpen=open;bindingChoice=false;hudSizesOpen=false;
         if(open){
-            GlobalOptions=false;
             AttractOptions=attractContext;
             previousCursorVisible=Cursor.visible;previousCursorLock=Cursor.lockState;
             Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
@@ -143,12 +137,12 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             // Returning to driving must preserve a held pedal or steering axis.
             // The host separately guards the closing menu button against reuse.
             options?.RevertDisplay();bindings?.CancelCapture();bindings?.CancelEdit(false);pending=Command.None;
-            if(AttractOptions||GlobalOptions){options?.BeginEdit();showOptions=false;queued=Command.None;AttractHoldProgress=0;}
+            if(AttractOptions){options?.BeginEdit();showOptions=false;queued=Command.None;AttractHoldProgress=0;}
             Cursor.lockState=previousCursorLock;Cursor.visible=previousCursorVisible;
         }
         // Keep the context available to the host through the closing callback.
         OpenChanged?.Invoke(open);
-        if(!open){AttractOptions=false;GlobalOptions=false;}
+        if(!open)AttractOptions=false;
     }
     public void SelectCategory(Category category)=>SelectTab((int)category);
     internal int OptionRows=>Rows;
@@ -227,7 +221,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(wheelEditing){wheelEditing=false;return;}
         if(hudSizesOpen){hudSizesOpen=false;selection=3;notice="";return;}
         if(showOptions&&selection!=0){selection=0;notice="";return;}
-        if(AttractOptions||GlobalOptions){SetOpen(false);return;}
+        if(AttractOptions){SetOpen(false);return;}
         if(showOptions){options.BeginEdit();bindings?.CancelEdit(false);showOptions=false;selection=1;notice="";return;}
         queued=Command.Resume;
     }
@@ -436,10 +430,9 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             GUI.matrix=Matrix4x4.TRS(new Vector3((Screen.width-Width*scale)*.5f,(Screen.height-Height*scale)*.5f,0),Quaternion.identity,new Vector3(scale,scale,1));
             Fill(new Rect(0,0,Width,Height),Ink);Frame(new Rect(0,0,Width,Height),Edge);Fill(new Rect(0,0,Width,5),Red);
             Fill(new Rect(0,108,Width,1),Edge);
-            Text(new Rect(30,18,630,52),GlobalOptions||AttractOptions?"GAME SETTINGS":showOptions?"OPTIONS":online?"RACE MENU":"PAUSED",title);
-            Text(new Rect(33,77,660,23),GlobalOptions?"INITIAL D  /  GAME SETTINGS":AttractOptions?"INITIAL D  /  ATTRACT SCREEN":"INITIAL D  /  "+courseName.ToUpperInvariant(),small);
-            if(GlobalOptions)Text(new Rect(750,33,238,27),"BACK TO GAME",small);
-            else if(AttractOptions)Text(new Rect(750,33,238,27),"BACK TO ATTRACT",small);
+            Text(new Rect(30,18,630,52),AttractOptions?"GAME SETTINGS":showOptions?"OPTIONS":online?"RACE MENU":"PAUSED",title);
+            Text(new Rect(33,77,660,23),AttractOptions?"INITIAL D  /  ATTRACT SCREEN":"INITIAL D  /  "+courseName.ToUpperInvariant(),small);
+            if(AttractOptions)Text(new Rect(750,33,238,27),"BACK TO ATTRACT",small);
             else if(online){Fill(new Rect(728,37,9,9),Red);Text(new Rect(750,29,238,26),"LIVE RACE CONTINUES",button);}
             else Text(new Rect(782,33,198,27),"TAKE A BREATHER",small);
             Text(new Rect(710,77,295,23),Updates!=null&&Updates.State==Idas3Updates.CheckState.Available?"UPDATE AVAILABLE — UPDATES":"v"+Application.version,small,Updates!=null&&Updates.State==Idas3Updates.CheckState.Available?PromptYellow:Muted);

@@ -81,9 +81,8 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         }
         Touch(11,TouchPhase.Began,controls.ButtonRect("L1").center);Touch(12,TouchPhase.Began,controls.ButtonRect("R1").center);
         Check(Key(Packet(),81)&&Key(Packet(),69)&&(Packet().padButtons&0x300)==0x300,"Shoulders map to both shift actions");controls.ResetInput();
-        // Touch actually opens Options through the normal host owner.
-        Touch(20,TouchPhase.Began,controls.ButtonRect("MENU").center);yield return Frames(3);Touch(20,TouchPhase.Ended,Vector2.zero);yield return Frames(2);
-        Check(host.PauseMenu.IsOpen,"MENU touch opens title options");host.PauseMenu.SelectTab(2);for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);
+        // Hold the actual virtual View control through the normal title owner.
+        yield return OpenTitleOptions();host.PauseMenu.SelectTab(2);for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);
         host.GameOptions.Draft.musicVolume=.7f;host.PauseMenu.Activate();
         Check(host.GameOptions.Current.gravitySteering&&host.GameOptions.Draft.gravitySteering,"Live gravity toggle on");
         Check(host.GameOptions.Current.musicVolume==1&&host.GameOptions.Draft.musicVolume==.7f,"Live switch preserves unrelated draft");
@@ -135,7 +134,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(host.GameOptions.Current.gravitySteering,"Switch usable while race paused");controls.InjectGravity(0,.35,3);Check(Packet().thumbLX==0,"Tilt cannot navigate pause options");
         host.PauseMenu.Activate();controls.ResetInput();host.DiagnosticFocusOverride=false;Touch(41,TouchPhase.Began,controls.ButtonRect("R2").center);Check(Packet().rightTrigger==0,"Focus gate blocks input");
         controls.ResetInput();host.DiagnosticFocusOverride=true;reload.Initialize(Path.Combine(root,"userdata"));Check(!reload.Current.gravitySteering,"Final off state saved");
-        yield return LayoutChecks();yield return GlobalMenuChecks();yield return StoryAndTuningChecks();yield return LocalizationChecks();Finish(true,null);
+        yield return LayoutChecks();yield return TitleMenuChecks();yield return StoryAndTuningChecks();yield return LocalizationChecks();Finish(true,null);
     }
     private IEnumerator StoryAndTuningChecks(){
         host.PauseMenu.SetOpen(false);controls.ResetInput();
@@ -183,7 +182,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
                 Check(Idas3MenuLocalization.T("NIGHT OF FIRE")=="NIGHT OF FIRE","Song metadata stays intact: "+code);
                 if(language==2)Check(Idas3MenuLocalization.T("EDIT TOUCH LAYOUT")!="EDIT TOUCH LAYOUT","Mobile copy extends upstream Chinese catalog");
                 Check(Idas3SceneModeFlowFixture(350)==1,"Private localized Save Select fixture");yield return Frames(5);
-                yield return Capture("locale-"+code+"-save");menu.OpenGlobalOptions(true);menu.SelectTab(2);yield return Frames(3);
+                yield return Capture("locale-"+code+"-save");yield return OpenTitleOptions();menu.SelectTab(2);yield return Frames(3);
                 Check(host.GameOptions.SetGravitySteering(true),"Enable localized gravity settings");yield return Frames(3);
                 yield return Capture("locale-"+code+"-gameplay");menu.SelectTab(8);yield return Frames(3);
                 yield return Capture("locale-"+code+"-touch");menu.Activate();Check(menu.TouchLayoutEditing,"Localized layout editor opens");yield return Frames(3);
@@ -191,7 +190,8 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
                 Check(host.GameOptions.SetPerformanceOsd(true),"Enable localized OSD");yield return Frames(5);
                 var osd=host.GetComponent<Idas3PerformanceOsd>();Rect safe=controls.SafeRect;
                 Check(osd.DisplayRect.height>=4*osd.LineHeight&&osd.LineHeight>0,"Four complete measured font lines: "+code);
-                Check(osd.DisplayRect.yMax<controls.ButtonRect("MENU").y&&safe.Contains(osd.DisplayRect.min)&&safe.Contains(osd.DisplayRect.max),"OSD stays inside safe area above MENU: "+code);
+                Check(safe.Contains(osd.DisplayRect.min)&&safe.Contains(osd.DisplayRect.max),"OSD stays inside safe area: "+code);
+                foreach(string id in Idas3TouchLayout.Ids)Check(!osd.DisplayRect.Overlaps(controls.ControlRect(id)),"OSD does not cover "+id+": "+code);
                 yield return Capture("locale-"+code+"-osd");Check(host.GameOptions.SetPerformanceOsd(false)&&host.GameOptions.SetGravitySteering(false),"Restore isolated overlay settings");
             }
         }finally{Idas3MenuLocalization.SetLanguage(previous);Idas3Native.Idas3SceneSetCustomMenuLanguage(previous);menu.SetOpen(false);}
@@ -221,6 +221,18 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(export!=null&&File.Exists(export),"JSON export created");var parsed=Idas3TouchLayout.Parse(File.ReadAllText(export));
         Check(parsed.Get("R2").size==150&&parsed.Get("R2").dx==layout.Current.Get("R2").dx,"Export contains saved size and anchor");
         bool rejected=false;try{Idas3TouchLayout.Parse("{\"schema\":\"wrong\",\"version\":1,\"controls\":[]}");}catch{rejected=true;}Check(rejected,"Unsupported layout rejected");
+        var legacy=parsed.Clone();legacy.snap=false;legacy.opacity=42;
+        Array.Resize(ref legacy.controls,legacy.controls.Length+1);legacy.controls[legacy.controls.Length-1]=new Idas3TouchLayout.Control{id="MENU",positioned=true,dx=25,dy=30,size=140};
+        var migrated=Idas3TouchLayout.Parse(JsonUtility.ToJson(legacy));
+        Check(migrated.controls.Length==Idas3TouchLayout.Ids.Length&&!migrated.snap&&migrated.opacity==42,"Legacy MENU entry is dropped without resetting layout preferences");
+        foreach(var c in parsed.controls){var kept=migrated.Get(c.id);Check(JsonUtility.ToJson(c)==JsonUtility.ToJson(kept),"Legacy layout preserves "+c.id);}
+        string legacyRoot=Path.Combine(root,"legacy-touch-layout");Directory.CreateDirectory(legacyRoot);File.WriteAllText(Path.Combine(legacyRoot,"touch-layout.json"),JsonUtility.ToJson(legacy));
+        var legacyStore=new Idas3TouchLayout();legacyStore.Initialize(legacyRoot);
+        Check(legacyStore.LastError==null&&JsonUtility.ToJson(legacyStore.Current)==JsonUtility.ToJson(migrated),"Production startup loads old MENU layout without resetting controls");
+        legacy.controls[legacy.controls.Length-1].id="UNKNOWN";
+        rejected=false;try{Idas3TouchLayout.Parse(JsonUtility.ToJson(legacy));}catch{rejected=true;}Check(rejected,"Migration still rejects unknown controls");
+        legacy.controls[legacy.controls.Length-1].id="R2";
+        rejected=false;try{Idas3TouchLayout.Parse(JsonUtility.ToJson(legacy));}catch{rejected=true;}Check(rejected,"Migration still rejects duplicate controls");
         editor.ResetDraft();Check(editor.Draft.Get("R2").size==100&&!editor.Draft.Get("R2").positioned,"Reset restores defaults in draft");editor.Close(false);
         Check(controls.LayoutStore.Current.Get("R2").size==150,"Cancel after reset preserves saved layout");
         Check(controls.LayoutStore.Save(Idas3TouchLayout.Defaults()),"Restore isolated default layout");controls.InvalidateLayout();
@@ -260,54 +272,52 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(controls.LayoutStore.Save(Idas3TouchLayout.Defaults()),"Restore layout after import checks");controls.InvalidateLayout();
         yield return Frames(3);menu.SelectTab(8);yield return Capture("touch-layout-options");menu.SetOpen(false);
     }
-    private IEnumerator GlobalMenuChecks(){
-        var menu=host.PauseMenu;
-        // Isolated native save, make, car, course and result owners. MENU never
-        // emits the original Escape/Back or changes the underlying selection.
-        foreach(int fixture in new[]{350,355,3,207,14}){
-            if(fixture==355){
-                // 355 checks an existing Make screen; enter it through the
-                // actual empty Save Select slot rather than treating it as setup.
-                pulse=40;yield return Frames(10);pulse=40;yield return Frames(10);pulse=13;
-                for(int i=0;i<120&&host.Status.frontendStage!=2;++i)yield return null;
-                Check(host.Status.frontendStage==2,"Empty save slot enters Make through native input");
-                Check(Idas3SceneModeFlowFixture(355)==1,"Private Make state check");
-            }else if(fixture==3){
-                yield return Frames(30);pulse=13;
-                for(int i=0;i<150&&host.Status.frontendStage!=3;++i)yield return null;
-                Check(host.Status.frontendStage==3,"Native Make confirmation enters Car selection");
-            }else Check(Idas3SceneModeFlowFixture(fixture)==1,"Private frontend fixture "+fixture);
-            yield return Frames(3);int stage=host.Status.frontendStage;
-            Touch(80,TouchPhase.Began,controls.ButtonRect("MENU").center);yield return Frames(4);
-            Check(menu.IsOpen&&menu.GlobalOptions&&menu.OptionsVisible,"MENU opens settings for fixture "+fixture);
-            Check(!Key(Packet(),27)&&host.Status.frontendStage==stage,"MENU does not send Escape or leave source menu");
-            yield return Frames(8);Check(menu.IsOpen&&host.Status.frontendStage==stage,"Settings survive non-race owner routing");
-            Touch(80,TouchPhase.Ended,Vector2.zero);yield return Frames(3);
-            if(fixture==355){
-                yield return Capture("mobile-menu-make");
-                menu.SelectTab(8);for(int i=0;i<4;++i)menu.Navigate(1);
-                host.GameOptions.Draft.musicVolume=.6f;menu.Activate();
-                Check(host.GameOptions.Current.showOsd&&host.GameOptions.Draft.showOsd,"OSD toggle applies immediately");
-                var reloaded=new Idas3GameOptions();reloaded.Initialize(Path.Combine(root,"userdata"));
-                Check(reloaded.Current.showOsd&&reloaded.Current.musicVolume!=.6f,"OSD persists independently of unrelated draft");
-                double until=Time.realtimeSinceStartupAsDouble+.8;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
-                var osd=host.GetComponent<Idas3PerformanceOsd>();
-                Check(osd.Visible&&osd.Text.Split('\n').Length==4&&osd.Text.Contains("CPU ")&&osd.Text.Contains("GPU ")&&osd.Text.Contains("RAM ")&&osd.Text.Contains("MiB"),"Four-line measured OSD");
-                Check(osd.Text.Split('\n')[0]=="FPS "+menu.FrameRateText.Split(' ')[0],"OSD and original FPS share the same render sample");
-                File.WriteAllText(Path.Combine(root,"osd-sample.txt"),osd.Text);yield return Capture("mobile-osd-options");
-                menu.Activate();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"OSD off hides immediately");
-            }
-            Touch(81,TouchPhase.Began,controls.ButtonRect("MENU").center);yield return Frames(3);Touch(81,TouchPhase.Ended,Vector2.zero);yield return Frames(3);
-            Check(!menu.IsOpen&&host.Status.frontendStage==stage&&(host.Status.flags&8u)!=0,"MENU closes to same source owner");
-        }
+    private IEnumerator OpenTitleOptions(){
+        var menu=host.PauseMenu;menu.SetOpen(false);controls.ResetInput();yield return Frames(4);
+        Check(Idas3SceneModeFlowFixture(10)==1,"Private ranking/title fixture");yield return Frames(4);
+        Check(host.Status.frontendStage==0&&(host.Status.flags&1u)!=0,"Original title owner is active");
+        Touch(80,TouchPhase.Began,controls.ButtonRect("VIEW").center);
+        double deadline=Time.realtimeSinceStartupAsDouble+4;
+        while(!menu.IsOpen&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(menu.IsOpen&&menu.AttractOptions&&menu.OptionsVisible,"Long VIEW opens original title settings");
+        Touch(80,TouchPhase.Ended,Vector2.zero);yield return Frames(4);
+        Check(host.Status.frontendStage==0&&(host.Status.flags&2u)==0,"Title settings do not pause or leave original title");
+    }
+    private IEnumerator TitleMenuChecks(){
+        var menu=host.PauseMenu;menu.SetOpen(false);controls.ResetInput();yield return Frames(4);
+        Check(controls.ButtonRect("MENU")==Rect.zero&&Array.IndexOf(Idas3TouchLayout.Ids,"MENU")<0,"No independent MENU control or layout entry");
+        Check(Idas3SceneModeFlowFixture(10)==1,"Private title tap fixture");yield return Frames(4);
+        Touch(81,TouchPhase.Began,controls.ButtonRect("VIEW").center);yield return Frames(2);
+        Touch(81,TouchPhase.Ended,Vector2.zero);yield return Frames(4);
+        Check(!menu.IsOpen&&host.Status.frontendStage==0,"Short VIEW tap does not open settings");
+        yield return OpenTitleOptions();yield return Capture("mobile-title-options");
+        menu.SelectTab(8);for(int i=0;i<4;++i)menu.Navigate(1);
+        host.GameOptions.Draft.musicVolume=.6f;menu.Activate();
+        Check(host.GameOptions.Current.showOsd&&host.GameOptions.Draft.showOsd,"OSD toggle applies immediately");
+        var reloaded=new Idas3GameOptions();reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(reloaded.Current.showOsd&&reloaded.Current.musicVolume!=.6f,"OSD persists independently of unrelated draft");
+        double until=Time.realtimeSinceStartupAsDouble+.8;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
+        var osd=host.GetComponent<Idas3PerformanceOsd>();
+        Check(osd.Visible&&osd.Text.Split('\n').Length==4&&osd.Text.Contains("CPU ")&&osd.Text.Contains("GPU ")&&osd.Text.Contains("RAM ")&&osd.Text.Contains("MiB"),"Four-line measured OSD");
+        Check(osd.Text.Split('\n')[0]=="FPS "+menu.FrameRateText.Split(' ')[0],"OSD and original FPS share the same render sample");
+        File.WriteAllText(Path.Combine(root,"osd-sample.txt"),osd.Text);yield return Capture("mobile-osd-options");
+        menu.Activate();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"OSD off hides immediately");
+        // Closing via the actual virtual Start must consume the press, leaving
+        // the title intact and not reopening settings while it is held.
+        Touch(82,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
+        Check(menu.IsOpen&&menu.DiagnosticSelection==0,"First START returns to the category row");
+        Touch(82,TouchPhase.Ended,Vector2.zero);yield return Frames(4);
+        Touch(82,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(8);
+        Check(!menu.IsOpen&&host.Status.frontendStage==0&&(host.Status.flags&8u)!=0,"Second START closes title settings without starting or quitting");
+        Touch(82,TouchPhase.Ended,Vector2.zero);yield return Frames(5);controls.ResetInput();
         Check(Idas3SceneModeFlowFixture(207)==1,"Course owner for default layout capture");yield return Frames(4);
         Check(host.GameOptions.SetPerformanceOsd(true),"Enable OSD for layout capture");
-        double deadline=Time.realtimeSinceStartupAsDouble+.8;while(Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        until=Time.realtimeSinceStartupAsDouble+.8;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
         yield return Capture("mobile-default-layout-osd");Check(host.GameOptions.SetPerformanceOsd(false),"Restore isolated OSD default");
-        menu.OpenGlobalOptions(true);menu.SelectTab(9);yield return Frames(3);yield return Capture("mobile-network-options");
+        yield return OpenTitleOptions();menu.SelectTab(9);yield return Frames(3);yield return Capture("mobile-network-options");
         menu.Activate();yield return Frames(6);
         var lan=host.GetComponent<Idas3.Multiplayer.Idas3MultiplayerMenu>();
-        Check(!menu.IsOpen&&lan.IsOpen&&host.MultiplayerSession.Available&&host.MultiplayerSession.TransportIndex==1,"Network settings open the working LAN menu");
+        Check(!menu.IsOpen&&lan.IsOpen&&host.MultiplayerSession.Available&&host.MultiplayerSession.TransportIndex==1,"Title settings open the working LAN menu");
         host.MultiplayerSession.SelectTransport(0);Check(host.MultiplayerSession.TransportIndex==1,"iOS cannot select Steam");
         yield return Capture("mobile-lan-menu");lan.SetOpen(false);yield return Frames(3);
     }

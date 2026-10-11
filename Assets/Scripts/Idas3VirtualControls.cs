@@ -29,7 +29,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     private Vector2 stick;
     private int stickFinger=-1;
     private float scale,travel,brake,gas;
-    private bool previousMenu,paused;
+    private bool paused;
     internal bool DiagnosticInput {get;set;}
     internal bool CameraHeld=>held.Contains("VIEW");
     internal Rect StickRect {get{Layout();return stickRect;}}
@@ -55,7 +55,6 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         float bottom=safe.yMax-edge;
         Add("L2",right-92*scale,bottom-140*scale,92,140,true);
         Add("R2",right-216*scale,bottom-196*scale,100,196,true);
-        Add("MENU",left,top+116*scale,112,56);
         Add("R1",left,top+184*scale,96,56);
         Add("L1",left,top+252*scale,96,56);
         Add("VIEW",right-104*scale,top+96*scale,104,56);
@@ -80,7 +79,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
             ProcessTouch(t.fingerId,t.phase,new Vector2(t.position.x,Screen.height-t.position.y));}
         removed.Clear();foreach(int id in fingers.Keys)if(!seen.Contains(id))removed.Add(id);
         foreach(int id in removed)Release(id);
-        RebuildHeld();RouteMenu(host);var settings=host?.GameOptions?.Current;
+        RebuildHeld();var settings=host?.GameOptions?.Current;
         gravity.Tick(settings?.gravitySteering==true&&Driving,settings?.gravityDeadzone??.05f,settings?.gravitySensitivity??1);
     }
     // One owner per finger; leaving a button releases it without activating its
@@ -120,15 +119,9 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         }
     }
     internal void InjectGravity(double x,double y,int orientation){var settings=host.GameOptions.Current;gravity.Sample(x,y,orientation,settings.gravityDeadzone,settings.gravitySensitivity);}
-    private void RouteMenu(Idas3SceneGame game){
-        bool menu=held.Contains("MENU");
-        if(menu&&!previousMenu)game?.ToggleMobileSettings();
-        previousMenu=menu;
-    }
     internal void Apply(ref Idas3Native.FrameInput frame,Idas3SceneGame game)
     {
         if(!Focused||EditingLayout!=null)return;
-        RouteMenu(game);
         Vector2 axis=HasTouchStick?stick:game.GameOptions.Current.gravitySteering&&Driving?new Vector2(gravity.Axis,0):Vector2.zero;
         if(held.Count==0&&axis==Vector2.zero&&!HasTouchStick)return;
         frame.padConnected=1;
@@ -199,9 +192,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         if(id=="L1"||id=="R1"){Line(c+new Vector2(-s,0),c+new Vector2(s,0),color,t);if(id=="R1")Line(c+new Vector2(0,-s),c+new Vector2(0,s),color,t);}
         else if(id=="A"){Line(c+new Vector2(-s,0),c+new Vector2(-s*.2f,s*.65f),color,t);Line(c+new Vector2(-s*.2f,s*.65f),c+new Vector2(s,-s*.65f),color,t);}
         else if(id=="B"){Line(c+new Vector2(-s,0),c+new Vector2(s,0),color,t);Line(c+new Vector2(-s,0),c+new Vector2(0,-s),color,t);Line(c+new Vector2(-s,0),c+new Vector2(0,s),color,t);}
-        else if(id=="MENU"){
-            for(int i=-1;i<=1;++i)Line(c+new Vector2(-s,i*s*.6f),c+new Vector2(s,i*s*.6f),color,t);
-        }else if(id=="START"){
+        else if(id=="START"){
             var style=new GUIStyle(GUI.skin.label){fontSize=Mathf.RoundToInt(r.height*.35f),alignment=TextAnchor.MiddleCenter,padding=new RectOffset(0,0,0,0)};
             style.normal.textColor=color;GUI.Label(r,"START",style);
         }else if(id=="VIEW"){
@@ -231,7 +222,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         // Unity's rounded rectangle renderer also handles circular outlines.
         Rounded(r,color,r.width/2,border);
     }
-    internal void ResetInput(){fingers.Clear();held.Clear();stickFinger=-1;stick=Vector2.zero;brake=gas=0;previousMenu=false;gravity.Stop();}
+    internal void ResetInput(){fingers.Clear();held.Clear();stickFinger=-1;stick=Vector2.zero;brake=gas=0;gravity.Stop();}
     private void OnApplicationFocus(bool focused){if(!focused)ResetInput();}
     private void OnApplicationPause(bool value){paused=value;if(value)ResetInput();}
     private void OnDisable(){ResetInput();}

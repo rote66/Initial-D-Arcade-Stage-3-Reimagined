@@ -87,14 +87,6 @@ public sealed class Idas3SceneGame : MonoBehaviour
     internal bool PresenceAllowed => ready&&!stopping&&!diagnosticMode;
     internal bool ReplayViewerOpen => replayLibrary!=null&&replayLibrary.ViewerOpen;
     internal bool MobileSteeringAllowed=>CanOpenPause&&!pauseMenu.IsOpen&&!multiplayerMenu.BlocksGameInput&&!raceMusicMenu.BlocksGameInput&&!ReplayViewerOpen;
-    internal void ToggleMobileSettings(){
-        if(!ready||stopping||pauseMenu==null)return;
-        if(pauseMenu.IsOpen){if(pauseMenu.TouchLayoutEditing||pauseMenu.EditingHud)pauseMenu.Back();else pauseMenu.SetOpen(false);return;}
-        if(multiplayerMenu.DisconnectedFinishVisible||multiplayerMenu.ResultsVisible)return;
-        if(multiplayerMenu.IsOpen)multiplayerMenu.SetOpen(false);
-        if(raceMusicMenu.IsOpen)raceMusicMenu.SetOpen(false);
-        pauseMenu.OpenGlobalOptions(!CanOpenPause);
-    }
     internal Idas3Native.Status Status { get; private set; }
     internal float SubmissionMilliseconds => simulationAndSubmissionMs;
     internal float NativeStepMilliseconds { get; private set; }
@@ -488,9 +480,6 @@ public sealed class Idas3SceneGame : MonoBehaviour
             Idas8HakoneTimeAttackSmoke.PrepareFrame(ref frame);
             // Diagnostic input replaces gameplay controls, never output sizing.
             frame.width = renderWidth; frame.height = renderHeight;
-            // Frontend/settings use a managed overlay instead of sending the
-            // original Escape command. Freeze transitions until it closes.
-            if(pauseMenu.GlobalOptions&&pauseMenu.AttractOptions)frame.deltaSeconds=0;
             if (diagnosticMode) DiagnosticSubmittedInput = frame;
             double began = Time.realtimeSinceStartupAsDouble;
             if (Idas3SceneStep(ref frame) != 1) throw new InvalidOperationException(Idas3Native.Error());
@@ -504,7 +493,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             UpdateWheelFeedback();
             if (!OnlineRace && !challenger.Active && CanOpenPause && (Status.flags & 2u) != 0 && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen)
                 pauseMenu.SetOpen(true);
-            if (pauseMenu.IsOpen && !CanOpenPause && !OnlineRace && !pauseMenu.GlobalOptions && !(pauseMenu.AttractOptions && AttractScreen))
+            if (pauseMenu.IsOpen && !CanOpenPause && !OnlineRace && !(pauseMenu.AttractOptions && AttractScreen))
             {
                 preservePauseOnClose = true;
                 pauseMenu.SetOpen(false);
