@@ -10,6 +10,9 @@ using UnityEngine.Rendering;
 
 public static class Idas3IosBuild
 {
+    private const string ProductName="Initial D Arcade Stage3 Reimagined";
+    private const string IconPath="Assets/Branding/iOS/AppIcon.png";
+
     [MenuItem("Initial D/Build iOS 15 Test Player")]
     public static void Build()
     {
@@ -28,10 +31,11 @@ public static class Idas3IosBuild
         string pluginPath="Assets/Plugins/iOS/libIdas3Unity.a";
         if(!File.Exists(pluginPath))throw new FileNotFoundException("Build the iOS native plugin first.",pluginPath);
         PlayerSettings.companyName="IDAS3";
-        PlayerSettings.productName="Initial D iOS";
+        PlayerSettings.productName=ProductName;
+        ConfigureIcons();
         PlayerSettings.bundleVersion="0.3.95";
         PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,"org.idas3.reimagined.ios");
-        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"15";
+        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"18";
         if(!int.TryParse(buildNumber,out int number)||number<1)throw new ArgumentException("IDAS3_BUILD_NUMBER must be a positive integer.");
         PlayerSettings.iOS.buildNumber=buildNumber;
         PlayerSettings.enableFrameTimingStats=true;
@@ -81,6 +85,26 @@ public static class Idas3IosBuild
         }
     }
 
+    private static void ConfigureIcons()
+    {
+        var importer=AssetImporter.GetAtPath(IconPath) as TextureImporter;
+        if(importer==null)throw new FileNotFoundException("Missing iOS app icon.",IconPath);
+        importer.textureType=TextureImporterType.Default;
+        importer.maxTextureSize=1024;
+        importer.textureCompression=TextureImporterCompression.Uncompressed;
+        importer.alphaSource=TextureImporterAlphaSource.None;
+        importer.mipmapEnabled=false;
+        importer.SaveAndReimport();
+        var texture=AssetDatabase.LoadAssetAtPath<Texture2D>(IconPath);
+        if(texture==null||texture.width!=1024||texture.height!=1024)
+            throw new InvalidOperationException("iOS app icon must be 1024 x 1024.");
+        foreach(var kind in PlayerSettings.GetSupportedIconKinds(NamedBuildTarget.iOS)){
+            var icons=PlayerSettings.GetPlatformIcons(NamedBuildTarget.iOS,kind);
+            foreach(var icon in icons)icon.SetTexture(texture,0);
+            PlayerSettings.SetPlatformIcons(NamedBuildTarget.iOS,kind,icons);
+        }
+    }
+
     [UnityEditor.Callbacks.PostProcessBuild(200)]
     public static void Stage(BuildTarget target,string output)
     {
@@ -92,6 +116,11 @@ public static class Idas3IosBuild
             if(Directory.Exists(staged))Directory.Delete(staged,true);
         }
         var plist=new PlistDocument();string info=Path.Combine(output,"Info.plist");plist.ReadFromFile(info);
+        plist.root.SetString("CFBundleDisplayName",ProductName);
+        // Unity sanitizes the product name during export. Keep spaces for Files
+        // and installer names too, and let Xcode resolve the renamed executable.
+        plist.root.SetString("CFBundleName",ProductName);
+        plist.root.SetString("CFBundleExecutable","$(EXECUTABLE_NAME)");
         plist.root.SetString("MinimumOSVersion","15.0");
         plist.root.SetString("IDAS3UpstreamRelease","0.3.95-community-replays.46");
         plist.root.SetString("CFBundleDevelopmentRegion","en");
@@ -109,6 +138,7 @@ public static class Idas3IosBuild
         plist.root.SetBoolean("IDAS3RomValidationEnabled",!PlayerSettings.GetScriptingDefineSymbols(NamedBuildTarget.iOS).Split(';').Contains("IDAS3_DISABLE_ROM_VALIDATION"));
         plist.WriteToFile(info);
         var pbx=new PBXProject();string pbxPath=PBXProject.GetPBXProjectPath(output);pbx.ReadFromFile(pbxPath);
+        pbx.SetBuildProperty(pbx.GetUnityMainTargetGuid(),"PRODUCT_NAME",ProductName);
         pbx.AddFrameworkToProject(pbx.GetUnityFrameworkTargetGuid(),"CoreMotion.framework",false);
         pbx.AddFrameworkToProject(pbx.GetUnityFrameworkTargetGuid(),"UniformTypeIdentifiers.framework",false);
         if(PlayerSettings.iOS.sdkVersion==iOSSdkVersion.SimulatorSDK){

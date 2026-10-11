@@ -34,7 +34,10 @@ with ipa_path.open('rb') as stream:
 with zipfile.ZipFile(ipa_path) as ipa:
     installed_app_bytes = sum(p.file_size for p in ipa.infolist())
     check(ipa.testzip() is None, 'ZIP resource CRCs')
-    prefix = 'Payload/InitialDiOS.app/'
+    main_infos = [name for name in ipa.namelist()
+                  if name.startswith('Payload/') and name.endswith('.app/Info.plist') and name.count('/') == 2]
+    check(len(main_infos) == 1, 'Exactly one main Payload app')
+    prefix = main_infos[0].removesuffix('Info.plist')
     if manifest.get('unityDataCompression'):
         check(manifest['unityDataCompression'] == 'LZ4HC', 'Lossless Unity resource compression')
         with ipa.open(prefix + 'Data/data.unity3d') as stream:
@@ -45,6 +48,15 @@ with zipfile.ZipFile(ipa_path) as ipa:
                   'No duplicate loose Unity resources: ' + loose)
         check(installed_app_bytes == manifest['installedAppBytes'], 'Installed app size')
     info = plistlib.loads(ipa.read(prefix + 'Info.plist'))
+    check(info.get('CFBundleDisplayName') == manifest['displayName'] == 'Initial D Arcade Stage3 Reimagined', 'App display name')
+    check(info.get('CFBundleName') == manifest['bundleName'] == manifest['displayName'], 'Bundle name preserves display-name spaces')
+    check(Path(prefix).name == manifest['appDirectory'] == manifest['displayName'] + '.app', 'Payload app directory preserves name spaces')
+    executable = info['CFBundleExecutable']
+    check(executable == manifest['executable'] == manifest['displayName'] and '/' not in executable, 'Main executable preserves name spaces and matches manifest')
+    check(hashlib.sha256((ROOT / manifest['appIcon']['source']).read_bytes()).hexdigest() == manifest['appIcon']['sha256'], 'App icon source checksum')
+    for key in ['CFBundleIcons', 'CFBundleIcons~ipad']:
+        primary = info.get(key, {}).get('CFBundlePrimaryIcon', {})
+        check(primary.get('CFBundleIconName') == 'AppIcon' and bool(primary.get('CFBundleIconFiles')), key + ' primary icon declared')
     check(info['MinimumOSVersion'] == '15.0', 'Info.plist minimum iOS 15.0')
     check(info['CFBundleVersion'] == manifest['buildNumber'], 'Build number matches manifest')
     check(info.get('IDAS3RomValidationEnabled') == (manifest['romValidation'] == 'enabled'), 'ROM macro matches manifest')
@@ -80,14 +92,19 @@ with zipfile.ZipFile(ipa_path) as ipa:
                 (Path(scratch) / name).chmod(mode & 0o777)
         subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True, capture_output=True)
         check(True, 'Whole app and nested resource signatures verify')
-        for name in ['InitialDiOS', 'Frameworks/UnityFramework.framework/UnityFramework', 'Frameworks/UnityRuntime.framework/UnityRuntime']:
+        assets = json.loads(subprocess.check_output(['xcrun', 'assetutil', '--info', str(app / 'Assets.car')], text=True))
+        icons = [asset for asset in assets if asset.get('AssetType') == 'Icon Image' and asset.get('Name') == 'AppIcon']
+        check({120, 180, 152, 167} <= {icon['PixelWidth'] for icon in icons}, 'iPhone and iPad app icon sizes')
+        check(all(icon.get('Opaque') is True and icon['PixelWidth'] == icon['PixelHeight'] for icon in icons), 'Opaque square app icons')
+        icon_sizes = sorted({icon['PixelWidth'] for icon in icons})
+        for name in [executable, 'Frameworks/UnityFramework.framework/UnityFramework', 'Frameworks/UnityRuntime.framework/UnityRuntime']:
             path = app / name
             architecture = subprocess.check_output(['lipo', '-archs', str(path)], text=True).strip()
             commands = subprocess.check_output(['otool', '-l', str(path)], text=True)
             check(architecture == 'arm64', name + ' ARM64 device architecture')
             check('platform 2\n' in commands and 'minos 15.0\n' in commands, name + ' iOS 15 Mach-O deployment target')
             binaries[name] = {'architecture': architecture, 'platform': 'IOS', 'minimumOS': '15.0'}
-            bundle = app if name == 'InitialDiOS' else path.parent
+            bundle = app if name == executable else path.parent
             bundle_info = plistlib.loads((bundle / 'Info.plist').read_bytes())
             details = subprocess.run(['codesign', '--display', '--verbose=4', str(bundle)], check=True, capture_output=True, text=True).stderr
             identifier = bundle_info['CFBundleIdentifier']
@@ -165,6 +182,11 @@ report = {'passed': True, 'sha256': manifest['sha256'], 'checks': len(checks), '
 report['packageMode'] = manifest['packageMode']
 report['testedDataVariant'] = variant
 report['buildNumber'] = info['CFBundleVersion']
+report['displayName'] = info['CFBundleDisplayName']
+report['bundleName'] = info['CFBundleName']
+report['appDirectory'] = manifest['appDirectory']
+report['executable'] = info['CFBundleExecutable']
+report['appIcon'] = {**manifest['appIcon'], 'packagedSizes': icon_sizes, 'opaque': True}
 report['supportedDataVariants'] = ['full', 'small']
 report['nativeStorage'] = native_storage_summary()
 report['unityDataCompression'] = manifest.get('unityDataCompression', 'legacy loose')

@@ -33,7 +33,12 @@ xcodebuild -project Builds/iOS/Simulator/Xcode/Unity-iPhone.xcodeproj -scheme Un
   -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath Builds/iOS/Simulator/DerivedData CODE_SIGNING_ALLOWED=NO \
   ONLY_ACTIVE_ARCH=YES ARCHS=arm64 > Logs/ios-simulator-xcode.log 2>&1
-task_app="$task_root/Builds/iOS/Simulator/DerivedData/Build/Products/Release-iphonesimulator/InitialDiOS.app"
+shopt -s nullglob
+task_apps=("$task_root/Builds/iOS/Simulator/DerivedData/Build/Products/Release-iphonesimulator/"*.app)
+if [[ ${#task_apps[@]} != 1 ]]; then
+  echo "Expected one built Simulator app, found ${#task_apps[@]}" >&2; exit 1
+fi
+task_app="${task_apps[0]}"
 if [[ -n "${IDAS3_SIMULATOR_DEVICE:-}" ]]; then
   xcrun simctl install "$IDAS3_SIMULATOR_DEVICE" "$task_app"
   if [[ "${IDAS3_KEEP_BUILD:-0}" != "1" ]]; then python3 Tools/Clean-iOS.py simulator; fi

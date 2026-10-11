@@ -19,7 +19,7 @@ if args.keep_simulator_app:
     derived = base / 'DerivedData'
     paths += [p for p in derived.glob('*') if p.name != 'Build']
     paths += [p for p in (derived / 'Build').glob('*') if p.name != 'Products']
-    paths += [p for p in (derived / 'Build/Products/Release-iphonesimulator').glob('*') if p.name != 'InitialDiOS.app']
+    paths += [p for p in (derived / 'Build/Products/Release-iphonesimulator').glob('*') if p.suffix != '.app']
 else:
     paths += [base / 'DerivedData']
 if args.target == 'all':

@@ -98,6 +98,11 @@ temporary.replace(output)
 with output.open('rb') as stream:
     digest = hashlib.file_digest(stream, "sha256").hexdigest()
 manifest = {"file": output.name, "sha256": digest, "bytes": output.stat().st_size,
+            "displayName": info['CFBundleDisplayName'], "bundleName": info['CFBundleName'],
+            "appDirectory": app.name, "executable": info['CFBundleExecutable'],
+            "appIcon": {"source": 'Assets/Branding/iOS/AppIcon.png',
+                        "sha256": hashlib.sha256((root / 'Assets/Branding/iOS/AppIcon.png').read_bytes()).hexdigest(),
+                        "artwork": 'https://www.steamgriddb.com/grid/803589'},
             "minimumOS": info["MinimumOSVersion"], "bundleIdentifier": info["CFBundleIdentifier"],
             "signing": "adhoc/fakesigned; TrollStore or AppSync; re-sign for standard sideloading",
             "signingIdentifier": info["CFBundleIdentifier"], "signedBundles": signed,
