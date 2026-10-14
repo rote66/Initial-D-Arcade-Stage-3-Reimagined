@@ -35,7 +35,7 @@ public static class Idas3IosBuild
         ConfigureIcons();
         PlayerSettings.bundleVersion="0.3.95";
         PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,"org.idas3.reimagined.ios");
-        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"18";
+        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"19";
         if(!int.TryParse(buildNumber,out int number)||number<1)throw new ArgumentException("IDAS3_BUILD_NUMBER must be a positive integer.");
         PlayerSettings.iOS.buildNumber=buildNumber;
         PlayerSettings.enableFrameTimingStats=true;
@@ -51,6 +51,9 @@ public static class Idas3IosBuild
         PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS,false);
         PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS,new[]{GraphicsDeviceType.Metal});
         var defines=PlayerSettings.GetScriptingDefineSymbols(NamedBuildTarget.iOS).Split(';').Where(x=>!string.IsNullOrWhiteSpace(x)).ToList();
+        // The upstream desktop SDK has no iOS binary. Dynamic bindings keep its
+        // unused P/Invokes out of the static link; iOS only selects TCP.
+        if(!defines.Contains("EOS_DYNAMIC_BINDINGS"))defines.Add("EOS_DYNAMIC_BINDINGS");
         // Opt back into the official dump check with IDAS3_VERIFY_ROM=1.
         defines.Remove("IDAS3_DISABLE_ROM_VALIDATION");
         if(Environment.GetEnvironmentVariable("IDAS3_VERIFY_ROM")!="1")defines.Add("IDAS3_DISABLE_ROM_VALIDATION");
@@ -122,7 +125,7 @@ public static class Idas3IosBuild
         plist.root.SetString("CFBundleName",ProductName);
         plist.root.SetString("CFBundleExecutable","$(EXECUTABLE_NAME)");
         plist.root.SetString("MinimumOSVersion","15.0");
-        plist.root.SetString("IDAS3UpstreamRelease","0.3.95-community-replays.46");
+        plist.root.SetString("IDAS3UpstreamRelease","0.3.95-community-replays.50");
         plist.root.SetString("CFBundleDevelopmentRegion","en");
         var localizations=plist.root.CreateArray("CFBundleLocalizations");
         foreach(string language in new[]{"en","ja","zh-Hans"})localizations.AddString(language);
@@ -132,6 +135,7 @@ public static class Idas3IosBuild
         plist.root.SetString("NSLocalNetworkUsageDescription","Connect to another driver on your local Wi-Fi for a two-player LAN battle. 用于连接同一 Wi-Fi 内的另一位车手，进行双人局域网对战。");
         plist.root.SetBoolean("IDAS3LanMultiplayerEnabled",true);
         plist.root.SetBoolean("IDAS3SteamEnabled",false);
+        plist.root.SetBoolean("IDAS3EosEnabled",false);
         plist.root.SetBoolean("IDAS3DiscordEnabled",false);
         plist.root.SetBoolean("IDAS3UpdatesEnabled",false);
         plist.root.SetInteger("IDAS3GameDataVersion",Idas3AssetPaths.DataVersion);

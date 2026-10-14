@@ -15,6 +15,10 @@ internal static class Idas3Native
 #else
     internal const string Library = "Idas3Unity";
 #endif
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate void LoadKeepAliveCallback();
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern void Idas3SceneSetLoadKeepAlive(LoadKeepAliveCallback callback);
     [StructLayout(LayoutKind.Sequential, Pack=8)]
     internal struct GhostState {
         public uint size,version,flags,finishTicks6000,car;
@@ -83,6 +87,7 @@ internal static class Idas3Native
     [DllImport(Idas3Native.Library, CallingConvention=CallingConvention.Cdecl)]
     public static extern int Idas3SceneSetCustomMenuLanguage(int language);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int Idas3SceneSetSunGlare(int enabled);
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int Idas3SceneSetCameraFov(int percent);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int Idas3SceneSetMapSize(int size);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int Idas3SceneSetLightsOffAdvantage(int hide);
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)] internal static extern int Idas3SceneSetMapDisplay(int display);

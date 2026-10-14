@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "com.rlabrecque.steamworks.net": "file:com.rlabrecque.steamworks.net",
     "com.unity.inputsystem": "1.20.0",
     "com.unity.ugui": "2.6.0",
     "com.unity.modules.audio": "1.0.0",
@@ -12,6 +11,8 @@
     "com.unity.modules.timelinefoundation": "1.0.0",
     "com.unity.modules.ui": "1.0.0",
     "com.unity.modules.unitywebrequest": "1.0.0",
-    "com.unity.modules.unitywebrequestaudio": "1.0.0"
+    "com.unity.modules.unitywebrequestaudio": "1.0.0",
+    "com.unity.nuget.newtonsoft-json": "3.2.2",
+    "com.initiald.eos-sdk": "file:../ThirdParty/EOS/com.initiald.eos-sdk"
   }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+
 namespace Idas3.Multiplayer {
     public static class Idas3LobbyNames {
         public static string ForHost(string host){
@@ -8,6 +9,9 @@ namespace Idas3.Multiplayer {
             return new string(chars,0,Math.Min(chars.Length,48)).Trim()+" Lobby";
         }
     }
+
+    // A default snapshot means the service has no global population survey.
+    // Room membership is not a count of all online players.
     public struct Idas3OnlineActivity {
         public int Online,Queuing,Racing;
         public bool Available,Limited;

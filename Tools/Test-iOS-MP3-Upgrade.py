@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 import time
 from datetime import datetime
@@ -36,6 +37,7 @@ def main():
     assert int(info['CFBundleVersion']) >= 10
     container = Path(simctl('get_app_container', DEVICE, BUNDLE, 'data', capture_output=True, text=True).stdout.strip())
     docs = container / 'Documents'
+    diagnostic_root = docs / ('simulator-test-' + OUTPUT.name + '-import')
     before = json.loads((docs / 'IDAS3GameData/game-data.json').read_text())
     if args.baseline:
         baseline = json.loads(args.baseline.read_text())
@@ -49,14 +51,19 @@ def main():
                     files[file.relative_to(docs).as_posix()] = hashlib.file_digest(file.open('rb'), 'sha256').hexdigest()
         baseline = {'dataVersion': before['version'], 'files': files}
     (OUTPUT / 'baseline.json').write_text(json.dumps(baseline, indent=2) + '\n')
+    for folder in ('userdata-unity-scene', 'Touch Layouts', 'Custom Music'):
+        source = docs / folder
+        if source.is_dir():
+            shutil.copytree(source, OUTPUT / 'user-files-before' / folder)
     report = {'passed': False, 'buildNumber': info['CFBundleVersion'], 'device': DEVICE, 'beforeVersion': before['version'],
-              'scope': 'Actual runtime data gate and importer, supplied archive path bypasses the Files picker. Simulator audio engine disabled only for this process. Save/layout/custom-music hashes checked before/after.'}
+              'scope': 'Actual runtime data gate and importer, supplied archive path bypasses the Files picker. Post-import startup uses isolated diagnostic saves. Simulator audio engine disabled only for this process. Save/layout/custom-music hashes checked before/after.'}
 
     def run_launch(log_name, extra, wait_for):
         log_path = OUTPUT / log_name
         with log_path.open('w') as log:
             proc = subprocess.Popen(['xcrun', 'simctl', 'launch', '--console', '--terminate-running-process',
-                                     DEVICE, BUNDLE, '-disableaudio', '-AppleLanguages', '(zh-Hans)', *extra],
+                                     DEVICE, BUNDLE, '-disableaudio', '-AppleLanguages', '(zh-Hans)',
+                                     '-idas3-pause-smoke', str(diagnostic_root), *extra],
                                     stdout=log, stderr=subprocess.STDOUT)
             try:
                 deadline = time.monotonic() + 180
@@ -101,6 +108,8 @@ def main():
         assert not Path(str(installed) + '.previous').exists()
         report.update(passed=True, afterVersion=VERSION, importedFiles=len(manifest['files']),
                       unpackedBytes=manifest['unpackedBytes'], mp3Songs=117,
+                      archiveSha256=meta['sha256'],
+                      installedManifestChanged=before != manifest,
                       originalFullSongsRemoved=True, preservedUserFiles=len(baseline['files']),
                       saveLayoutMusicHashesUnchanged=True, stagingAndPreviousRemoved=True)
         print('Runtime data import: PASS; 117 MP3s; user files preserved', flush=True)
@@ -109,7 +118,9 @@ def main():
         raise
     finally:
         (OUTPUT / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
-        simctl('launch', DEVICE, BUNDLE, '-disableaudio')
+        if diagnostic_root.is_dir():
+            shutil.copytree(diagnostic_root, OUTPUT / 'diagnostic')
+            shutil.rmtree(diagnostic_root)
     print('Report: ' + str(OUTPUT / 'report.json'), flush=True)
 
 

@@ -95,6 +95,16 @@ public sealed class Idas3SceneGame : MonoBehaviour
     internal float NetworkMilliseconds { get; private set; }
     private bool performanceDiagnostics;
     private Idas3VirtualControls virtualControls;
+    private bool loadKeepAliveRegistered;
+    // Root the reverse-P/Invoke delegate for the entire managed lifetime. It
+    // performs transport IO only; game/native/UI methods must not be re-entered.
+    private static readonly Idas3Native.LoadKeepAliveCallback loadKeepAliveCallback=ServiceOnlineLoadKeepAlive;
+    [AOT.MonoPInvokeCallback(typeof(Idas3Native.LoadKeepAliveCallback))]
+    private static void ServiceOnlineLoadKeepAlive()
+    {
+        try { Idas3OnlineTransportPump.KeepAliveDuringNativeLoad(); }
+        catch (Exception) { /* Exceptions must never cross this native ABI. */ }
+    }
 
     [DllImport(Idas3Native.Library, CallingConvention = CallingConvention.Cdecl)]
     private static extern int Idas3SceneInitialize(
@@ -197,6 +207,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             Directory.CreateDirectory(saves);
             if (Idas3Native.Idas3SceneConfigureLanguage(Idas3GameOptions.LoadArcadeTextLanguage(saves)) != 1)
                 throw new InvalidOperationException(Idas3Native.Error());
+            Idas3Native.Idas3SceneSetLoadKeepAlive(loadKeepAliveCallback);loadKeepAliveRegistered=true;
             if (Idas3SceneInitialize(assets, saves, renderWidth, renderHeight) != 1)
                 throw new InvalidOperationException(Idas3Native.Error());
             ready = true;
@@ -214,7 +225,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             multiplayer = new Idas3MultiplayerSession(Status.car,saves);
             multiplayerMenu = gameObject.AddComponent<Idas3MultiplayerMenu>();
             multiplayerMenu.Initialize(multiplayer);
-            if(!diagnosticMode)multiplayer.InitializeOnlinePresence();
+            if(!diagnosticMode){multiplayer.InitializeOnlinePresence();multiplayer.PublishActivity=!Application.isEditor;}
             gameOptions = new Idas3GameOptions();
             gameOptions.Changed += ApplyNativeOptions;
             gameOptions.Initialize(saves);
@@ -416,7 +427,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 diagnosticPad ? null : controllerDevices.Controls, diagnosticPad ? null : controllerDevices.RigSamples);
             bool bindingInputBlocked = controlBindings.SuppressInput || controlBindings.IsCapturing;
             multiplayerMenu.ProcessControlInput(controlBindings.RawOnlineHeld, controlBindings.RawPauseHeld,
-                bindingInputBlocked || !Focused || raceMusicMenu.BlocksGameInput || musicReleaseBlocked || pauseMenu.AttractOptions || challenger.Active);
+                bindingInputBlocked || !Focused || raceMusicMenu.BlocksGameInput || musicReleaseBlocked || pauseMenu.AttractOptions || challenger.Active,
+                MenuNavigationHeld(frame) || controlBindings.ViewChangeHeld);
             if (multiplayerMenu.IsOpen && pauseMenu.IsOpen)
             {
                 // The offline race stays paused while visiting the F1 room.
@@ -454,7 +466,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 controlBindings.PauseHeld || Held(frame, 27) || Held(frame, 8) || (frame.padButtons & 0x2000) != 0,
                 !Focused || bindingInputBlocked);
             if (disconnectedFinish && !multiplayer.DisconnectedFinish) musicReleaseBlocked = true;
-            bool musicInputBlocked = UpdateRaceMusic(ref frame, bindingInputBlocked);
+            bool musicInputBlocked = UpdateRaceMusic(ref frame, bindingInputBlocked || multiplayerMenu.CapturesTextInput);
             bool attractInputBlocked = UpdateAttractOptions(ref frame, bindingInputBlocked || musicInputBlocked);
             bool savePointerBlocked = RouteSaveMenuPointer(frame, saveMenuOwnsPointer,
                 bindingInputBlocked || musicInputBlocked || attractInputBlocked || disconnectedFinish || challenger.Active || networkRoom);
@@ -588,6 +600,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
             throw new InvalidOperationException("Could not apply performance options. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetSunGlare(values.sunGlare?1:0) != 1)
             throw new InvalidOperationException("Could not apply sun glare option. " + Idas3Native.Error());
+        if (Idas3Native.Idas3SceneSetCameraFov(values.cameraFovPercent) != 1)
+            throw new InvalidOperationException("Could not apply field of view. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetAiDifficulty(values.aiDifficulty) != 1)
             throw new InvalidOperationException("Could not apply AI difficulty. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetMapDisplay(values.minimapDisplay) != 1)
@@ -634,7 +648,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
         controlBindings.ControllerDeviceChanged();
     }
 
-    private bool MusicLobbyAllowed => multiplayerMenu.IsOpen && multiplayer.InLobby && !multiplayer.IsRacing && !multiplayer.Busy && !multiplayer.HasCourseDraw;
+    private bool MusicLobbyAllowed => multiplayerMenu.IsOpen && !multiplayerMenu.CapturesTextInput && multiplayer.InLobby && !multiplayer.IsRacing && !multiplayer.Busy && !multiplayer.HasCourseDraw;
     private bool MusicOpponentAllowed => raceMusic.State.opponentEligible != 0 && !multiplayerMenu.IsOpen && !pauseMenu.IsOpen;
     private string ViewChangeHint()
     {
@@ -1125,6 +1139,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     {
         if (stopping) return;
         stopping = true;
+        if(loadKeepAliveRegistered){Idas3Native.Idas3SceneSetLoadKeepAlive(null);loadKeepAliveRegistered=false;}
         if(timeAttackGhost!=null)timeAttackGhost.ShowGhost=false;
         raceMusicMenu?.StopPreview();
         if(CustomMusic!=null)CustomMusic.StopAllCoroutines();

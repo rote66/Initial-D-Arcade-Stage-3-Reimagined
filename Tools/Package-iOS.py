@@ -111,6 +111,8 @@ manifest = {"file": output.name, "sha256": digest, "bytes": output.stat().st_siz
             "installedAppBytes": sum(p.stat().st_size for p in app.rglob('*') if p.is_file()),
             "nativeStorage": data['nativeStorage'],
             "romValidation": "enabled" if info.get("IDAS3RomValidationEnabled", True) else "disabled", "steamMultiplayer": "disabled",
+            "eosMultiplayer": "disabled" if not info.get("IDAS3EosEnabled", True) else "enabled",
+            "upstreamRelease": info["IDAS3UpstreamRelease"],
             "lanMultiplayer": "enabled", "discord": "disabled",
             "updates": "disabled" if not info.get("IDAS3UpdatesEnabled", True) else "enabled",
             "buildNumber": info["CFBundleVersion"], "touchControls": "analog stick, full-strength digital L2 brake/R2 gas, L1 downshift/R1 upshift",

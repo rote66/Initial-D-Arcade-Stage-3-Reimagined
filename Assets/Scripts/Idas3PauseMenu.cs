@@ -189,7 +189,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(pending!=Command.None){if(modalSelection==1){queued=pending;pending=Command.None;}else pending=Command.None;return;}
         if(!showOptions){MainAction(selection);return;}
         if(selection==0){selection=1;return;}
-        if(tab==2&&selection==4){if(FullTuneAvailable)queued=Command.FullTune;return;}
+        if(tab==2&&selection==5){if(FullTuneAvailable)queued=Command.FullTune;return;}
         if(MobileControls&&tab==9){if(selection==1)queued=Command.LocalNetwork;else Back();return;}
         if(MobileControls&&tab==8){if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);else if(selection==5)ToggleOsd();else Back();return;}
         if(tab==8&&selection==1){if(AttractOptions)Updates?.Activate();return;}
@@ -235,7 +235,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
     private int BindingFirstSelection=>controllerDevices!=null?2:1;
     private bool DeviceRowSelected=>controllerDevices!=null&&selection==1;
-    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?5:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?9:7):6):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
+    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?5:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
     private static int Wrap(int value,int count)=>(value%count+count)%count;
     private void Update(){
         double now=Time.realtimeSinceStartupAsDouble;options?.Tick(now);
@@ -349,15 +349,16 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(row==10)v.showFps=!v.showFps;
         }else if(tab==2){
             if(MobileControls){
-                if(row==6){ToggleGravity();return;}
-                if(GravityResponseVisible&&row==7){SetGravityResponse(Mathf.Round(options.Current.gravityDeadzone*100+direction)/100f,options.Current.gravitySensitivity);return;}
-                if(GravityResponseVisible&&row==8){SetGravityResponse(options.Current.gravityDeadzone,Mathf.Round(options.Current.gravitySensitivity*100+direction*5)/100f);return;}
+                if(row==7){ToggleGravity();return;}
+                if(GravityResponseVisible&&row==8){SetGravityResponse(Mathf.Round(options.Current.gravityDeadzone*100+direction)/100f,options.Current.gravitySensitivity);return;}
+                if(GravityResponseVisible&&row==9){SetGravityResponse(options.Current.gravityDeadzone,Mathf.Round(options.Current.gravitySensitivity*100+direction*5)/100f);return;}
             }
             if(row==0)v.defaultCamera=Wrap(v.defaultCamera+direction,CameraModes.Length);
-            if(row==1)v.aiDifficulty=Wrap(v.aiDifficulty+direction,3);
-            if(row==2)v.timeAttackGhost=!v.timeAttackGhost;
-            if(row==4)v.arcadeTextLanguage=Wrap(v.arcadeTextLanguage+direction,2);
-            if(row==5)v.customMenuLanguage=Wrap(v.customMenuLanguage+direction,3);
+            if(row==1)v.cameraFovPercent=Mathf.Clamp(v.cameraFovPercent+Math.Sign(direction),Idas3GameOptions.MinimumCameraFovPercent,Idas3GameOptions.MaximumCameraFovPercent);
+            if(row==2)v.aiDifficulty=Wrap(v.aiDifficulty+direction,3);
+            if(row==3)v.timeAttackGhost=!v.timeAttackGhost;
+            if(row==5)v.arcadeTextLanguage=Wrap(v.arcadeTextLanguage+direction,2);
+            if(row==6)v.customMenuLanguage=Wrap(v.customMenuLanguage+direction,3);
         }else if(tab==5){
             if(row==0)v.communityTimes=!v.communityTimes;
             if(row==2)v.discordPresence=!v.discordPresence;
@@ -560,26 +561,28 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             Text(new Rect(288,522,687,20),v.vSync?"Turn off VSync to use the frame limit.":"Display changes must be confirmed within 15 seconds.",small);
         }else if(tab==2){
             ChoiceRow(0,"DEFAULT CAMERA",CameraModes[v.defaultCamera]);
-            ChoiceRow(1,"AI DRIVER DIFFICULTY",new[]{"NORMAL","HARD (+5% PACE)","EXPERT (+10% PACE)"}[v.aiDifficulty]);
-            ChoiceRow(2,"TIME ATTACK GHOST",v.timeAttackGhost?"ON":"OFF");
-            Text(new Rect(290,RowY(3)+5,294,31),"FULL TUNE",label);
-            if(Button(new Rect(595,RowY(3)+2,387,35),"999999 POINTS + UPGRADES",selection==4,FullTuneAvailable)){selection=4;queued=Command.FullTune;}
-            ChoiceRow(4,"ARCADE TEXT LANGUAGE",v.arcadeTextLanguage==1?"JAPANESE":"ENGLISH");
-            ChoiceRow(5,"CUSTOM MENU LANGUAGE",Idas3MenuLocalization.LanguageNames[v.customMenuLanguage],false);
-            string help=selection==4?(FullTuneAvailable?"Choose a save, then a make and car for upgrades.":"Finish the current screen and leave online play to use Full Tune."):
-                selection==3?"Race your best saved run. New bests are saved with the ghost off, too.":
-                selection==2?"Legend of the Streets only. Bunta Challenge keeps its original difficulty.":"";
-            if(selection==5)help="Original menu and race text artwork. Apply, then restart the game. Separate from Custom Menu Language.";
-            if(selection==6)help="Pause, online, music and other custom menus only. Apply to change now. Original arcade artwork stays unchanged.";
+            FovRow(1,v);
+            ChoiceRow(2,"AI DRIVER DIFFICULTY",new[]{"NORMAL","HARD (+5% PACE)","EXPERT (+10% PACE)"}[v.aiDifficulty]);
+            ChoiceRow(3,"TIME ATTACK GHOST",v.timeAttackGhost?"ON":"OFF");
+            Text(new Rect(290,RowY(4)+5,294,31),"FULL TUNE",label);
+            if(Button(new Rect(595,RowY(4)+2,387,35),"999999 POINTS + UPGRADES",selection==5,FullTuneAvailable)){selection=5;queued=Command.FullTune;}
+            ChoiceRow(5,"ARCADE TEXT LANGUAGE",v.arcadeTextLanguage==1?"JAPANESE":"ENGLISH");
+            ChoiceRow(6,"CUSTOM MENU LANGUAGE",Idas3MenuLocalization.LanguageNames[v.customMenuLanguage],false);
+            string help=selection==5?(FullTuneAvailable?"Choose a save, then a make and car for upgrades.":"Finish the current screen and leave online play to use Full Tune."):
+                selection==4?"Race your best saved run. New bests are saved with the ghost off, too.":
+                selection==3?"Legend of the Streets only. Bunta Challenge keeps its original difficulty.":
+                selection==2?"100% keeps each camera's original view. Higher values show more road. Apply to save.":"";
+            if(selection==6)help="Original menu and race text artwork. Apply, then restart the game. Separate from Custom Menu Language.";
+            if(selection==7)help="Pause, online, music and other custom menus only. Apply to change now. Original arcade artwork stays unchanged.";
             if(MobileControls){
-                ChoiceRow(6,"GRAVITY STEERING",options.Current.gravitySteering?"ON":"OFF");
+                if(Button(new Rect(278,RowY(7),714,35),"GRAVITY STEERING: "+(options.Current.gravitySteering?"ON":"OFF"),selection==8)){selection=8;ToggleGravity();}
                 if(GravityResponseVisible){
-                    SliderRow(7,"GRAVITY DEADZONE",options.Current.gravityDeadzone,.25f,value=>SetGravityResponse(value,options.Current.gravitySensitivity));
-                    SliderRow(8,"GRAVITY SENSITIVITY",options.Current.gravitySensitivity,2,value=>SetGravityResponse(options.Current.gravityDeadzone,value),.25f);
+                    SliderRow(8,"GRAVITY DEADZONE",options.Current.gravityDeadzone,.25f,value=>SetGravityResponse(value,options.Current.gravitySensitivity));
+                    SliderRow(9,"GRAVITY SENSITIVITY",options.Current.gravitySensitivity,2,value=>SetGravityResponse(options.Current.gravityDeadzone,value),.25f);
                 }
-                if(selection>=7)help="Tilt to steer. Touching the stick takes priority. Changes apply and save immediately.";
+                if(selection>=8)help="Tilt to steer. Touching the stick takes priority. Changes apply and save immediately.";
             }
-            Text(new Rect(288,MobileControls?518:485,687,MobileControls?25:56),help,wrapped);
+            Text(new Rect(288,MobileControls?522:485,687,MobileControls?20:56),help,wrapped);
         }else if(tab==5){
             ChoiceRow(0,"COMMUNITY TIMES",v.communityTimes?"ON":"OFF");
             if(Button(new Rect(282,256,692,39),"VIEW LEADERBOARDS",selection==2)){selection=2;Application.OpenURL(Idas3CommunityTimes.ServiceUrl);}
@@ -635,7 +638,18 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         return string.IsNullOrEmpty(id)?"AUTOMATIC":"DISCONNECTED DEVICE";
     }
     private bool CompactRows=>tab==1||tab==2||tab==4||hudSizesOpen;
-    private float RowY(int row)=>tab==2?194+row*(MobileControls?35:49):tab==4?(row<3?208+row*38:354+(row-3)*38):tab==1?194+row*29:CompactRows?194+row*36:194+row*59;
+    private float RowY(int row)=>tab==2?194+row*(MobileControls?32:41):tab==4?(row<3?208+row*38:354+(row-3)*38):tab==1?194+row*29:CompactRows?194+row*36:194+row*59;
+    private void FovRow(int row,Idas3GameOptions.Values value){
+        float y=RowY(row);
+        if(selection==row+1)Frame(new Rect(278,y,714,35),Red);
+        Text(new Rect(290,y+5,294,31),"FIELD OF VIEW",label);
+        if(Button(new Rect(595,y+2,34,29),"-")){selection=row+1;Adjust(row,-1);}
+        float next=GUI.HorizontalSlider(new Rect(643,y+13,208,20),value.cameraFovPercent,Idas3GameOptions.MinimumCameraFovPercent,Idas3GameOptions.MaximumCameraFovPercent);
+        int percent=Mathf.RoundToInt(next);
+        if(percent!=value.cameraFovPercent){selection=row+1;value.cameraFovPercent=percent;notice="";}
+        Text(new Rect(855,y+5,85,29),value.cameraFovPercent+"%",button);
+        if(Button(new Rect(948,y+2,34,29),"+")){selection=row+1;Adjust(row,1);}
+    }
     private void SliderRow(int row,string name,float value,float maximum,Action<float> set,float minimum=0){
         float y=RowY(row);bool compact=CompactRows;
         if(selection==row+1)Frame(new Rect(278,y,714,compact?35:49),Red);

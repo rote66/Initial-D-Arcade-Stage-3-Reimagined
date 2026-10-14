@@ -82,9 +82,15 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Touch(11,TouchPhase.Began,controls.ButtonRect("L1").center);Touch(12,TouchPhase.Began,controls.ButtonRect("R1").center);
         Check(Key(Packet(),81)&&Key(Packet(),69)&&(Packet().padButtons&0x300)==0x300,"Shoulders map to both shift actions");controls.ResetInput();
         // Hold the actual virtual View control through the normal title owner.
-        yield return OpenTitleOptions();host.PauseMenu.SelectTab(2);for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);
+        yield return OpenTitleOptions();host.PauseMenu.SelectTab(2);
+        Check(host.PauseMenu.DiagnosticRows==8,"Gameplay contains upstream FOV and mobile gravity");
+        host.PauseMenu.Navigate(1);host.PauseMenu.NavigateHorizontal(1);
+        Check(host.GameOptions.Draft.cameraFovPercent==101,"Mobile menu adjusts upstream FOV");
+        host.PauseMenu.NavigateHorizontal(-1);
+        for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);
         host.GameOptions.Draft.musicVolume=.7f;host.PauseMenu.Activate();
         Check(host.GameOptions.Current.gravitySteering&&host.GameOptions.Draft.gravitySteering,"Live gravity toggle on");
+        Check(host.PauseMenu.DiagnosticRows==10,"Gravity response rows follow upstream gameplay settings");
         Check(host.GameOptions.Current.musicVolume==1&&host.GameOptions.Draft.musicVolume==.7f,"Live switch preserves unrelated draft");
         var reload=new Idas3GameOptions();reload.Initialize(Path.Combine(root,"userdata"));Check(reload.Current.gravitySteering&&reload.Current.musicVolume==1,"Live switch persists alone");
         host.PauseMenu.Navigate(1);host.PauseMenu.NavigateHorizontal(1);
@@ -130,7 +136,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(host.GameOptions.SetGravitySteering(false)&&Packet().thumbLX==0,"Turning off neutralizes gravity immediately");
         controls.ResetInput();Check(Packet().padButtons==0&&Packet().rightTrigger==0&&Packet().thumbLX==0,"Lifecycle reset clears contacts and motion");
         Touch(40,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(3);Touch(40,TouchPhase.Ended,Vector2.zero);yield return Frames(3);
-        Check(host.PauseMenu.IsOpen,"START touch routes actual race pause");host.PauseMenu.SelectTab(2);for(int i=0;i<6;++i)host.PauseMenu.Navigate(1);host.PauseMenu.Activate();
+        Check(host.PauseMenu.IsOpen,"START touch routes actual race pause");host.PauseMenu.SelectTab(2);for(int i=0;i<7;++i)host.PauseMenu.Navigate(1);host.PauseMenu.Activate();
         Check(host.GameOptions.Current.gravitySteering,"Switch usable while race paused");controls.InjectGravity(0,.35,3);Check(Packet().thumbLX==0,"Tilt cannot navigate pause options");
         host.PauseMenu.Activate();controls.ResetInput();host.DiagnosticFocusOverride=false;Touch(41,TouchPhase.Began,controls.ButtonRect("R2").center);Check(Packet().rightTrigger==0,"Focus gate blocks input");
         controls.ResetInput();host.DiagnosticFocusOverride=true;reload.Initialize(Path.Combine(root,"userdata"));Check(!reload.Current.gravitySteering,"Final off state saved");
@@ -318,7 +324,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         menu.Activate();yield return Frames(6);
         var lan=host.GetComponent<Idas3.Multiplayer.Idas3MultiplayerMenu>();
         Check(!menu.IsOpen&&lan.IsOpen&&host.MultiplayerSession.Available&&host.MultiplayerSession.TransportIndex==1,"Title settings open the working LAN menu");
-        host.MultiplayerSession.SelectTransport(0);Check(host.MultiplayerSession.TransportIndex==1,"iOS cannot select Steam");
+        host.MultiplayerSession.SelectTransport(0);Check(host.MultiplayerSession.TransportIndex==1,"iOS cannot select EOS internet matchmaking");
         yield return Capture("mobile-lan-menu");lan.SetOpen(false);yield return Frames(3);
     }
     private void Update(){if(finished)return;if(host?.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>160)Finish(false,"Mobile diagnostic timeout");}

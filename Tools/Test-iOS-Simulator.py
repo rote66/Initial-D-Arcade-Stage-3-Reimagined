@@ -19,6 +19,10 @@ CASES = {
     "render": ("-idas3-scene-smoke", ["-idas3-scene-render-check"]),
     "audio": ("-idas3-scene-smoke", ["-idas3-scene-realtime-audio"]),
     "pause": ("-idas3-pause-smoke", ["-idas3-pause-no-capture"]),
+    "fov": ("-idas3-pause-smoke", ["-idas3-fov-check", "-idas3-pause-scene-only-capture"]),
+    "headlights": ("-idas3-scene-smoke", ["-idas3-scene-perf-check", "-idas3-scene-perf-course", "17",
+        "-idas3-scene-perf-night", "-idas3-scene-perf-warmup", "60", "-idas3-scene-perf-frames", "60",
+        "-idas3-perf-offscreen", "-idas3-perf-manual-render", "-idas3-imported-headlight-check"]),
     "courses": ("-idas3-mode-flow-smoke", ["-idas3-pause-course-check"]),
     "gunsai": ("-gunsai-ta-smoke", []),
     "odawara": ("-odawara-ta-smoke", []),
@@ -104,9 +108,13 @@ def main():
                     except subprocess.TimeoutExpired:
                         proc.terminate()
                         proc.wait(timeout=10)
+                    if test_root.is_dir() and not test_root.is_symlink():
+                        exported = output / name
+                        if not exported.exists():
+                            shutil.copytree(test_root, exported)
+                        shutil.rmtree(test_root)
     finally:
         (output / "results.json").write_text(json.dumps(results, indent=2))
-        simctl("launch", args.device, BUNDLE, *(["-disableaudio"] if args.disable_engine_audio else []))
         print(f"Results: {output}", flush=True)
     return 0 if len(results) == len(args.cases) and all(r["passed"] for r in results.values()) else 1
 
