@@ -20,6 +20,11 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private void ToggleGravity(){notice=options.SetGravitySteering(!options.Current.gravitySteering)?"GRAVITY STEERING SAVED":options.LastError;}
     private void SetGravityResponse(float deadzone,float sensitivity){notice=options.SetGravityResponse(deadzone,sensitivity)?"GRAVITY STEERING SAVED":options.LastError;}
     private void ToggleOsd(){notice=options.SetPerformanceOsd(!options.Current.showOsd)?"OSD SAVED":options.LastError;}
+    private void ToggleDiagnostics(){
+        if(!options.SetDiagnosticLogging(!options.Current.diagnosticLogging)){notice=options.LastError;return;}
+        var diagnostics=GetComponent<Idas3IosDiagnostics>();diagnostics?.Synchronize();
+        notice=diagnostics?.LastError??(options.Current.diagnosticLogging?"DIAGNOSTIC LOGGING ON":"DIAGNOSTIC LOGS DELETED");
+    }
     private static readonly int[] HudSizeGroups={1,2,3,6,7,4,9,8,10};
     private static readonly string[] HudSizeNames={"TIME / SECTION TIMES","SPEEDOMETER / GEAR","TIME ATTACK RECORDS","LEGEND OPPONENT PANEL","ONLINE OPPONENT PANEL","REAR-VIEW MIRROR","TIME EXTENDED","ACCEPTING CHALLENGERS","ORNAMENT / KEYCHAIN"};
     public string ReplayStatus {get;set;}="Finished recordings are saved on this computer.";
@@ -44,6 +49,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private Idas3ControlBindings.ActionId captureAction;
     private Idas3ControlBindings.Slot captureSlot;
     private GUIStyle title,heading,label,small,wrapped,button,bindingButton,attractPromptStyle;
+    private GUIStyle loggingToggle;
     private bool online,canRetire,canRestart,showOptions,hudSizesOpen,previousCursorVisible;
     private bool attractPromptRequested;
     private string attractControlLabel="VIEW CHANGE";
@@ -191,7 +197,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(selection==0){selection=1;return;}
         if(tab==2&&selection==5){if(FullTuneAvailable)queued=Command.FullTune;return;}
         if(MobileControls&&tab==9){if(selection==1)queued=Command.LocalNetwork;else Back();return;}
-        if(MobileControls&&tab==8){if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);else if(selection==5)ToggleOsd();else Back();return;}
+        if(MobileControls&&tab==8){if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);else if(selection==5)ToggleOsd();else if(selection==6)ToggleDiagnostics();else Back();return;}
         if(tab==8&&selection==1){if(AttractOptions)Updates?.Activate();return;}
         if(tab==5&&selection==2){Application.OpenURL(Idas3CommunityTimes.ServiceUrl);return;}
         if(tab==6&&selection==1){queued=Command.Replays;return;}
@@ -235,7 +241,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
     private int BindingFirstSelection=>controllerDevices!=null?2:1;
     private bool DeviceRowSelected=>controllerDevices!=null&&selection==1;
-    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?5:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
+    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?6:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
     private static int Wrap(int value,int count)=>(value%count+count)%count;
     private void Update(){
         double now=Time.realtimeSinceStartupAsDouble;options?.Tick(now);
@@ -526,9 +532,17 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(Button(new Rect(282,293,692,40),"EXPORT SAVED LAYOUT",selection==3))ExportTouchLayout();
             if(Button(new Rect(282,341,692,40),"RESTORE DEFAULT LAYOUT",selection==4))OpenTouchEditor(true);
             if(Button(new Rect(282,389,692,40),"OSD DISPLAY: "+(options.Current.showOsd?"ON":"OFF"),selection==5)){selection=5;ToggleOsd();}
-            Text(new Rect(288,437,681,82),"Import a layout JSON from Files, preview it, then SAVE to keep it or CANCEL to discard it. Export saves JSON to Files for sharing.",wrapped);
-            Text(new Rect(288,530,681,42),notice,wrapped);
-            if(Button(new Rect(731,583,279,35),"BACK",selection==6))Back();return;
+            if(loggingToggle==null)loggingToggle=new GUIStyle(button){alignment=TextAnchor.MiddleLeft};
+            var loggingRect=new Rect(282,437,692,40);
+            Fill(loggingRect,Panel);Frame(loggingRect,selection==6?Red:Edge);
+            var checkbox=new Rect(loggingRect.x+12,loggingRect.y+10,20,20);
+            Fill(checkbox,options.Current.diagnosticLogging?Red:Raised);Frame(checkbox,Color.white);
+            if(options.Current.diagnosticLogging)Text(checkbox,"✓",button,translate:false);
+            Text(new Rect(loggingRect.x+44,loggingRect.y,loggingRect.width-52,loggingRect.height),"DIAGNOSTIC LOGGING",loggingToggle);
+            bool logging=GUI.Toggle(loggingRect,options.Current.diagnosticLogging,GUIContent.none,GUIStyle.none);
+            if(logging!=options.Current.diagnosticLogging){selection=6;ToggleDiagnostics();}
+            Text(new Rect(288,490,681,48),notice,wrapped);
+            if(Button(new Rect(731,583,279,35),"BACK",selection==7))Back();return;
         }
         var v=options.Draft;
         if(tab==0){

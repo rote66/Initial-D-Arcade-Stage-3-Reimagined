@@ -94,6 +94,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
     internal float UiMilliseconds { get; private set; }
     internal float NetworkMilliseconds { get; private set; }
     private bool performanceDiagnostics;
+    private Idas3IosDiagnostics iosDiagnostics;
+    private bool CollectPerformanceTimings=>performanceDiagnostics||iosDiagnostics?.Recording==true;
     private Idas3VirtualControls virtualControls;
     private bool loadKeepAliveRegistered;
     // Root the reverse-P/Invoke delegate for the entire managed lifetime. It
@@ -236,7 +238,12 @@ public sealed class Idas3SceneGame : MonoBehaviour
             pauseMenu = gameObject.AddComponent<Idas3PauseMenu>();
             pauseMenu.Initialize(gameOptions);
             gameObject.AddComponent<Idas3FrameStatistics>();
-            if(Application.platform==RuntimePlatform.IPhonePlayer)gameObject.AddComponent<Idas3PerformanceOsd>().Initialize(gameOptions);
+            if(Application.platform==RuntimePlatform.IPhonePlayer){
+                gameObject.AddComponent<Idas3PerformanceOsd>().Initialize(gameOptions);
+                iosDiagnostics=gameObject.AddComponent<Idas3IosDiagnostics>();
+                iosDiagnostics.Initialize(this,diagnosticMode?Path.Combine(Path.GetDirectoryName(saves),"Diagnostics"):
+                    Path.Combine(Application.persistentDataPath,"Diagnostics"));
+            }
             pauseMenu.Updates=Idas3Updates.Instance;
             if(pauseMenu.Updates==null&&Idas3Updates.FeatureEnabled){pauseMenu.Updates=gameObject.AddComponent<Idas3Updates>();pauseMenu.Updates.Initialize(false);}
             replayLibrary=gameObject.AddComponent<Idas3ReplayLibrary>();replayLibrary.Initialize(this,pauseMenu,saves);
@@ -376,9 +383,10 @@ public sealed class Idas3SceneGame : MonoBehaviour
             bool muteBackground = gameOptions.Current.muteWhenUnfocused && !Focused;
             if (muteBackground != appliedBackgroundMute) ApplyNativeOptions(gameOptions.Current, false);
             MatchOutputResolution();
-            double networkBegan=performanceDiagnostics?Time.realtimeSinceStartupAsDouble:0;
+            bool collectTimings=CollectPerformanceTimings;
+            double networkBegan=collectTimings?Time.realtimeSinceStartupAsDouble:0;
             multiplayer.BeforeFrame();
-            if(performanceDiagnostics)NetworkMilliseconds=(float)((Time.realtimeSinceStartupAsDouble-networkBegan)*1000);
+            if(collectTimings)NetworkMilliseconds=(float)((Time.realtimeSinceStartupAsDouble-networkBegan)*1000);
             challenger.Tick();
             var frame = new Idas3Native.FrameInput {
                 size = (uint)Marshal.SizeOf<Idas3Native.FrameInput>(),
@@ -495,12 +503,12 @@ public sealed class Idas3SceneGame : MonoBehaviour
             if (diagnosticMode) DiagnosticSubmittedInput = frame;
             double began = Time.realtimeSinceStartupAsDouble;
             if (Idas3SceneStep(ref frame) != 1) throw new InvalidOperationException(Idas3Native.Error());
-            if (performanceDiagnostics) NativeStepMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
+            if (collectTimings) NativeStepMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
             RefreshScene();
             simulationAndSubmissionMs = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
-            networkBegan=performanceDiagnostics?Time.realtimeSinceStartupAsDouble:0;
+            networkBegan=collectTimings?Time.realtimeSinceStartupAsDouble:0;
             multiplayer.AfterFrame();
-            if(performanceDiagnostics)NetworkMilliseconds+=(float)((Time.realtimeSinceStartupAsDouble-networkBegan)*1000);
+            if(collectTimings)NetworkMilliseconds+=(float)((Time.realtimeSinceStartupAsDouble-networkBegan)*1000);
             Idas3MultiplayerPresentationSmoke.AfterFrame(this,multiplayer);
             UpdateWheelFeedback();
             if (!OnlineRace && !challenger.Active && CanOpenPause && (Status.flags & 2u) != 0 && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen)
@@ -1080,13 +1088,14 @@ public sealed class Idas3SceneGame : MonoBehaviour
         Status = Idas3Native.ReadStatus();
         if (Status.state != 1 || Status.reserved != 1)
             throw new InvalidOperationException("Unity scene simulation did not initialize correctly. " + Idas3Native.Error());
-        double began = performanceDiagnostics ? Time.realtimeSinceStartupAsDouble : 0;
+        bool collectTimings=CollectPerformanceTimings;
+        double began = collectTimings ? Time.realtimeSinceStartupAsDouble : 0;
         scene.ApplyFrame();
         timeAttackGhost?.ApplyFrame();
-        if (performanceDiagnostics) RendererMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
-        began = performanceDiagnostics ? Time.realtimeSinceStartupAsDouble : 0;
+        if (collectTimings) RendererMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
+        began = collectTimings ? Time.realtimeSinceStartupAsDouble : 0;
         ui.ApplyFrame();
-        if (performanceDiagnostics) UiMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
+        if (collectTimings) UiMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
         stage = (Status.flags & 1) != 0 ? "Menu " + Status.frontendStage : "Race " + Status.racePhase;
         speedKmh = Status.speedMetresPerSecond * 3.6f;
     }

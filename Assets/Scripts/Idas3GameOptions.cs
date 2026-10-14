@@ -29,7 +29,7 @@ public sealed class Idas3GameOptions
         public bool wheelForceFeedback,wheelFeedbackInvert;
         public float wheelFeedbackStrength=.35f;
         public string wheelFeedbackDevice="";
-        public bool showFps,showOsd,muteWhenUnfocused;
+        public bool showFps,showOsd,muteWhenUnfocused,diagnosticLogging;
         public bool discordPresence=true;
         public bool hideLightsOffAdvantage=true;
         public bool communityTimes=true;
@@ -224,6 +224,11 @@ public sealed class Idas3GameOptions
         try{SaveCurrent();draft.showOsd=enabled;if(rollback!=null)rollback.showOsd=enabled;return true;}
         catch(Exception error){current.showOsd=previous;LastError="Could not save OSD. "+error.Message;return false;}
     }
+    public bool SetDiagnosticLogging(bool enabled){
+        EnsureInitialized();LastError=null;bool previous=current.diagnosticLogging;current.diagnosticLogging=enabled;
+        try{SaveCurrent();draft.diagnosticLogging=enabled;if(rollback!=null)rollback.diagnosticLogging=enabled;return true;}
+        catch(Exception error){current.diagnosticLogging=previous;LastError="Could not save diagnostic logging. "+error.Message;return false;}
+    }
     public bool SetGravityResponse(float deadzone,float sensitivity){
         EnsureInitialized();LastError=null;
         float previousDeadzone=current.gravityDeadzone,previousSensitivity=current.gravitySensitivity;
@@ -396,7 +401,7 @@ public sealed class Idas3GameOptions
         a.gravityDeadzone==b.gravityDeadzone&&a.gravitySensitivity==b.gravitySensitivity&&
         a.wheelForceFeedback==b.wheelForceFeedback&&a.wheelFeedbackStrength==b.wheelFeedbackStrength&&
         a.wheelFeedbackInvert==b.wheelFeedbackInvert&&a.wheelFeedbackDevice==b.wheelFeedbackDevice&&
-        a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
+        a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.diagnosticLogging==b.diagnosticLogging&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
         a.discordPresence==b.discordPresence&&a.hideLightsOffAdvantage==b.hideLightsOffAdvantage&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
         a.hudMeterStyle==b.hudMeterStyle&&a.hudMeterLayout==b.hudMeterLayout&&a.hudOrnamentId==b.hudOrnamentId&&a.hudShiftLights==b.hudShiftLights&&a.hudPedalIndicators==b.hudPedalIndicators&&a.hudNameplateStyle==b.hudNameplateStyle&&
         SameHudPositions(a,b)&&SameHudSizes(a,b)&&a.hudOrnamentSize==b.hudOrnamentSize&&a.hudTimeExtensionSize==b.hudTimeExtensionSize&&a.hudTimerSize==b.hudTimerSize&&a.hudSpeedometerSize==b.hudSpeedometerSize&&a.hudRecordsSize==b.hudRecordsSize&&a.hudLegendSize==b.hudLegendSize&&a.hudOnlineSize==b.hudOnlineSize&&a.hudMirrorSize==b.hudMirrorSize&&a.hudMessagesSize==b.hudMessagesSize&&a.hudChallengersSize==b.hudChallengersSize&&

@@ -53,6 +53,16 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
     }
     private IEnumerator Checks(){
         yield return Frames(6);Check(host.Ready&&controls!=null,"iOS controls initialized");host.DiagnosticFocusOverride=true;controls.DiagnosticInput=true;controls.ResetInput();
+        foreach(int fps in new[]{30,60,90,120,240}){
+            Check(Idas3FramePacing.UnityTarget(fps,true,120)==fps,"Explicit iOS cap preserved: "+fps);
+        }
+        Check(Idas3FramePacing.UnityTarget(0,true,60)==60,"Unlimited iOS maps to a 60 Hz display, not Unity's default 30");
+        Check(Idas3FramePacing.UnityTarget(0,true,120)==120,"Unlimited iOS follows a 120 Hz display");
+        Check(Idas3FramePacing.UnityTarget(0,true,0)==60&&Idas3FramePacing.UnityTarget(0,true,double.NaN)==60,"Unknown iOS refresh falls back to 60");
+        Check(Idas3FramePacing.UnityTarget(0,false,60)==-1,"Desktop unlimited behavior preserved");
+        Idas3FramePacing.Configure(false,0);
+        Check(Application.targetFrameRate==Idas3FramePacing.UnityTarget(0,true,Screen.currentResolution.refreshRateRatio.value),"Actual iOS unlimited configuration avoids default 30");
+        Idas3FramePacing.Configure(host.GameOptions.Current.vSync,host.GameOptions.Current.frameRateLimit);
         Check(!Idas3Updates.FeatureEnabled&&host.PauseMenu.Updates==null&&Idas3Updates.StartupFinished,"Updater must have no owner on iOS");
         Check(!host.GameOptions.Current.gravitySteering,"Gravity default off");
         Check(controls.ButtonRect("L2").yMin>controls.SafeRect.center.y&&controls.ButtonRect("R2").yMin>controls.SafeRect.center.y,"Both pedals in lower half");
@@ -308,6 +318,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(osd.Text.Split('\n')[0]=="FPS "+menu.FrameRateText.Split(' ')[0],"OSD and original FPS share the same render sample");
         File.WriteAllText(Path.Combine(root,"osd-sample.txt"),osd.Text);yield return Capture("mobile-osd-options");
         menu.Activate();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"OSD off hides immediately");
+        yield return DiagnosticLoggingChecks();
         // Closing via the actual virtual Start must consume the press, leaving
         // the title intact and not reopening settings while it is held.
         Touch(82,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
@@ -326,6 +337,32 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(!menu.IsOpen&&lan.IsOpen&&host.MultiplayerSession.Available&&host.MultiplayerSession.TransportIndex==1,"Title settings open the working LAN menu");
         host.MultiplayerSession.SelectTransport(0);Check(host.MultiplayerSession.TransportIndex==1,"iOS cannot select EOS internet matchmaking");
         yield return Capture("mobile-lan-menu");lan.SetOpen(false);yield return Frames(3);
+    }
+    private IEnumerator DiagnosticLoggingChecks(){
+        var menu=host.PauseMenu;var diagnostics=host.GetComponent<Idas3IosDiagnostics>();
+        Check(diagnostics!=null&&!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Diagnostic logging defaults off");
+        Check(!Directory.Exists(diagnostics.Folder),"Disabled logging creates no directory");
+        Check(menu.DiagnosticRows==6,"Touch menu includes six rows");
+        menu.Navigate(1);Check(menu.DiagnosticSelection==6,"Logging has its own touch row");
+        host.GameOptions.Draft.musicVolume=.6f;menu.Activate();
+        Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording,"Logging starts immediately");
+        var saved=new Idas3GameOptions();saved.Initialize(Path.Combine(root,"userdata"));
+        Check(saved.Current.diagnosticLogging&&saved.Current.musicVolume!=.6f,"Logging saves without applying the music draft");
+        Debug.Log("IDAS3 DIAGNOSTIC FILE SMOKE");
+        double until=Time.realtimeSinceStartupAsDouble+2.5;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
+        string runtime=Path.Combine(diagnostics.Folder,"runtime.log"),performance=Path.Combine(diagnostics.Folder,"performance.jsonl");
+        Check(File.Exists(runtime)&&File.ReadAllText(runtime).Contains("IDAS3 DIAGNOSTIC FILE SMOKE"),"Unity logs reach the background file");
+        Check(File.Exists(performance)&&File.ReadAllText(performance).Contains("\"thermalState\"")&&File.ReadAllText(performance).Contains("\"targetFps\""),"Performance files contain system and pacing metrics");
+        File.Copy(runtime,Path.Combine(root,"diagnostic-runtime-observed.log"));
+        File.Copy(performance,Path.Combine(root,"diagnostic-performance-observed.jsonl"));
+        Check(host.GetComponent<Idas3SceneGame>().NativeStepMilliseconds>=0,"Native frame timings available");
+        yield return Capture("mobile-diagnostic-logging");
+        menu.Activate();Check(!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Logging stops immediately");
+        Check(!Directory.Exists(diagnostics.Folder),"Turning logging off deletes its generated files");
+        saved.Initialize(Path.Combine(root,"userdata"));Check(!saved.Current.diagnosticLogging,"Logging off persists");
+        yield return Frames(5);
+        Check(!Directory.Exists(diagnostics.Folder),"Closed background writer cannot recreate deleted logs");
+        menu.Navigate(-1);
     }
     private void Update(){if(finished)return;if(host?.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>160)Finish(false,"Mobile diagnostic timeout");}
     private void Finish(bool passed,string error){

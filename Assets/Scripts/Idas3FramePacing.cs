@@ -32,6 +32,13 @@ public static class Idas3FramePacing
     private static Schedule schedule;
     public static int ActiveLimit=>timer!=IntPtr.Zero&&QualitySettings.vSyncCount==0&&Application.targetFrameRate==-1?limit:0;
     public static bool HighResolutionTimer=>highResolution;
+    internal static int UnityTarget(int fps,bool ios,double refreshHz){
+        if(fps>0)return fps;
+        // -1 means 30 FPS on iOS, not uncapped presentation.
+        if(!ios)return -1;
+        return refreshHz>0&&!double.IsNaN(refreshHz)&&!double.IsInfinity(refreshHz)
+            ?Math.Max(30,Math.Min(360,(int)Math.Round(refreshHz))):60;
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void Reset(){
@@ -43,7 +50,8 @@ public static class Idas3FramePacing
         fps=Math.Max(0,Math.Min(360,fps));
         QualitySettings.vSyncCount=vSync?1:0;
         if(vSync||fps==0||Application.isEditor||Application.platform!=RuntimePlatform.WindowsPlayer){
-            Shutdown();Application.targetFrameRate=fps==0?-1:fps;return;
+            Shutdown();Application.targetFrameRate=UnityTarget(fps,Application.platform==RuntimePlatform.IPhonePlayer,
+                Screen.currentResolution.refreshRateRatio.value);return;
         }
         if(limit==fps&&timer!=IntPtr.Zero){Application.targetFrameRate=-1;return;}
         Shutdown();
