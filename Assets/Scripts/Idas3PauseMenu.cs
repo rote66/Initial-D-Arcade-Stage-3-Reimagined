@@ -575,7 +575,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(selection==6)help="Original menu and race text artwork. Apply, then restart the game. Separate from Custom Menu Language.";
             if(selection==7)help="Pause, online, music and other custom menus only. Apply to change now. Original arcade artwork stays unchanged.";
             if(MobileControls){
-                if(Button(new Rect(278,RowY(7),714,35),"GRAVITY STEERING: "+(options.Current.gravitySteering?"ON":"OFF"),selection==8)){selection=8;ToggleGravity();}
+                ChoiceRow(7,"GRAVITY STEERING",options.Current.gravitySteering?"ON":"OFF");
                 if(GravityResponseVisible){
                     SliderRow(8,"GRAVITY DEADZONE",options.Current.gravityDeadzone,.25f,value=>SetGravityResponse(value,options.Current.gravitySensitivity));
                     SliderRow(9,"GRAVITY SENSITIVITY",options.Current.gravitySensitivity,2,value=>SetGravityResponse(options.Current.gravityDeadzone,value),.25f);

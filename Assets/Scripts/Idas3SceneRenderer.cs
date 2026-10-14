@@ -75,6 +75,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     private bool diagnosticDepthSubmissionBaseline;
     private bool diagnosticViewCullingBaseline;
     private ComputeBuffer framesBuffer, lightsBuffer, fogBuffer;
+    private ComputeBuffer emptyLampCells, emptyLampLights;
     private readonly float[] frameWords = new float[184];
     private readonly int[] lightWords = new int[1248], fogWords = new int[136];
     [StructLayout(LayoutKind.Sequential)] private struct UInt4 { public uint x, y, z, w; }
@@ -209,6 +210,13 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         framesBuffer = new ComputeBuffer(46, 16, ComputeBufferType.Structured);
         lightsBuffer = new ComputeBuffer(312, 16, ComputeBufferType.Structured);
         fogBuffer = new ComputeBuffer(34, 16, ComputeBufferType.Structured);
+        // Metal requires every declared buffer, even for day/no-lamp branches.
+        emptyLampCells = new ComputeBuffer(1, 8, ComputeBufferType.Structured);
+        emptyLampCells.SetData(new[] { Vector2Int.zero });
+        emptyLampLights = new ComputeBuffer(1, 16, ComputeBufferType.Structured);
+        emptyLampLights.SetData(new[] { Vector4.zero });
+        Shader.SetGlobalBuffer("_ImportedLampCells", emptyLampCells);
+        Shader.SetGlobalBuffer("_ImportedLampLights", emptyLampLights);
         Camera.onPreRender += BeforeCamera;
         initialized = true;
     }
@@ -246,6 +254,8 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         Shader.SetGlobalBuffer("_IdasFrameWords", framesBuffer);
         Shader.SetGlobalBuffer("_IdasLightWords", lightsBuffer);
         Shader.SetGlobalBuffer("_IdasFogWords", fogBuffer);
+        Shader.SetGlobalBuffer("_ImportedLampCells", emptyLampCells);
+        Shader.SetGlobalBuffer("_ImportedLampLights", emptyLampLights);
         // Form reversed depth directly from clip W. Subtracting forward clip Z
         // from W loses the tiny near-plane term in distant-world intro shots.
         // Double precision here also keeps the coefficients accurate for the
@@ -871,6 +881,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
             mirrorAlphaDepth.Release(); mirrorAlphaDepth = null;
         }
         framesBuffer?.Release(); lightsBuffer?.Release(); fogBuffer?.Release();
+        emptyLampCells?.Release(); emptyLampLights?.Release();
         foreach (var item in objects) {
             if (item.vertexCache.IsCreated) item.vertexCache.Dispose();
             if (item.material != null) Destroy(item.material); if (item.depthMaterial != null) Destroy(item.depthMaterial); if (item.mesh != null) Destroy(item.mesh);
