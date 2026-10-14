@@ -4,7 +4,7 @@ task_root="$(cd "$(dirname "$0")/.." && pwd)"
 task_unity="${IDAS3_UNITY_EDITOR:-/Applications/Unity/Hub/Editor/6000.6.4f1/Unity.app/Contents/MacOS/Unity}"
 task_mode=core-small
 task_jobs="${IDAS3_BUILD_JOBS:-8}"
-task_build_number="${IDAS3_BUILD_NUMBER:-19}"
+task_build_number="${IDAS3_BUILD_NUMBER:-25}"
 task_keep="${IDAS3_KEEP_BUILD:-0}"
 task_force=0
 task_dry=0
@@ -24,7 +24,7 @@ Modes:
 Options:
   --unity PATH       Unity editor executable (or IDAS3_UNITY_EDITOR).
   --jobs N           Native build parallelism (default 8).
-  --build-number N   iOS build number (default 19, or IDAS3_BUILD_NUMBER).
+  --build-number N   iOS build number (default 25, or IDAS3_BUILD_NUMBER).
   --clean            Clean rebuildable caches and exit; retain IPA/data/saves.
   --keep-build       Keep Xcode exports and DerivedData after success.
   --force-data       Recreate the selected data ZIP even if unchanged.
@@ -32,7 +32,7 @@ Options:
   -h, --help         Show this help.
 
 Outputs: Builds/iOS/InitialD-iOS15-full.ipa or InitialD-iOS15-core.ipa;
-         InitialD-GameData-v3-full.zip / InitialD-GameData-v3-mp3.zip.
+         InitialD-GameData-full.zip / InitialD-GameData-mp3.zip.
 Core supports BOTH data ZIPs; the IPA filename/audio support does not vary.
 All IPAs use the existing ad-hoc signature and iOS 15 ARM64 settings.
 HELP
@@ -104,7 +104,7 @@ if [[ "$task_mode" == full ]]; then
   echo "Output: $task_root/Builds/iOS/InitialD-iOS15-full.ipa (data embedded)"
 else
   echo "Output: $task_root/Builds/iOS/InitialD-iOS15-core.ipa"
-  if [[ "$task_variant" == small ]]; then task_data_name=InitialD-GameData-v3-mp3.zip;
-  else task_data_name=InitialD-GameData-v3-full.zip; fi
+  if [[ "$task_variant" == small ]]; then task_data_name=InitialD-GameData-mp3.zip;
+  else task_data_name=InitialD-GameData-full.zip; fi
   echo "Data: $task_root/Builds/iOS/$task_data_name"
 fi

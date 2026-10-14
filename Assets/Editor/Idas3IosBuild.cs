@@ -35,7 +35,7 @@ public static class Idas3IosBuild
         ConfigureIcons();
         PlayerSettings.bundleVersion="0.3.95";
         PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.iOS,"org.idas3.reimagined.ios");
-        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"19";
+        string buildNumber=Environment.GetEnvironmentVariable("IDAS3_BUILD_NUMBER")??"25";
         if(!int.TryParse(buildNumber,out int number)||number<1)throw new ArgumentException("IDAS3_BUILD_NUMBER must be a positive integer.");
         PlayerSettings.iOS.buildNumber=buildNumber;
         PlayerSettings.enableFrameTimingStats=true;

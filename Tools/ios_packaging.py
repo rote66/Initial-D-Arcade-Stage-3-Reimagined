@@ -18,7 +18,7 @@ def variant_for_mode(mode):
 
 
 def data_path(variant):
-    return OUTPUT / f'InitialD-GameData-v{VERSION}-{"mp3" if variant == "small" else "full"}.zip'
+    return OUTPUT / f'InitialD-GameData-{"mp3" if variant == "small" else "full"}.zip'
 
 
 def ipa_path(mode):
