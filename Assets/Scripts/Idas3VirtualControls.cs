@@ -30,14 +30,40 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     private int stickFinger=-1;
     private float scale,travel,brake,gas;
     private bool paused;
+    private bool drivingControls,manualControls;
+    private int telemetryFrame=-1;
     internal bool DiagnosticInput {get;set;}
-    internal bool CameraHeld=>held.Contains("VIEW");
+    internal bool CameraHeld {get{RefreshContext();return held.Contains("VIEW");}}
     internal Rect StickRect {get{Layout();return stickRect;}}
     internal float StickTravel {get{Layout();return travel;}}
     internal Rect ButtonRect(string name){Layout();foreach(var b in buttons)if(b.name==name)return b.rect;return Rect.zero;}
     internal bool HasTouchStick=>stickFinger>=0;
+    internal bool SavePointerHeld {get{foreach(var contact in fingers.Values)if(contact.owner=="SAVE")return true;return false;}}
     private bool Focused=>!paused&&(host?.DiagnosticFocusOverride??Application.isFocused);
     private bool Driving=>host!=null&&host.Ready&&host.MobileSteeringAllowed;
+    private void RefreshContext(){
+        bool driving=Driving,manual=false;
+        if(driving){
+            if(telemetryFrame!=Time.frameCount||driving!=drivingControls){
+                manual=Idas3ArcadeHud.Read(out var value)&&(value.flags&2u)==0;
+                telemetryFrame=Time.frameCount;
+            }else manual=manualControls;
+        }else telemetryFrame=-1;
+        // A held contact must not acquire a new role when entering/leaving a
+        // race or pause menu. It needs a fresh touch after the context changes.
+        if(driving!=drivingControls||manual!=manualControls)ResetInput();
+        drivingControls=driving;manualControls=manual;
+    }
+    private bool Visible(string id){
+        switch(id){
+            case "L2":case "R2":case "LIGHT":return drivingControls;
+            case "L1":case "R1":return drivingControls&&manualControls;
+            case "B":return !drivingControls;
+            case "STICK":case "START":case "VIEW":return true;
+            default:return false;
+        }
+    }
+    internal bool ControlVisible(string id,bool preview=false){RefreshContext();return preview||Visible(id);}
     private void Awake(){host=GetComponent<Idas3SceneGame>();Input.simulateMouseWithTouches=false;Layout();}
     private void Layout()
     {
@@ -60,7 +86,6 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         Add("VIEW",right-104*scale,top+96*scale,104,56);
         Add("LIGHT",right-104*scale,top+164*scale,104,56);
         Add("START",safe.center.x-64*scale,safe.yMax-edge-48*scale,128,48);
-        Add("A",right-72*scale,bottom-284*scale,72,72);
         Add("B",right-164*scale,bottom-284*scale,72,72);
         float diameter=180*scale;stickRect=new Rect(left,safe.yMax-edge-diameter,diameter,diameter);
         var layout=EditingLayout??LayoutStore.Current;
@@ -70,7 +95,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     }
     private void Update()
     {
-        Layout();if(EditingLayout!=null)return;if(DiagnosticInput)return;
+        Layout();RefreshContext();if(EditingLayout!=null)return;if(DiagnosticInput)return;
         var multiplayer=host?.GetComponent<Idas3.Multiplayer.Idas3MultiplayerMenu>();
         if(multiplayer!=null&&multiplayer.IsOpen){ResetInput();return;}
         if(!Focused){ResetInput();return;}
@@ -86,6 +111,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     // neighbor. A second stick finger cannot steal the current drag.
     internal void ProcessTouch(int id,TouchPhase phase,Vector2 point)
     {
+        RefreshContext();
         if(phase==TouchPhase.Ended||phase==TouchPhase.Canceled){Release(id);RebuildHeld();return;}
         if(phase==TouchPhase.Began){
             if(fingers.ContainsKey(id))Release(id);
@@ -93,6 +119,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
             if(hit=="STICK"){
                 fingers[id]=new Contact{owner="STICK",origin=point,point=point};stickFinger=id;stick=Vector2.zero;
             }else if(hit!=null)fingers[id]=new Contact{owner=hit,origin=point,point=point};
+            else if(!SavePointerHeld&&host.TryTouchSaveMenu(point))fingers[id]=new Contact{owner="SAVE",origin=point,point=point};
         }
         if(fingers.TryGetValue(id,out var contact)){
             contact.point=point;
@@ -103,16 +130,16 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         }
         RebuildHeld();
     }
-    internal string HitControl(Vector2 point,bool allowStick){
-        Layout();string best=null;float distance=float.MaxValue;
+    internal string HitControl(Vector2 point,bool allowStick,bool preview=false){
+        Layout();RefreshContext();string best=null;float distance=float.MaxValue;
         if(allowStick&&(point-stickRect.center).sqrMagnitude<=stickRect.width*stickRect.width/4){best="STICK";distance=(point-stickRect.center).sqrMagnitude/(stickRect.width*stickRect.width);}
-        foreach(var b in buttons)if(b.rect.Contains(point)){Vector2 d=point-b.rect.center;float n=d.x*d.x/(b.rect.width*b.rect.width)+d.y*d.y/(b.rect.height*b.rect.height);if(n<distance){best=b.name;distance=n;}}
+        foreach(var b in buttons)if((preview||Visible(b.name))&&b.rect.Contains(point)){Vector2 d=point-b.rect.center;float n=d.x*d.x/(b.rect.width*b.rect.width)+d.y*d.y/(b.rect.height*b.rect.height);if(n<distance){best=b.name;distance=n;}}
         return best;
     }
     private void Release(int id){fingers.Remove(id);if(stickFinger==id){stickFinger=-1;stick=Vector2.zero;}}
     private void RebuildHeld(){
         held.Clear();brake=gas=0;
-        foreach(var c in fingers.Values)foreach(var b in buttons)if(c.owner==b.name&&b.rect.Contains(c.point)){
+        foreach(var c in fingers.Values)foreach(var b in buttons)if(Visible(b.name)&&c.owner==b.name&&b.rect.Contains(c.point)){
             held.Add(b.name);
             if(b.name=="L2")brake=1;
             if(b.name=="R2")gas=1;
@@ -121,6 +148,7 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     internal void InjectGravity(double x,double y,int orientation){var settings=host.GameOptions.Current;gravity.Sample(x,y,orientation,settings.gravityDeadzone,settings.gravitySensitivity);}
     internal void Apply(ref Idas3Native.FrameInput frame,Idas3SceneGame game)
     {
+        RefreshContext();RebuildHeld();
         if(!Focused||EditingLayout!=null)return;
         Vector2 axis=HasTouchStick?stick:game.GameOptions.Current.gravitySteering&&Driving?new Vector2(gravity.Axis,0):Vector2.zero;
         if(held.Count==0&&axis==Vector2.zero&&!HasTouchStick)return;
@@ -131,16 +159,15 @@ public sealed class Idas3VirtualControls : MonoBehaviour
         if(HasTouchStick&&!Driving){
             if(axis.y<-.45f)frame.padButtons|=1;if(axis.y>.45f)frame.padButtons|=2;
             if(axis.x<-.45f)frame.padButtons|=4;if(axis.x>.45f)frame.padButtons|=8;
+            // Model rankings use the source gear signal. Keep that menu action
+            // on stick up/down while the separate shift buttons are hidden.
+            if(!game.PauseMenu.IsOpen&&(game.Status.flags&1u)!=0&&game.Status.frontendStage==0&&game.Status.attractChild==12){
+                if(axis.y<-.45f)frame.SetKey(69);if(axis.y>.45f)frame.SetKey(81);
+            }
         }
-        if(held.Contains("R2")){
-            frame.rightTrigger=255;
-            // Arcade prompts call Confirm the accelerator. Non-driving owners
-            // consume A, while the race consumes the full right trigger.
-            if(!Driving)frame.padButtons|=0x1000;
-        }
+        if(held.Contains("R2"))frame.rightTrigger=255;
         if(held.Contains("L2"))frame.leftTrigger=(uint)Mathf.RoundToInt(brake*255);
-        if(held.Contains("A"))frame.padButtons|=0x1000;
-        if(held.Contains("B")){if(Driving)frame.SetKey(27);else frame.padButtons|=0x2000;}
+        if(held.Contains("B"))frame.padButtons|=0x2000;
         if(held.Contains("R1")){frame.padButtons|=0x200;frame.SetKey(69);}
         if(held.Contains("L1")){frame.padButtons|=0x100;frame.SetKey(81);}
         if(held.Contains("START")){
@@ -161,9 +188,10 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     }
     internal void DrawControls(string selected,bool preview)
     {
-        Layout();
+        Layout();RefreshContext();
         float opacity=(EditingLayout??LayoutStore.Current).opacity/65f;
         foreach(var b in buttons){
+            if(!preview&&!Visible(b.name))continue;
             bool down=held.Contains(b.name);Color edge=down?new Color32(255,191,105,255):new Color32(203,216,232,166);
             Color fill=down?new Color32(88,64,30,137):new Color32(18,24,34,137);
             edge.a=Mathf.Clamp01(edge.a*opacity);fill.a=Mathf.Clamp01(fill.a*opacity);
@@ -190,7 +218,6 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     private static void DrawGlyph(Rect r,string id,Color color){
         Vector2 c=r.center;float s=Mathf.Min(r.width,r.height)*.24f,t=Mathf.Max(2,s*.13f);
         if(id=="L1"||id=="R1"){Line(c+new Vector2(-s,0),c+new Vector2(s,0),color,t);if(id=="R1")Line(c+new Vector2(0,-s),c+new Vector2(0,s),color,t);}
-        else if(id=="A"){Line(c+new Vector2(-s,0),c+new Vector2(-s*.2f,s*.65f),color,t);Line(c+new Vector2(-s*.2f,s*.65f),c+new Vector2(s,-s*.65f),color,t);}
         else if(id=="B"){Line(c+new Vector2(-s,0),c+new Vector2(s,0),color,t);Line(c+new Vector2(-s,0),c+new Vector2(0,-s),color,t);Line(c+new Vector2(-s,0),c+new Vector2(0,s),color,t);}
         else if(id=="START"){
             var style=new GUIStyle(GUI.skin.label){fontSize=Mathf.RoundToInt(r.height*.35f),alignment=TextAnchor.MiddleCenter,padding=new RectOffset(0,0,0,0)};

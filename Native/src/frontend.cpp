@@ -1151,12 +1151,14 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
             text(tr("EMPTY SLOT"),419,291,11,muted);
         }
         fill(42,440,556,1,edge);
+#if !defined(IDAS3_IOS)
         float x=43;
         for(const auto& [keyName,action]:std::initializer_list<std::pair<const char*,const char*>>{
                 {"ARROWS / STEERING","SELECT"},{"ACCEL.","CONFIRM"},{"BRAKE","BACK"}}){
             text(tr(keyName),x,451,11,white);x+=font.width(tr(keyName),11)+7;
             text(tr(action),x,451,11,muted);x+=font.width(tr(action),11)+25;
         }
+#endif
         if(saveDeleteOpen){
             fill(154,162,332,166,ink);frame(154,162,332,166,edge);fill(154,162,332,3,red);
             text(tr("ARE YOU SURE?"),320-font.width(tr("ARE YOU SURE?"),25)*.5f,186,25,white);

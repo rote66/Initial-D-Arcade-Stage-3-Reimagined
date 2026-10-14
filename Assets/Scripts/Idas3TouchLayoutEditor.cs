@@ -115,7 +115,7 @@ public sealed class Idas3TouchLayoutEditor : MonoBehaviour
             if(finger>=0)return;
             if(sizeSlider.Contains(point)){finger=id;sizing=true;SetSize(point);return;}
             if(preview.Contains(point)){
-                Vector2 gamePoint=FromPreview(point);string hit=controls.HitControl(gamePoint,true);
+                Vector2 gamePoint=FromPreview(point);string hit=controls.HitControl(gamePoint,true,true);
                 if(hit!=null){selected=hit;finger=id;sizing=false;grab=gamePoint-controls.ControlRect(hit).center;}
             }
         }else if(id==finger){
@@ -132,7 +132,7 @@ public sealed class Idas3TouchLayoutEditor : MonoBehaviour
     private static void Fill(Rect r,Color c){GUI.DrawTexture(r,Texture2D.whiteTexture,ScaleMode.StretchToFill,true,0,c,0,0);}
     private void Text(Rect r,string value,GUIStyle style){Idas3MenuLocalization.Label(r,value,style);}
     private void Button(Rect r,string value){Fill(r,new Color(.10f,.13f,.18f,.97f));GUI.DrawTexture(r,Texture2D.whiteTexture,ScaleMode.StretchToFill,true,0,new Color(.65f,.71f,.79f),1.2f*ui,7*ui);Text(r,value,label);}
-    private static string Name(string id){switch(id){case "STICK":return "STEERING STICK";case "L2":return "BRAKE";case "R2":return "ACCELERATOR";case "L1":return "SHIFT DOWN";case "R1":return "SHIFT UP";case "A":return "CONFIRM";case "B":return "BACK";default:return id;}}
+    private static string Name(string id){switch(id){case "STICK":return "STEERING STICK";case "L2":return "BRAKE";case "R2":return "ACCELERATOR";case "L1":return "SHIFT DOWN";case "R1":return "SHIFT UP";case "B":return "BACK";default:return id;}}
     private void OnGUI(){
         if(!IsOpen)return;Geometry();GUI.depth=-25000;Matrix4x4 matrix=GUI.matrix;Color color=GUI.color;GUI.matrix=Matrix4x4.identity;GUI.color=Color.white;
         if(label==null){label=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleCenter,fontStyle=FontStyle.Bold};title=new GUIStyle(label);}

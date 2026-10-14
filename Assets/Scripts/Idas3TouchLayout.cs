@@ -7,7 +7,7 @@ using UnityEngine;
 // their nearest edges in layout units. Size controls both artwork and hit bounds.
 public sealed class Idas3TouchLayout
 {
-    internal static readonly string[] Ids={"STICK","L2","R2","L1","R1","VIEW","LIGHT","START","A","B"};
+    internal static readonly string[] Ids={"STICK","L2","R2","L1","R1","VIEW","LIGHT","START","B"};
     [Serializable] public sealed class Control {
         public string id;public bool positioned,fromRight,fromBottom;public float dx,dy;public int size=100;
         public Control Clone()=>(Control)MemberwiseClone();
@@ -42,10 +42,10 @@ public sealed class Idas3TouchLayout
     internal static Values Normalize(Values value){
         var result=Defaults();result.snap=value.snap;result.opacity=Mathf.Clamp(value.opacity,20,100);var seen=new HashSet<string>();
         foreach(var c in value.controls??Array.Empty<Control>()){
-            if(c==null||(c.id!="MENU"&&Array.IndexOf(Ids,c.id)<0)||!seen.Add(c.id)||!Finite(c.dx)||!Finite(c.dy))throw new InvalidDataException("Invalid or duplicate touch control.");
-            // Older saved/exported layouts include the retired settings button.
+            if(c==null||(c.id!="MENU"&&c.id!="A"&&Array.IndexOf(Ids,c.id)<0)||!seen.Add(c.id)||!Finite(c.dx)||!Finite(c.dy))throw new InvalidDataException("Invalid or duplicate touch control.");
+            // Older saved/exported layouts include retired menu/confirm buttons.
             // Drop that entry while preserving every surviving control.
-            if(c.id=="MENU")continue;
+            if(c.id=="MENU"||c.id=="A")continue;
             var to=result.Get(c.id);to.positioned=c.positioned;to.fromRight=c.fromRight;to.fromBottom=c.fromBottom;
             to.dx=Mathf.Clamp(c.dx,0,10000);to.dy=Mathf.Clamp(c.dy,0,10000);to.size=Mathf.Clamp(c.size,50,180);
         }

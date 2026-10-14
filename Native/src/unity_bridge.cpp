@@ -472,6 +472,7 @@ IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneModeFlowValue(int field){
     case 55:return int(a.frontend.saveFiles.at(std::size_t(a.frontend.saveSelected)).level);
     case 56:return int(a.saveSlots.at(unsigned(a.frontend.saveSelected)).car);
     case 57:{int count=0;for(unsigned i=0;i<a.wetWeather.count;++i)if(a.wetWeather.quads[i].waterTrail)++count;return count;}
+    case 58:return int(a.frontend.selectedColor());
     case 41:return unsigned(a.frontend.reverse)|(unsigned(a.frontend.wet)<<1)|(unsigned(a.frontend.night)<<2);
     case 40:return int(a.smokeTextureBase);
     case 38:return int(a.drivingEffects.markCount());

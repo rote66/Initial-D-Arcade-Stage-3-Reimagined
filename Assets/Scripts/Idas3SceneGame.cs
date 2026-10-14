@@ -87,6 +87,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     internal bool PresenceAllowed => ready&&!stopping&&!diagnosticMode;
     internal bool ReplayViewerOpen => replayLibrary!=null&&replayLibrary.ViewerOpen;
     internal bool MobileSteeringAllowed=>CanOpenPause&&!pauseMenu.IsOpen&&!multiplayerMenu.BlocksGameInput&&!raceMusicMenu.BlocksGameInput&&!ReplayViewerOpen;
+    internal bool MobileSaveMenuVisible=>ready&&(Status.flags&1u)!=0&&Status.frontendStage==1;
     internal Idas3Native.Status Status { get; private set; }
     internal float SubmissionMilliseconds => simulationAndSubmissionMs;
     internal float NativeStepMilliseconds { get; private set; }
@@ -974,6 +975,12 @@ public sealed class Idas3SceneGame : MonoBehaviour
         // the same records used by its car's aura.
         saveCarLevelsLoaded=true;
     }
+    internal bool TryTouchSaveMenu(Vector2 point){
+        if(!MobileSaveMenuVisible||!Focused||pauseMenu.BlocksGameInput||multiplayerMenu.BlocksGameInput||
+           raceMusicMenu.BlocksGameInput||controlBindings.SuppressInput||challenger.Active||OnlineRace)return false;
+        if(Idas3Native.Idas3SceneSaveMenuPointer(point.x,point.y,Screen.width,Screen.height,1)!=1)return false;
+        savePointerReleaseBlocked=true;return true;
+    }
     private bool RouteSaveMenuPointer(Idas3Native.FrameInput frame, bool ownsPointer, bool inputBlocked)
     {
         bool allowed = Focused && !inputBlocked && !pauseMenu.BlocksGameInput && !multiplayerMenu.BlocksGameInput;
@@ -1002,7 +1009,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
         // input until release so it cannot also confirm the following screen.
         bool navigationHeld = MenuNavigationHeld(frame) || Held(frame, 65) || Held(frame, 68) ||
             Held(frame, 69) || Held(frame, 81) || (frame.padButtons & 0xC000u) != 0;
-        if (allowed && !mouseHeld && !navigationHeld) savePointerReleaseBlocked = false;
+        if (allowed && !mouseHeld && virtualControls?.SavePointerHeld!=true && !navigationHeld) savePointerReleaseBlocked = false;
         return true;
     }
     private void RoutePauseInput(ref Idas3Native.FrameInput frame)

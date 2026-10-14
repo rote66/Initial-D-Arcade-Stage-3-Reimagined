@@ -2744,6 +2744,11 @@ struct App {
     }
     bool renderLegendVisit(double dt){
         if(input.key(VK_RETURN)||input.button(XINPUT_GAMEPAD_A))legendConfirmPending=true;
+#if defined(IDAS3_IOS)
+        // Mobile uses Start for both skip and choice confirmation. Read its
+        // edge here so a held dialogue skip cannot accept the next choice.
+        if(legendVisit.choiceVisible()&&input.button(XINPUT_GAMEPAD_START))legendConfirmPending=true;
+#endif
         // The prompt this owner draws says "Steering SELECT", so the wheel and
         // the pad have to move the selection. Confirm already accepted the pad
         // while these two did not, which left a player on a controller able to

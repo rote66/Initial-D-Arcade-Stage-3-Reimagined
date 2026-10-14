@@ -48,6 +48,25 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         var capture=ScreenCapture.CaptureScreenshotAsTexture();try{File.WriteAllBytes(path,capture.EncodeToPNG());}finally{Destroy(capture);}
         Check(File.Exists(path)&&new FileInfo(path).Length>1000,"Missing screen capture "+name);
     }
+    private void VisibilityChecks(bool driving,bool manual){
+        foreach(string id in Idas3TouchLayout.Ids){
+            bool expected=id=="STICK"||id=="START"||id=="VIEW"||
+                (id=="B"?!driving:id=="L1"||id=="R1"?driving&&manual:driving);
+            Check(controls.ControlVisible(id)==expected,"Context visibility: "+id+", driving="+driving+", MT="+manual);
+            Check(controls.HitControl(controls.ControlRect(id).center,true)==(expected?id:null),"Only visible controls own touches: "+id);
+        }
+    }
+    private void PedalChecks(){
+        foreach(string name in new[]{"L2","R2"}){
+            Rect r=controls.ButtonRect(name);Touch(10,TouchPhase.Began,new Vector2(r.center.x,r.y+1));var top=Packet();
+            Check((name=="L2"?top.leftTrigger:top.rightTrigger)==255,"Pedal begins at full strength even at its top: "+name);
+            Touch(10,TouchPhase.Moved,r.center);var mid=Packet();Check((name=="L2"?mid.leftTrigger:mid.rightTrigger)==255,"Dragging within pedal keeps full strength: "+name);
+            Touch(10,TouchPhase.Moved,new Vector2(r.center.x,r.yMax-1));var full=Packet();Check((name=="L2"?full.leftTrigger:full.rightTrigger)==255,"Pedal bottom remains full strength: "+name);
+            Touch(10,TouchPhase.Moved,r.position-Vector2.one);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Trigger releases outside bounds");
+            Touch(10,TouchPhase.Moved,r.center);Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==255,"Re-entering captured pedal restores full strength: "+name);
+            Touch(10,TouchPhase.Ended,r.center);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Releasing pedal neutralizes both triggers");
+        }
+    }
     private IEnumerator Run(){
         // Catch exceptions while advancing each nested iterator.
         var stack=new System.Collections.Generic.Stack<IEnumerator>();stack.Push(Checks());
@@ -85,17 +104,9 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(diagonal.thumbLX>23000&&diagonal.thumbLX<23300&&diagonal.thumbLY< -23000,"Diagonal clamps radially");
         Touch(1,TouchPhase.Canceled,center);Check(!controls.HasTouchStick&&Packet().thumbLX==0,"Canceled stick resets");Touch(2,TouchPhase.Ended,center);
         Touch(3,TouchPhase.Began,controls.StickRect.position+Vector2.one);Check(!controls.HasTouchStick,"Outside circle cannot capture stick");
-        foreach(string name in new[]{"L2","R2"}){
-            Rect r=controls.ButtonRect(name);Touch(10,TouchPhase.Began,new Vector2(r.center.x,r.y+1));var top=Packet();
-            Check((name=="L2"?top.leftTrigger:top.rightTrigger)==255,"Pedal begins at full strength even at its top: "+name);
-            Touch(10,TouchPhase.Moved,r.center);var mid=Packet();Check((name=="L2"?mid.leftTrigger:mid.rightTrigger)==255,"Dragging within pedal keeps full strength: "+name);
-            Touch(10,TouchPhase.Moved,new Vector2(r.center.x,r.yMax-1));var full=Packet();Check((name=="L2"?full.leftTrigger:full.rightTrigger)==255,"Pedal bottom remains full strength: "+name);
-            Touch(10,TouchPhase.Moved,r.position-Vector2.one);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Trigger releases outside bounds");
-            Touch(10,TouchPhase.Moved,r.center);Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==255,"Re-entering captured pedal restores full strength: "+name);
-            Touch(10,TouchPhase.Ended,r.center);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Releasing pedal neutralizes both triggers");
-        }
-        Touch(11,TouchPhase.Began,controls.ButtonRect("L1").center);Touch(12,TouchPhase.Began,controls.ButtonRect("R1").center);
-        Check(Key(Packet(),81)&&Key(Packet(),69)&&(Packet().padButtons&0x300)==0x300,"Shoulders map to both shift actions");controls.ResetInput();
+        VisibilityChecks(false,false);
+        foreach(string name in new[]{"L2","R2","L1","R1","LIGHT"})Touch(10+Array.IndexOf(Idas3TouchLayout.Ids,name),TouchPhase.Began,controls.ButtonRect(name).center);
+        Check(Packet().padButtons==0&&Packet().leftTrigger==0&&Packet().rightTrigger==0&&!Key(Packet(),69)&&!Key(Packet(),81)&&!Key(Packet(),72),"Menu hidden driving buttons cannot send input");controls.ResetInput();
         // Hold the actual virtual View control through the normal title owner.
         yield return OpenTitleOptions();host.PauseMenu.SelectTab(2);
         Check(host.PauseMenu.DiagnosticRows==8,"Gameplay contains upstream FOV and mobile gravity");
@@ -116,9 +127,14 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(reload.Current.gravityDeadzone==host.GameOptions.Current.gravityDeadzone&&reload.Current.gravitySensitivity==host.GameOptions.Current.gravitySensitivity&&reload.Current.musicVolume==1,"Gravity response saves independently");
         Check(host.GameOptions.SetGravityResponse(.05f,1),"Restore default gravity response");
         yield return Capture("mobile-options");host.PauseMenu.Navigate(-1);host.PauseMenu.Navigate(-1);host.PauseMenu.Activate();Check(!host.GameOptions.Current.gravitySteering,"Live toggle off");host.PauseMenu.SetOpen(false);yield return Frames(3);
+        yield return SelectManualTransmission();
         pulse=116;double deadline=Time.realtimeSinceStartupAsDouble+40;
-        while(!host.MobileSteeringAllowed&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
-        Check(host.MobileSteeringAllowed,"Native race started");yield return Frames(10);
+        while((!host.MobileSteeringAllowed||host.Status.racePhase!=2)&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(host.MobileSteeringAllowed&&host.Status.racePhase==2,"Native race is running after countdown");yield return Frames(10);
+        Check(Idas3ArcadeHud.Read(out var transmission)&&(transmission.flags&2u)==0,"Selected MT reaches the actual race telemetry");
+        VisibilityChecks(true,true);PedalChecks();
+        Touch(11,TouchPhase.Began,controls.ButtonRect("L1").center);Touch(12,TouchPhase.Began,controls.ButtonRect("R1").center);
+        Check(Key(Packet(),81)&&Key(Packet(),69)&&(Packet().padButtons&0x300)==0x300,"MT shoulders map to both shift actions");controls.ResetInput();
         var nativeOptions=Idas3Native.ReadOptions();nativeOptions.cameraView=1;
         Check(Idas3Native.Idas3SceneApplyOptions(ref nativeOptions)==1,"Set current player view");
         Check(host.GameOptions.SetGravitySteering(true),"Enable during race");
@@ -155,14 +171,71 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(host.GameOptions.Current.gravitySteering,"Switch usable while race paused");controls.InjectGravity(0,.35,3);Check(Packet().thumbLX==0,"Tilt cannot navigate pause options");
         host.PauseMenu.Activate();controls.ResetInput();host.DiagnosticFocusOverride=false;Touch(41,TouchPhase.Began,controls.ButtonRect("R2").center);Check(Packet().rightTrigger==0,"Focus gate blocks input");
         controls.ResetInput();host.DiagnosticFocusOverride=true;reload.Initialize(Path.Combine(root,"userdata"));Check(!reload.Current.gravitySteering,"Final off state saved");
-        yield return LayoutChecks();yield return TitleMenuChecks();yield return StoryAndTuningChecks();yield return LocalizationChecks();Finish(true,null);
+        yield return ControlContextChecks();yield return LayoutChecks();yield return TitleMenuChecks();yield return StoryAndTuningChecks();yield return SaveTouchChecks();yield return LocalizationChecks();Finish(true,null);
+    }
+    private IEnumerator SelectManualTransmission(){
+        controls.ResetInput();Check(Idas3SceneModeFlowFixture(430)==1,"Private car-selection fixture");yield return Frames(5);
+        Check(host.Status.frontendStage==3,"Actual car selection is active");VisibilityChecks(false,false);
+        int color=Idas3SceneModeFlowValue(58);Vector2 center=controls.StickRect.center;
+        Touch(110,TouchPhase.Began,center);Touch(110,TouchPhase.Moved,center-Vector2.up*controls.StickTravel);yield return Frames(4);
+        Touch(110,TouchPhase.Ended,center);Check(Idas3SceneModeFlowValue(58)!=color,"Stick up changes factory paint with hidden shift buttons");
+        Check(!controls.ControlVisible("A"),"Car selection uses START without a redundant checkmark");
+        Touch(111,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(3);Touch(111,TouchPhase.Ended,Vector2.zero);
+        for(int i=0;i<300&&host.Status.frontendStage==3;++i)yield return null;
+        Check(host.Status.frontendStage==4,"START confirms the real car selection");
+        for(int i=0;i<60&&Idas3SceneModeFlowValue(27)!=1;++i)yield return null;
+        Touch(112,TouchPhase.Began,center);Touch(112,TouchPhase.Moved,center+Vector2.right*controls.StickTravel);yield return Frames(4);Touch(112,TouchPhase.Ended,center);
+        Check(Idas3SceneModeFlowValue(51)==0,"Stick selects MT on the real transmission screen");VisibilityChecks(false,false);
+        yield return Capture("mobile-mt-selection");
+        Touch(113,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(3);Touch(113,TouchPhase.Ended,Vector2.zero);
+        for(int i=0;i<300&&host.Status.frontendStage==4;++i)yield return null;
+        Check(host.Status.frontendStage==5&&Idas3SceneModeFlowValue(51)==0,"MT choice confirmed before starting the race");controls.ResetInput();
+    }
+    private IEnumerator ControlContextChecks(){
+        host.PauseMenu.SetOpen(false);controls.ResetInput();
+        Check(Idas3SceneModeFlowFixture(428)==1,"Private running AT fixture");yield return Frames(4);
+        Check(host.MobileSteeringAllowed&&Idas3ArcadeHud.Read(out var at)&&(at.flags&2u)!=0,"Production telemetry identifies AT");VisibilityChecks(true,false);
+        int finger=120;
+        foreach(string id in new[]{"A","B","L1","R1"})Touch(finger++,TouchPhase.Began,controls.ButtonRect(id).center);
+        Check(Packet().padButtons==0&&!Key(Packet(),27)&&!Key(Packet(),69)&&!Key(Packet(),81),"AT hidden confirm, back and shift controls send nothing");
+        yield return Frames(3);Check(!host.PauseMenu.IsOpen,"Hidden back cannot pause an AT race");controls.ResetInput();
+        int lamps=Idas3SceneModeFlowValue(36);
+        Touch(125,TouchPhase.Began,controls.ButtonRect("LIGHT").center);Check(Key(Packet(),72),"Visible lamp emits H");yield return Frames(3);Touch(125,TouchPhase.Ended,Vector2.zero);
+        Check(Idas3SceneModeFlowValue(36)!=lamps,"Lamp changes the actual running-race headlights");
+        uint camera=Idas3Native.ReadOptions().cameraView;
+        Touch(126,TouchPhase.Began,controls.ButtonRect("VIEW").center);yield return Frames(3);Touch(126,TouchPhase.Ended,Vector2.zero);
+        Check(Idas3Native.ReadOptions().cameraView!=camera,"VIEW still changes the driving camera");yield return Capture("mobile-driving-at");
+        Check(Idas3SceneModeFlowFixture(429)==1,"Private running MT fixture");yield return Frames(4);
+        Check(host.MobileSteeringAllowed&&Idas3ArcadeHud.Read(out var mt)&&(mt.flags&2u)==0,"Production telemetry identifies MT");VisibilityChecks(true,true);
+        Touch(127,TouchPhase.Began,controls.ButtonRect("R1").center);yield return Frames(3);
+        Check(Key(host.DiagnosticSubmittedInput,69)&&(host.DiagnosticSubmittedInput.padButtons&0x200)!=0,"Visible MT shift reaches native input");
+        yield return Capture("mobile-driving-mt");Touch(127,TouchPhase.Ended,Vector2.zero);
+        // Hold gas through pause and resume. Moving the old finger must never
+        // regain the pedal or activate a newly visible menu control.
+        Vector2 gas=controls.ButtonRect("R2").center;
+        Touch(128,TouchPhase.Began,gas);Check(Packet().rightTrigger==255,"Gas held before pause");
+        Touch(129,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
+        Check(host.PauseMenu.IsOpen,"START is the virtual race-pause entry");VisibilityChecks(false,false);
+        Touch(129,TouchPhase.Ended,Vector2.zero);Touch(128,TouchPhase.Moved,gas);
+        Check(Packet().rightTrigger==0&&Packet().leftTrigger==0&&(Packet().padButtons&0x3000)==0,"Held gas is released when pause opens");yield return Capture("mobile-paused-controls");
+        Touch(130,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);Touch(130,TouchPhase.Ended,Vector2.zero);yield return Frames(4);
+        Check(!host.PauseMenu.IsOpen&&host.MobileSteeringAllowed,"START resumes from the root pause menu");VisibilityChecks(true,true);
+        Touch(128,TouchPhase.Moved,gas);Check(Packet().rightTrigger==0,"Old gas finger stays neutral after resume");
+        Touch(128,TouchPhase.Ended,gas);Touch(128,TouchPhase.Began,gas);Check(Packet().rightTrigger==255,"Fresh gas touch works after resume");Touch(128,TouchPhase.Ended,gas);
+        Touch(131,TouchPhase.Began,controls.ButtonRect("L2").center);Check(Packet().leftTrigger==255,"Brake held before result transition");
+        Check(Idas3SceneModeFlowFixture(4)==1,"Private actual post-race owner");yield return Frames(4);
+        VisibilityChecks(false,false);Touch(131,TouchPhase.Moved,controls.ButtonRect("L2").center);
+        Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Result transition releases hidden pedals");Touch(131,TouchPhase.Ended,Vector2.zero);
+        Check(Idas3SceneModeFlowFixture(429)==1,"Restore private MT race for layout checks");yield return Frames(4);
+        Touch(132,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);Touch(132,TouchPhase.Ended,Vector2.zero);
+        Check(host.PauseMenu.IsOpen,"Restore pause menu for layout checks");controls.ResetInput();
     }
     private IEnumerator StoryAndTuningChecks(){
         host.PauseMenu.SetOpen(false);controls.ResetInput();
         Check(Idas3SceneModeFlowFixture(425)==1,"Source story fixture");yield return Frames(3);
         Check((host.Status.flags&512u)!=0,"Source story is active");
-        Touch(90,TouchPhase.Began,controls.ButtonRect("A").center);Check((Packet().padButtons&0x1000)!=0&&(Packet().padButtons&16)==0,"Checkmark is A, separate from Start");
-        yield return Frames(3);Touch(90,TouchPhase.Ended,Vector2.zero);
+        Check(!controls.ControlVisible("A"),"Pre-race story needs only its START skip control");
+        Check(controls.ButtonRect("A")==Rect.zero&&Array.IndexOf(Idas3TouchLayout.Ids,"A")<0,"Checkmark is removed from controls and layout editor");
         Touch(91,TouchPhase.Began,controls.ButtonRect("START").center);
         Check((Packet().padButtons&16)!=0&&!Key(Packet(),13),"Story Start emits real pad Start, not menu Enter");
         yield return Frames(3);Check((host.DiagnosticSubmittedInput.padButtons&16)!=0,"Story Start reaches native submission");
@@ -171,19 +244,68 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Touch(91,TouchPhase.Ended,Vector2.zero);controls.ResetInput();yield return Frames(3);
         Check(Idas3SceneModeFlowFixture(426)==1,"Source tuning-route fixture");yield return Frames(4);
         Check(host.Status.frontendStage==12,"Real tuning route is active");yield return Capture("mobile-tuning-route");
-        Touch(92,TouchPhase.Began,controls.ButtonRect("R2").center);
-        Check(Packet().rightTrigger==255&&(Packet().padButtons&0x1000)!=0,"Accelerator maps to full trigger and arcade Confirm in tuning");
+        VisibilityChecks(false,false);Touch(92,TouchPhase.Began,controls.ButtonRect("START").center);
+        Check(Packet().rightTrigger==0&&(Packet().padButtons&0x10)!=0,"START confirms the tuning route with hidden pedals");
         yield return Frames(3);Touch(92,TouchPhase.Ended,Vector2.zero);
         for(int i=0;i<250&&host.Status.frontendStage==12;++i)yield return null;
-        Check(host.Status.frontendStage==5,"Accelerator confirms actual tuning route");controls.ResetInput();
+        Check(host.Status.frontendStage==5,"START confirms actual tuning route");controls.ResetInput();
         Check(Idas3SceneModeFlowFixture(427)==1,"Source optional-parts fixture: "+Idas3Native.Error());yield return Frames(4);
         Check(Idas3SceneModeFlowValue(23)==1&&Idas3SceneModeFlowValue(26)==0,"Optional part waits for confirmation");
+        Check(!controls.ControlVisible("A"),"Optional-part purchase uses START without a checkmark");
         int before=Idas3SceneModeFlowValue(25);Vector2 center=controls.StickRect.center;
         Touch(93,TouchPhase.Began,center);Touch(93,TouchPhase.Moved,center-Vector2.right*controls.StickTravel);yield return Frames(5);
-        Touch(94,TouchPhase.Began,controls.ButtonRect("R2").center);yield return Frames(4);Touch(94,TouchPhase.Ended,Vector2.zero);Touch(93,TouchPhase.Ended,Vector2.zero);
+        Touch(94,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);Touch(94,TouchPhase.Ended,Vector2.zero);Touch(93,TouchPhase.Ended,Vector2.zero);
         for(int i=0;i<250&&Idas3SceneModeFlowValue(25)==before;++i)yield return null;
-        Check(Idas3SceneModeFlowValue(25)<before,"Accelerator purchases actual optional part");yield return Capture("mobile-tuning-confirmed");
+        Check(Idas3SceneModeFlowValue(25)<before,"START purchases actual optional part");yield return Capture("mobile-tuning-confirmed");
+        foreach(int fixture in new[]{431,432}){
+            controls.ResetInput();Check(Idas3SceneModeFlowFixture(fixture)==1,"Private Legend choice fixture");yield return Frames(4);
+            Check((host.Status.flags&96u)==96u&&!host.PauseMenu.IsOpen,"Legend choice is active");
+            VisibilityChecks(false,false);yield return Capture(fixture==431?"mobile-legend-continue":"mobile-legend-next-rival");
+            Touch(95,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
+            Check(!host.PauseMenu.IsOpen,"Legend choice START does not pause");
+            Touch(95,TouchPhase.Ended,Vector2.zero);
+            for(int i=0;i<120&&(host.Status.flags&96u)==96u;++i)yield return null;
+            Check((host.Status.flags&96u)!=96u,"START confirms actual Legend choice");
+        }
         controls.ResetInput();Check(Idas3SceneModeFlowFixture(207)==1,"Return to isolated course screen");yield return Frames(3);
+    }
+    private static Vector2 SaveTouchPoint(float x,float y){
+        float fit=Mathf.Min(Screen.width/640f,Screen.height/480f);
+        int width=Mathf.Max(1,(int)(640*fit)),height=Mathf.Max(1,(int)(480*fit));
+        return new Vector2((Screen.width-width)/2+x*width/640f,(Screen.height-height)/2+y*height/480f);
+    }
+    private IEnumerator SaveTouchChecks(){
+        host.PauseMenu.SetOpen(false);controls.ResetInput();
+        Check(Idas3SceneModeFlowFixture(350)==1,"Private touch Save Select fixture");yield return Frames(5);
+        Check(host.MobileSaveMenuVisible&&!controls.ControlVisible("A"),"Clickable Save Select omits the redundant checkmark");
+        VisibilityChecks(false,false);yield return Capture("mobile-save-touch");
+        Vector2 slot=SaveTouchPoint(150,130),proceed=SaveTouchPoint(380,380);
+        Touch(150,TouchPhase.Began,slot);Check(controls.SavePointerHeld,"Touch captures the native save pointer");
+        yield return Frames(4);Check(Idas3SceneModeFlowValue(42)==1,"Touching a used save opens its actions");
+        Touch(151,TouchPhase.Began,proceed);Touch(150,TouchPhase.Moved,proceed);yield return Frames(4);
+        Check(host.MobileSaveMenuVisible&&Idas3SceneModeFlowValue(42)==1,"Moving the captured touch or adding another finger cannot confirm Continue");
+        Touch(151,TouchPhase.Ended,proceed);Touch(150,TouchPhase.Ended,proceed);yield return Frames(3);
+        Check(!controls.SavePointerHeld,"Releasing native touch clears pointer ownership");
+        Vector2 remove=SaveTouchPoint(400,410),cancel=SaveTouchPoint(240,288);
+        Touch(152,TouchPhase.Began,remove);yield return Frames(3);Touch(152,TouchPhase.Ended,remove);yield return Frames(3);
+        Check(Idas3SceneModeFlowValue(52)==1&&Idas3SceneModeFlowValue(53)==0,"Touch opens delete confirmation with safe No selected");
+        Touch(153,TouchPhase.Began,cancel);yield return Frames(3);Touch(153,TouchPhase.Ended,cancel);yield return Frames(3);
+        Check(Idas3SceneModeFlowValue(52)==0&&Idas3SceneModeFlowValue(42)==1,"Touching No cancels deletion without a checkmark");
+        Touch(154,TouchPhase.Began,proceed);yield return Frames(12);
+        Check(host.Status.frontendStage==4,"Touch Continue reaches the saved car's transmission screen");
+        Check(controls.SavePointerHeld&&host.DiagnosticSubmittedInput.padButtons==0,"Held save touch cannot confirm the following screen");
+        Touch(154,TouchPhase.Ended,proceed);yield return Frames(3);controls.ResetInput();
+        double deadline=Time.realtimeSinceStartupAsDouble+3;
+        while(Idas3SceneModeFlowValue(27)==0&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(Idas3SceneModeFlowValue(27)==1,"Saved transmission is ready before a fresh confirmation");
+        Touch(155,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
+        Check((host.DiagnosticSubmittedInput.padButtons&16)!=0,"Fresh START reaches native after the save touch releases");
+        Touch(155,TouchPhase.Ended,Vector2.zero);
+        // The source confirmation holds for over 120 native ticks plus fade.
+        // Render frames vary with the display refresh rate.
+        deadline=Time.realtimeSinceStartupAsDouble+5;
+        while(host.Status.frontendStage==4&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(host.Status.frontendStage==5,"Fresh START confirms saved transmission and reaches Mode; stage="+host.Status.frontendStage);
     }
     private IEnumerator LocalizationChecks(){
         int previous=Idas3MenuLocalization.Language;var menu=host.PauseMenu;
@@ -220,6 +342,10 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
     private IEnumerator LayoutChecks(){
         var menu=host.PauseMenu;menu.SelectTab(8);Check(menu.SelectedTab==8,"Touch layout settings category reachable");yield return Frames(3);menu.Activate();
         Check(menu.TouchLayoutEditing&&controls.EditingLayout!=null,"Layout editor opens through settings");var editor=menu.TouchEditor;
+        foreach(string id in Idas3TouchLayout.Ids){
+            Check(controls.ControlVisible(id,true),"Editor displays even context-hidden controls: "+id);
+            Check(controls.HitControl(controls.ControlRect(id).center,true,true)==id,"Editor can select every control: "+id);
+        }
         Rect original=controls.ButtonRect("R2");Vector2 start=editor.ToPreview(original.center),end=editor.ToPreview(original.center+new Vector2(-160,80)*controls.LayoutUnit);
         Check((editor.FromPreview(start)-original.center).magnitude<.1f,"Preview pointer maps to actual game bounds");
         editor.ProcessTouch(60,TouchPhase.Began,start);editor.ProcessTouch(60,TouchPhase.Moved,end);editor.ProcessTouch(60,TouchPhase.Ended,end);
@@ -236,20 +362,25 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(layout.Current.Get("R2").size==150&&layout.Current.Get("R2").positioned,"Layout persists across reload");
         var wider=new Rect(0,0,1800,720);var narrower=new Rect(0,0,1280,720);Rect a=Idas3TouchLayout.Place(layout.Current,"R2",new Rect(1180,100,82,116),narrower,1),b=Idas3TouchLayout.Place(layout.Current,"R2",new Rect(1700,100,82,116),wider,1);
         Check(Mathf.Abs((wider.xMax-b.center.x)-(narrower.xMax-a.center.x))<.1f,"Edge distance preserved across different aspect ratios");
-        Touch(62,TouchPhase.Began,new Vector2(saved.center.x,saved.yMax-1));Check(Packet().rightTrigger>=250,"Saved enlarged bounds operate trigger");Touch(62,TouchPhase.Ended,saved.center);
+        menu.SetOpen(false);yield return Frames(4);
+        Check(host.MobileSteeringAllowed,"Resume MT race to test saved pedal bounds");
+        Touch(62,TouchPhase.Began,new Vector2(saved.center.x,saved.yMax-1));Check(Packet().rightTrigger>=250,"Saved enlarged bounds operate trigger in a race");Touch(62,TouchPhase.Ended,saved.center);
         Touch(63,TouchPhase.Began,original.center);Check(Packet().rightTrigger==0,"Previous position no longer operates moved control");Touch(63,TouchPhase.Ended,original.center);
+        Touch(66,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);Touch(66,TouchPhase.Ended,Vector2.zero);
+        Check(menu.IsOpen,"Return to pause after saved pedal bounds check");menu.SelectTab(8);
         yield return Frames(3);menu.Activate();editor=menu.TouchEditor;string export=editor.Export();
         Check(export!=null&&File.Exists(export),"JSON export created");var parsed=Idas3TouchLayout.Parse(File.ReadAllText(export));
         Check(parsed.Get("R2").size==150&&parsed.Get("R2").dx==layout.Current.Get("R2").dx,"Export contains saved size and anchor");
         bool rejected=false;try{Idas3TouchLayout.Parse("{\"schema\":\"wrong\",\"version\":1,\"controls\":[]}");}catch{rejected=true;}Check(rejected,"Unsupported layout rejected");
         var legacy=parsed.Clone();legacy.snap=false;legacy.opacity=42;
-        Array.Resize(ref legacy.controls,legacy.controls.Length+1);legacy.controls[legacy.controls.Length-1]=new Idas3TouchLayout.Control{id="MENU",positioned=true,dx=25,dy=30,size=140};
+        Array.Resize(ref legacy.controls,legacy.controls.Length+2);legacy.controls[legacy.controls.Length-2]=new Idas3TouchLayout.Control{id="MENU",positioned=true,dx=25,dy=30,size=140};
+        legacy.controls[legacy.controls.Length-1]=new Idas3TouchLayout.Control{id="A",positioned=true,dx=90,dy=150,size=120};
         var migrated=Idas3TouchLayout.Parse(JsonUtility.ToJson(legacy));
-        Check(migrated.controls.Length==Idas3TouchLayout.Ids.Length&&!migrated.snap&&migrated.opacity==42,"Legacy MENU entry is dropped without resetting layout preferences");
+        Check(migrated.controls.Length==Idas3TouchLayout.Ids.Length&&!migrated.snap&&migrated.opacity==42,"Legacy MENU and A entries are dropped without resetting layout preferences");
         foreach(var c in parsed.controls){var kept=migrated.Get(c.id);Check(JsonUtility.ToJson(c)==JsonUtility.ToJson(kept),"Legacy layout preserves "+c.id);}
         string legacyRoot=Path.Combine(root,"legacy-touch-layout");Directory.CreateDirectory(legacyRoot);File.WriteAllText(Path.Combine(legacyRoot,"touch-layout.json"),JsonUtility.ToJson(legacy));
         var legacyStore=new Idas3TouchLayout();legacyStore.Initialize(legacyRoot);
-        Check(legacyStore.LastError==null&&JsonUtility.ToJson(legacyStore.Current)==JsonUtility.ToJson(migrated),"Production startup loads old MENU layout without resetting controls");
+        Check(legacyStore.LastError==null&&JsonUtility.ToJson(legacyStore.Current)==JsonUtility.ToJson(migrated),"Production startup loads old MENU/A layout without resetting controls");
         legacy.controls[legacy.controls.Length-1].id="UNKNOWN";
         rejected=false;try{Idas3TouchLayout.Parse(JsonUtility.ToJson(legacy));}catch{rejected=true;}Check(rejected,"Migration still rejects unknown controls");
         legacy.controls[legacy.controls.Length-1].id="R2";
@@ -278,10 +409,12 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         editor.BeginImport();editor.SelectedTouchLayout("");
         Check(!editor.SelectingImport&&JsonUtility.ToJson(editor.Draft)==draftJson,"File picker cancellation preserves draft");
         var importPreferences=parsed.Clone();importPreferences.opacity=42;importPreferences.snap=false;
-        if(Array.IndexOf(Idas3TouchLayout.Ids,"MENU")<0){Array.Resize(ref importPreferences.controls,importPreferences.controls.Length+1);importPreferences.controls[importPreferences.controls.Length-1]=new Idas3TouchLayout.Control{id="MENU"};}
+        Array.Resize(ref importPreferences.controls,importPreferences.controls.Length+2);
+        importPreferences.controls[importPreferences.controls.Length-2]=new Idas3TouchLayout.Control{id="MENU"};
+        importPreferences.controls[importPreferences.controls.Length-1]=new Idas3TouchLayout.Control{id="A"};
         string importFile=Path.Combine(root,"import-preferences.json");File.WriteAllText(importFile,JsonUtility.ToJson(importPreferences));
         editor.BeginImport();editor.SelectedTouchLayout(importFile);
-        Check(editor.Draft.controls.Length==Idas3TouchLayout.Ids.Length&&editor.Draft.opacity==42&&!editor.Draft.snap,"Old exported MENU layout imports with preferences intact");
+        Check(editor.Draft.controls.Length==Idas3TouchLayout.Ids.Length&&editor.Draft.opacity==42&&!editor.Draft.snap,"Old exported MENU/A layout imports with preferences intact");
         editor.ProcessTouch(65,TouchPhase.Began,editor.CommandRect(1).center);
         layout.Initialize(Path.Combine(root,"userdata"),Path.Combine(root,"export-check"));
         Check(!menu.TouchLayoutEditing&&layout.Current.Get("R2").size==150&&layout.Current.opacity==42&&!layout.Current.snap,"SAVE persists imported layout across reload");
@@ -308,9 +441,17 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         var menu=host.PauseMenu;menu.SetOpen(false);controls.ResetInput();yield return Frames(4);
         Check(controls.ButtonRect("MENU")==Rect.zero&&Array.IndexOf(Idas3TouchLayout.Ids,"MENU")<0,"No independent MENU control or layout entry");
         Check(Idas3SceneModeFlowFixture(10)==1,"Private title tap fixture");yield return Frames(4);
+        VisibilityChecks(false,false);int ranking=Idas3SceneModeFlowValue(11),page=Idas3SceneModeFlowValue(12);Vector2 stick=controls.StickRect.center;
+        Touch(83,TouchPhase.Began,stick);Touch(83,TouchPhase.Moved,stick-Vector2.up*controls.StickTravel);
+        Check(Key(Packet(),69)&&(Packet().padButtons&1u)!=0&&(Packet().padButtons&0x300u)==0,"Ranking stick up sends the source gear signal with hidden shoulders");
+        yield return Frames(4);Touch(83,TouchPhase.Ended,stick);
+        Check(Key(host.DiagnosticSubmittedInput,69),"Ranking stick signal reaches the actual native submission");
+        Check(Idas3SceneModeFlowValue(11)!=ranking||Idas3SceneModeFlowValue(12)!=page,"Stick up advances the actual model-ranking mode or subpage");
+        int condition=Idas3SceneModeFlowValue(14);
         Touch(81,TouchPhase.Began,controls.ButtonRect("VIEW").center);yield return Frames(2);
         Touch(81,TouchPhase.Ended,Vector2.zero);yield return Frames(4);
         Check(!menu.IsOpen&&host.Status.frontendStage==0,"Short VIEW tap does not open settings");
+        Check(Idas3SceneModeFlowValue(14)!=condition,"Short VIEW retains actual ranking condition navigation");
         yield return OpenTitleOptions();yield return Capture("mobile-title-options");
         menu.SelectTab(8);for(int i=0;i<4;++i)menu.Navigate(1);
         host.GameOptions.Draft.musicVolume=.6f;menu.Activate();

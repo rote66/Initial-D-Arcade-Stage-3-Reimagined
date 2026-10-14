@@ -2,6 +2,41 @@
 // separate regression in mode_flow_app_tests.inl; these select authored scenes
 // quickly for Unity rendering and controller-route verification.
 void prepareModeFlowFixture(App& app,unsigned scene){
+    if(scene==431||scene==432){
+        prepareModeFlowFixture(app,425);app.preRaceDialogueActive=false;
+        app.battleProfile=app.frontend.battleProfile;
+        original::OriginalLegendVisit::Setup setup;setup.resultStatus=scene==431?1u:0u;
+        if(!app.legendVisitLoaded){app.legendVisit.load(app.root);app.legendVisitLoaded=true;}
+        app.legendVisit.begin(app.battleProfile,setup);
+        app.menu=app.loadingActive=app.timeAttackVisitActive=app.buntaVisitActive=app.vsActive=false;
+        app.legendVisitActive=true;app.paused=false;app.legendSkipHeld=true;
+        for(unsigned i=0;i<2000&&!app.legendVisit.choiceVisible();++i)app.advanceLegendVisit(1.0/60.0);
+        if(!app.legendVisit.choiceVisible())throw std::runtime_error("Mobile fixture did not reach Legend choice");
+        if(scene==432){
+            app.legendConfirmPending=true;app.advanceLegendVisit(1.0/60.0);
+            for(unsigned i=0;i<120&&(!app.legendVisit.choiceVisible()||
+                unsigned(app.legendVisit.choiceKind())<2u);++i)app.advanceLegendVisit(1.0/60.0);
+            if(!app.legendVisit.choiceVisible()||unsigned(app.legendVisit.choiceKind())<2u)
+                throw std::runtime_error("Mobile fixture did not reach next-rival choice");
+        }
+        app.legendSkipHeld=false;app.input={};return;
+    }
+    if(scene>=428&&scene<=430){
+        prepareModeFlowFixture(app,10);
+        auto& f=app.frontend;
+        if(scene==430){
+            f.stage=FrontendStage::Car;f.liveCarPreview=true;f.advance(1);
+            app.menuTexturesLoaded=false;
+        }else{
+            app.validationMode=true;app.replayPlaybackActive=false;
+            f.automatic=app.automatic=scene==428;f.battleProfile.setu(68,f.automatic?0u:1u);
+            f.night=app.night=true;f.gameMode=original::OriginalGameMode::TimeAttack;app.start();
+            app.loadingActive=app.vsActive=app.preRaceDialogueActive=false;app.menu=false;
+            app.race.phase=RacePhase::Running;app.race.remaining6000=120*6000;
+            app.drivingView=OriginalDrivingView::Chase;
+        }
+        app.input={};return;
+    }
     if(scene==425||scene==426){
         app.validationMode=false;app.returnToCourseSelection(true);
         app.fullTuneActive=app.fullTuneSelecting=false;app.menu=true;app.paused=false;
