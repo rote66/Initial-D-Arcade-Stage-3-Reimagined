@@ -22,6 +22,11 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         public string schema="idas3-ios-mobile-controls-v1",scope="Production touch/frame mapper, live Gameplay toggle, persistence, native race/pause. Synthetic touch and gravity samples; no physical sensor or OS multi-touch coverage.",error;
         public bool passed,shutdownComplete;public int checks;public double seconds;
     }
+    private sealed class OptionsTestPlatform : Idas3GameOptions.IPlatform {
+        public int Width=>1280;public int Height=>720;public int DisplayMode=>0;public double Now=>0;
+        public Idas3GameOptions.ResolutionChoice[] Resolutions=>new[]{new Idas3GameOptions.ResolutionChoice(1280,720)};
+        public void Apply(Idas3GameOptions.Values previous,Idas3GameOptions.Values next,bool displayChanged){}
+    }
     public static bool Configure(ref string saves){
         pendingRoot=null;active=null;var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-mobile-controls-smoke");
         if(at<0)return false;if(at+1>=args.Length)throw new ArgumentException("A private diagnostic root is required.");
@@ -319,6 +324,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         File.WriteAllText(Path.Combine(root,"osd-sample.txt"),osd.Text);yield return Capture("mobile-osd-options");
         menu.Activate();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"OSD off hides immediately");
         yield return DiagnosticLoggingChecks();
+        yield return ThermalFrameRateChecks();
         // Closing via the actual virtual Start must consume the press, leaving
         // the title intact and not reopening settings while it is held.
         Touch(82,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
@@ -342,8 +348,8 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         var menu=host.PauseMenu;var diagnostics=host.GetComponent<Idas3IosDiagnostics>();
         Check(diagnostics!=null&&!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Diagnostic logging defaults off");
         Check(!Directory.Exists(diagnostics.Folder),"Disabled logging creates no directory");
-        Check(menu.DiagnosticRows==6,"Touch menu includes six rows");
-        menu.Navigate(1);Check(menu.DiagnosticSelection==6,"Logging has its own touch row");
+        Check(menu.DiagnosticRows==7,"iOS menu includes seven rows");
+        menu.Navigate(1);Check(menu.DiagnosticSelection==6,"Logging has its own iOS row");
         host.GameOptions.Draft.musicVolume=.6f;menu.Activate();
         Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording,"Logging starts immediately");
         var saved=new Idas3GameOptions();saved.Initialize(Path.Combine(root,"userdata"));
@@ -352,7 +358,8 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         double until=Time.realtimeSinceStartupAsDouble+2.5;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
         string runtime=Path.Combine(diagnostics.Folder,"runtime.log"),performance=Path.Combine(diagnostics.Folder,"performance.jsonl");
         Check(File.Exists(runtime)&&File.ReadAllText(runtime).Contains("IDAS3 DIAGNOSTIC FILE SMOKE"),"Unity logs reach the background file");
-        Check(File.Exists(performance)&&File.ReadAllText(performance).Contains("\"thermalState\"")&&File.ReadAllText(performance).Contains("\"targetFps\""),"Performance files contain system and pacing metrics");
+        Check(File.Exists(performance)&&File.ReadAllText(performance).Contains("\"thermalState\"")&&File.ReadAllText(performance).Contains("\"targetFps\"")&&
+            File.ReadAllText(performance).Contains("\"displayLinkPreferredFps\"")&&File.ReadAllText(performance).Contains("\"thermalFrameRateAdjustment\""),"Performance files contain system, pacing and display-link metrics");
         File.Copy(runtime,Path.Combine(root,"diagnostic-runtime-observed.log"));
         File.Copy(performance,Path.Combine(root,"diagnostic-performance-observed.jsonl"));
         Check(host.GetComponent<Idas3SceneGame>().NativeStepMilliseconds>=0,"Native frame timings available");
@@ -363,6 +370,54 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         yield return Frames(5);
         Check(!Directory.Exists(diagnostics.Folder),"Closed background writer cannot recreate deleted logs");
         menu.Navigate(-1);
+    }
+    private IEnumerator ThermalFrameRateChecks(){
+        var options=host.GameOptions;var menu=host.PauseMenu;
+        Check(options.Current.iosThermalFrameRateAdjustment&&Idas3IosThermalFrameRate.Enabled,"Thermal adjustment defaults on");
+        string legacyRoot=Path.Combine(root,"thermal-legacy");Directory.CreateDirectory(legacyRoot);
+        File.WriteAllText(Path.Combine(legacyRoot,"game-options.json"),"{\"version\":1,\"musicVolume\":0.7}");
+        var isolated=new Idas3GameOptions(new OptionsTestPlatform());isolated.Initialize(legacyRoot);
+        Check(isolated.Current.iosThermalFrameRateAdjustment,"Old saved options retain the enabled thermal default");
+        isolated.BeginEdit();isolated.Draft.width=1920;
+        Check(isolated.ApplyDraft()&&isolated.DisplayConfirmationPending,"Private display rollback prepared");
+        Check(isolated.SetIosThermalFrameRateAdjustment(false)&&Idas3IosThermalFrameRate.Enabled,"Fake platform does not alter native thermal state");
+        isolated.RevertDisplay();Check(!isolated.Current.iosThermalFrameRateAdjustment,"Display rollback retains independently saved thermal switch");
+        isolated.Initialize(legacyRoot);Check(!isolated.Current.iosThermalFrameRateAdjustment,"Thermal off reloads from disk");
+        Directory.CreateDirectory(isolated.FilePath+".tmp");
+        Check(!isolated.SetIosThermalFrameRateAdjustment(true)&&!isolated.Current.iosThermalFrameRateAdjustment&&
+            !isolated.Draft.iosThermalFrameRateAdjustment&&Idas3IosThermalFrameRate.Enabled,"Save failure preserves current, draft and native thermal state");
+        Idas3MenuLocalization.SetLanguage(options.Current.customMenuLanguage);
+        menu.SelectTab(8);for(int i=0;i<6;++i)menu.Navigate(1);
+        Check(menu.DiagnosticSelection==7,"Thermal switch has its own iOS row");
+        bool simulated=Idas3IosThermalFrameRate.DiagnosticThermalState(2);
+        if(simulated){
+            Idas3FramePacing.Configure(false,60);
+            Check(Application.targetFrameRate==60&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Serious caps the actual display link at 30 while Unity target remains 60");
+            yield return Capture("mobile-thermal-on");
+        }
+        options.Draft.musicVolume=.6f;menu.Activate();
+        Check(!options.Current.iosThermalFrameRateAdjustment&&!options.Draft.iosThermalFrameRateAdjustment&&!Idas3IosThermalFrameRate.Enabled,"Menu disables native thermal cap immediately");
+        var reloaded=new Idas3GameOptions();reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(!reloaded.Current.iosThermalFrameRateAdjustment&&reloaded.Current.musicVolume!=.6f&&
+            options.Draft.musicVolume==.6f,"Thermal switch persists independently and preserves unrelated draft");
+        if(simulated){
+            Check(Math.Abs(Idas3IosThermalFrameRate.PreferredFps-60)<.01,"Disabling thermal adjustment immediately restores 60 without leaving the race");
+            yield return Capture("mobile-thermal-off");
+            menu.NavigateHorizontal(1);
+            Check(options.Current.iosThermalFrameRateAdjustment&&Idas3IosThermalFrameRate.Enabled&&
+                Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Horizontal control re-enables the Serious cap immediately");
+            Check(Idas3IosThermalFrameRate.DiagnosticThermalState(3)&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-15)<.01,"Critical caps the display link at 15");
+            menu.Activate();Check(!Idas3IosThermalFrameRate.Enabled&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-60)<.01,"Disabling also removes the Critical cap");
+            Idas3FramePacing.Configure(false,30);Check(Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Thermal off preserves the explicit 30 FPS setting");
+            Idas3FramePacing.Configure(false,0);
+            Check(Math.Abs(Idas3IosThermalFrameRate.PreferredFps-Application.targetFrameRate)<.01,"Thermal off preserves the unlimited display-refresh mapping");
+            Check(Idas3IosThermalFrameRate.DiagnosticThermalState(-1),"Restore actual Simulator thermal state");
+        }
+        Check(options.SetIosThermalFrameRateAdjustment(true)&&Idas3IosThermalFrameRate.Enabled,"Restore isolated thermal default");
+        Idas3FramePacing.Configure(options.Current.vSync,options.Current.frameRateLimit);
+        menu.Navigate(1);Check(menu.DiagnosticSelection==8,"Back follows the new thermal row");menu.Back();
+        Check(menu.DiagnosticSelection==0,"Back returns from iOS options to categories");
+        menu.Activate();
     }
     private void Update(){if(finished)return;if(host?.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>160)Finish(false,"Mobile diagnostic timeout");}
     private void Finish(bool passed,string error){

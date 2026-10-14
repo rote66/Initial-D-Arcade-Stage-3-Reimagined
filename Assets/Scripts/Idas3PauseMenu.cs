@@ -13,13 +13,14 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private static readonly Color PromptYellow=new Color32(255,221,44,255);
     public enum Category {Audio,Graphics,Gameplay,Controls,Steering,Online,Replays,Hud,Updates}
     private static readonly string[] DesktopTabs={"AUDIO","DISPLAY & GRAPHICS","GAMEPLAY","CONTROLS","STEERING & WHEEL","ONLINE","REPLAYS","HUD & MAP","UPDATES"};
-    private static readonly string[] MobileTabs={"AUDIO","DISPLAY & GRAPHICS","GAMEPLAY","CONTROLS","STEERING & WHEEL","ONLINE","REPLAYS","HUD & MAP","TOUCH","NETWORK"};
+    private static readonly string[] MobileTabs={"AUDIO","DISPLAY & GRAPHICS","GAMEPLAY","CONTROLS","STEERING & WHEEL","ONLINE","REPLAYS","HUD & MAP","iOS","NETWORK"};
     private static string[] Tabs=>MobileControls?MobileTabs:DesktopTabs;
     private static bool MobileControls=>Application.platform==RuntimePlatform.IPhonePlayer;
     private bool GravityResponseVisible=>MobileControls&&options.Current.gravitySteering;
     private void ToggleGravity(){notice=options.SetGravitySteering(!options.Current.gravitySteering)?"GRAVITY STEERING SAVED":options.LastError;}
     private void SetGravityResponse(float deadzone,float sensitivity){notice=options.SetGravityResponse(deadzone,sensitivity)?"GRAVITY STEERING SAVED":options.LastError;}
     private void ToggleOsd(){notice=options.SetPerformanceOsd(!options.Current.showOsd)?"OSD SAVED":options.LastError;}
+    private void ToggleThermalFrameRate(){notice=options.SetIosThermalFrameRateAdjustment(!options.Current.iosThermalFrameRateAdjustment)?"THERMAL FRAME RATE SAVED":options.LastError;}
     private void ToggleDiagnostics(){
         if(!options.SetDiagnosticLogging(!options.Current.diagnosticLogging)){notice=options.LastError;return;}
         var diagnostics=GetComponent<Idas3IosDiagnostics>();diagnostics?.Synchronize();
@@ -197,7 +198,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(selection==0){selection=1;return;}
         if(tab==2&&selection==5){if(FullTuneAvailable)queued=Command.FullTune;return;}
         if(MobileControls&&tab==9){if(selection==1)queued=Command.LocalNetwork;else Back();return;}
-        if(MobileControls&&tab==8){if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);else if(selection==5)ToggleOsd();else if(selection==6)ToggleDiagnostics();else Back();return;}
+        if(MobileControls&&tab==8){if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);else if(selection==5)ToggleOsd();else if(selection==6)ToggleDiagnostics();else if(selection==7)ToggleThermalFrameRate();else Back();return;}
         if(tab==8&&selection==1){if(AttractOptions)Updates?.Activate();return;}
         if(tab==5&&selection==2){Application.OpenURL(Idas3CommunityTimes.ServiceUrl);return;}
         if(tab==6&&selection==1){queued=Command.Replays;return;}
@@ -241,7 +242,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
     private int BindingFirstSelection=>controllerDevices!=null?2:1;
     private bool DeviceRowSelected=>controllerDevices!=null&&selection==1;
-    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?6:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
+    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?7:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
     private static int Wrap(int value,int count)=>(value%count+count)%count;
     private void Update(){
         double now=Time.realtimeSinceStartupAsDouble;options?.Tick(now);
@@ -314,7 +315,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private void Adjust(int row,int direction){
         var v=options.Draft;
         if(MobileControls&&tab==9)return;
-        if(MobileControls&&tab==8){if(row==4)ToggleOsd();return;}
+        if(MobileControls&&tab==8){if(row==4)ToggleOsd();else if(row==5)ToggleDiagnostics();else if(row==6)ToggleThermalFrameRate();return;}
         if(tab==6){
             if(row==1&&!v.communityTimes)v.replayTimeAttack=!v.replayTimeAttack;
             if(row==2)v.replayOnline=!v.replayOnline;
@@ -512,6 +513,16 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         Fill(new Rect(405,y-8,573,1),Edge);Text(new Rect(405,y+1,180,22),name,small);
         Text(new Rect(570,y-2,405,31),value,label);
     }
+    private bool IosToggleRow(float y,string name,bool enabled,int row){
+        if(loggingToggle==null)loggingToggle=new GUIStyle(button){alignment=TextAnchor.MiddleLeft};
+        var rect=new Rect(282,y,692,40);
+        Fill(rect,Panel);Frame(rect,selection==row?Red:Edge);
+        var checkbox=new Rect(rect.x+12,rect.y+10,20,20);
+        Fill(checkbox,enabled?Red:Raised);Frame(checkbox,Color.white);
+        if(enabled)Text(checkbox,"✓",button,translate:false);
+        Text(new Rect(rect.x+44,rect.y,rect.width-52,rect.height),name,loggingToggle);
+        return GUI.Toggle(rect,enabled,GUIContent.none,GUIStyle.none);
+    }
     private void OptionsView(){
         const float categoryTop=139;float categoryStep=MobileControls?38:40,categoryHeight=MobileControls?31:34;
         for(int i=0;i<Tabs.Length;++i){var rect=new Rect(30,categoryTop+i*categoryStep,207,categoryHeight);if(Button(rect,Tabs[i],tab==i))SelectTab(i);if(selection==0&&tab==i)Frame(rect,Color.white);}
@@ -528,21 +539,16 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         }
         if(MobileControls&&tab==8){
             if(Button(new Rect(282,197,692,40),"EDIT TOUCH LAYOUT",selection==1))OpenTouchEditor();
-            if(Button(new Rect(282,245,692,40),"IMPORT TOUCH LAYOUT",selection==2))ImportTouchLayout();
-            if(Button(new Rect(282,293,692,40),"EXPORT SAVED LAYOUT",selection==3))ExportTouchLayout();
-            if(Button(new Rect(282,341,692,40),"RESTORE DEFAULT LAYOUT",selection==4))OpenTouchEditor(true);
-            if(Button(new Rect(282,389,692,40),"OSD DISPLAY: "+(options.Current.showOsd?"ON":"OFF"),selection==5)){selection=5;ToggleOsd();}
-            if(loggingToggle==null)loggingToggle=new GUIStyle(button){alignment=TextAnchor.MiddleLeft};
-            var loggingRect=new Rect(282,437,692,40);
-            Fill(loggingRect,Panel);Frame(loggingRect,selection==6?Red:Edge);
-            var checkbox=new Rect(loggingRect.x+12,loggingRect.y+10,20,20);
-            Fill(checkbox,options.Current.diagnosticLogging?Red:Raised);Frame(checkbox,Color.white);
-            if(options.Current.diagnosticLogging)Text(checkbox,"✓",button,translate:false);
-            Text(new Rect(loggingRect.x+44,loggingRect.y,loggingRect.width-52,loggingRect.height),"DIAGNOSTIC LOGGING",loggingToggle);
-            bool logging=GUI.Toggle(loggingRect,options.Current.diagnosticLogging,GUIContent.none,GUIStyle.none);
+            if(Button(new Rect(282,241,692,40),"IMPORT TOUCH LAYOUT",selection==2))ImportTouchLayout();
+            if(Button(new Rect(282,285,692,40),"EXPORT SAVED LAYOUT",selection==3))ExportTouchLayout();
+            if(Button(new Rect(282,329,692,40),"RESTORE DEFAULT LAYOUT",selection==4))OpenTouchEditor(true);
+            if(Button(new Rect(282,373,692,40),"OSD DISPLAY: "+(options.Current.showOsd?"ON":"OFF"),selection==5)){selection=5;ToggleOsd();}
+            bool logging=IosToggleRow(417,"DIAGNOSTIC LOGGING",options.Current.diagnosticLogging,6);
             if(logging!=options.Current.diagnosticLogging){selection=6;ToggleDiagnostics();}
-            Text(new Rect(288,490,681,48),notice,wrapped);
-            if(Button(new Rect(731,583,279,35),"BACK",selection==7))Back();return;
+            bool disabled=IosToggleRow(461,"DISABLE THERMAL FRAME RATE ADJUSTMENT",!options.Current.iosThermalFrameRateAdjustment,7);
+            if(disabled==options.Current.iosThermalFrameRateAdjustment){selection=7;ToggleThermalFrameRate();}
+            Text(new Rect(288,509,681,32),notice,wrapped);
+            if(Button(new Rect(731,583,279,35),"BACK",selection==8))Back();return;
         }
         var v=options.Draft;
         if(tab==0){

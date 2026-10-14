@@ -705,7 +705,7 @@ GRAPHICS	GRAPHICS	画面
 WHEEL	WHEEL	方向盘
 RECORDS	RECORDS	成绩
 HUD	HUD	仪表与比赛信息
-TOUCH	タッチ操作	触控
+iOS	iOS	iOS
 START	START	开始
 VIEW	VIEW	视角
 LIGHT	LIGHT	车灯
@@ -836,6 +836,9 @@ Use visible characters without formatting or angle brackets.	表示できる文�
 Your online username could not be saved. Please try again.	オンラインユーザー名を保存できませんでした。もう一度お試しください。	无法保存您的在线用户名。请重试。
 Leave the room or queue before changing your online username.	オンラインユーザー名を変更する前にルームまたはマッチングから退出してください。	更改在线用户名之前，请先退出房间或匹配队列。
 DIAGNOSTIC LOGGING	診断ログ	生成诊断日志
+THERMAL FRAME RATE ADJUSTMENT	温度によるFPS調整	温度帧率调整
+DISABLE THERMAL FRAME RATE ADJUSTMENT	温度によるFPS調整を無効化	禁用温度帧率调整
+THERMAL FRAME RATE SAVED	温度によるFPS調整を保存しました	温度帧率调整已保存
 DIAGNOSTIC LOGGING ON	診断ログを有効にしました	已开启诊断日志
 DIAGNOSTIC LOGS DELETED	診断ログを削除しました	诊断日志已关闭并删除
 Could not save diagnostic logging. {0}	診断ログ設定を保存できませんでした。{0}	无法保存日志设置：{0}

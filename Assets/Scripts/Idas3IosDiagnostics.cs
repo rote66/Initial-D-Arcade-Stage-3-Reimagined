@@ -26,7 +26,8 @@ public sealed class Idas3IosDiagnostics : MonoBehaviour
     [Serializable] private sealed class Sample {
         public string kind,utc;
         public double uptime,fps,frameMs,maxFrameMs,nativeMs,rendererMs,uiMs,networkMs,
-            cpuPercent,memoryMiB,gpuMs,mainThreadMs,renderThreadMs,presentWaitMs,refreshHz;
+            cpuPercent,memoryMiB,gpuMs,mainThreadMs,renderThreadMs,presentWaitMs,refreshHz,displayLinkPreferredFps;
+        public bool thermalFrameRateAdjustment;
         public int frame,targetFps,requestedFps,vSync,renderInterval,width,height,antialiasing,
             course,car,phase,frontend,thermalState,lowPowerMode,gc0,gc1,gc2,droppedLogs,
             meshes,uploadedVertices,geometryUploads,textures;
@@ -115,6 +116,7 @@ public sealed class Idas3IosDiagnostics : MonoBehaviour
             gpuMs=timedFrames>0?gpuMs/timedFrames:-1,mainThreadMs=timedFrames>0?mainMs/timedFrames:-1,
             renderThreadMs=timedFrames>0?renderThreadMs/timedFrames:-1,presentWaitMs=timedFrames>0?presentWaitMs/timedFrames:-1,
             refreshHz=Screen.currentResolution.refreshRateRatio.value,targetFps=Application.targetFrameRate,
+            displayLinkPreferredFps=Idas3IosThermalFrameRate.PreferredFps,thermalFrameRateAdjustment=Idas3IosThermalFrameRate.Enabled,
             requestedFps=options.frameRateLimit,vSync=QualitySettings.vSyncCount,
             renderInterval=OnDemandRendering.renderFrameInterval,width=Screen.width,height=Screen.height,
             antialiasing=QualitySettings.antiAliasing,course=state.course,car=state.car,phase=state.racePhase,

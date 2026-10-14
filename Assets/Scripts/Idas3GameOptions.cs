@@ -30,6 +30,7 @@ public sealed class Idas3GameOptions
         public float wheelFeedbackStrength=.35f;
         public string wheelFeedbackDevice="";
         public bool showFps,showOsd,muteWhenUnfocused,diagnosticLogging;
+        public bool iosThermalFrameRateAdjustment=true;
         public bool discordPresence=true;
         public bool hideLightsOffAdvantage=true;
         public bool communityTimes=true;
@@ -136,6 +137,7 @@ public sealed class Idas3GameOptions
         }
         public void Apply(Values previous,Values next,bool displayChanged){
             if(QualitySettings.antiAliasing!=next.antiAliasing)QualitySettings.antiAliasing=next.antiAliasing;
+            Idas3IosThermalFrameRate.Configure(next.iosThermalFrameRateAdjustment);
             Idas3FramePacing.Configure(next.vSync,next.frameRateLimit);
             if(displayChanged){
                 var mode=next.displayMode==0?FullScreenMode.Windowed:
@@ -195,6 +197,7 @@ public sealed class Idas3GameOptions
         // A missing file must not overwrite the host's diagnostic resolution,
         // vSync or frame cap. Normal first-run defaults already match the game.
         if(loadedSaved){var live=Defaults();platform.Apply(live,current,DisplayChanged(live,current));}
+        else if(platform is UnityPlatform)Idas3IosThermalFrameRate.Configure(current.iosThermalFrameRateAdjustment);
         Idas3MenuLocalization.SetLanguage(current.customMenuLanguage);Changed?.Invoke(current);
     }
     public void BeginEdit(){
@@ -228,6 +231,16 @@ public sealed class Idas3GameOptions
         EnsureInitialized();LastError=null;bool previous=current.diagnosticLogging;current.diagnosticLogging=enabled;
         try{SaveCurrent();draft.diagnosticLogging=enabled;if(rollback!=null)rollback.diagnosticLogging=enabled;return true;}
         catch(Exception error){current.diagnosticLogging=previous;LastError="Could not save diagnostic logging. "+error.Message;return false;}
+    }
+    public bool SetIosThermalFrameRateAdjustment(bool enabled){
+        EnsureInitialized();LastError=null;
+        bool previous=current.iosThermalFrameRateAdjustment;current.iosThermalFrameRateAdjustment=enabled;
+        try{SaveCurrent();}
+        catch(Exception error){current.iosThermalFrameRateAdjustment=previous;LastError="Could not save thermal frame rate adjustment. "+error.Message;return false;}
+        draft.iosThermalFrameRateAdjustment=enabled;
+        if(rollback!=null)rollback.iosThermalFrameRateAdjustment=enabled;
+        if(platform is UnityPlatform)Idas3IosThermalFrameRate.Configure(enabled);
+        return true;
     }
     public bool SetGravityResponse(float deadzone,float sensitivity){
         EnsureInitialized();LastError=null;
@@ -402,6 +415,7 @@ public sealed class Idas3GameOptions
         a.wheelForceFeedback==b.wheelForceFeedback&&a.wheelFeedbackStrength==b.wheelFeedbackStrength&&
         a.wheelFeedbackInvert==b.wheelFeedbackInvert&&a.wheelFeedbackDevice==b.wheelFeedbackDevice&&
         a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.diagnosticLogging==b.diagnosticLogging&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
+        a.iosThermalFrameRateAdjustment==b.iosThermalFrameRateAdjustment&&
         a.discordPresence==b.discordPresence&&a.hideLightsOffAdvantage==b.hideLightsOffAdvantage&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
         a.hudMeterStyle==b.hudMeterStyle&&a.hudMeterLayout==b.hudMeterLayout&&a.hudOrnamentId==b.hudOrnamentId&&a.hudShiftLights==b.hudShiftLights&&a.hudPedalIndicators==b.hudPedalIndicators&&a.hudNameplateStyle==b.hudNameplateStyle&&
         SameHudPositions(a,b)&&SameHudSizes(a,b)&&a.hudOrnamentSize==b.hudOrnamentSize&&a.hudTimeExtensionSize==b.hudTimeExtensionSize&&a.hudTimerSize==b.hudTimerSize&&a.hudSpeedometerSize==b.hudSpeedometerSize&&a.hudRecordsSize==b.hudRecordsSize&&a.hudLegendSize==b.hudLegendSize&&a.hudOnlineSize==b.hudOnlineSize&&a.hudMirrorSize==b.hudMirrorSize&&a.hudMessagesSize==b.hudMessagesSize&&a.hudChallengersSize==b.hudChallengersSize&&
