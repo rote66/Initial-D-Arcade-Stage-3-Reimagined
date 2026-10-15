@@ -19,7 +19,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
     private bool finished;
     private double began;
     [Serializable] private sealed class Report {
-        public string schema="idas3-ios-mobile-controls-v1",scope="Production touch/frame mapper, live Gameplay toggle, persistence, native race/pause. Synthetic touch and gravity samples; no physical sensor or OS multi-touch coverage.",error;
+        public string schema="idas3-ios-mobile-controls-v1",scope="Production touch/frame mapper, iOS draft/apply/reset, selective pedal travel, live Gameplay toggle, persistence, native race/pause. Synthetic touch and gravity samples; no physical sensor or OS multi-touch coverage.",error;
         public bool passed,shutdownComplete;public int checks;public double seconds;
     }
     private sealed class OptionsTestPlatform : Idas3GameOptions.IPlatform {
@@ -43,6 +43,11 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
     private static bool Key(Idas3Native.FrameInput f,int key){uint word=key<32?f.key0:key<64?f.key1:key<96?f.key2:key<128?f.key3:0;return (word&(1u<<(key&31)))!=0;}
     private void Touch(int id,TouchPhase phase,Vector2 p){controls.ProcessTouch(id,phase,p);}
     private IEnumerator Frames(int count){while(count-->0)yield return null;}
+    private IEnumerator SimulationTicks(int count){
+        ulong start=host.Status.simulationTicks;double deadline=Time.realtimeSinceStartupAsDouble+2;
+        while(host.Status.simulationTicks-start<(ulong)count&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(host.Status.simulationTicks-start>=(ulong)count,"Native physics advances for pedal telemetry");
+    }
     private IEnumerator Capture(string name){
         yield return new WaitForEndOfFrame();string path=Path.Combine(root,name+".png");
         var capture=ScreenCapture.CaptureScreenshotAsTexture();try{File.WriteAllBytes(path,capture.EncodeToPNG());}finally{Destroy(capture);}
@@ -66,6 +71,209 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
             Touch(10,TouchPhase.Moved,r.center);Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==255,"Re-entering captured pedal restores full strength: "+name);
             Touch(10,TouchPhase.Ended,r.center);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Releasing pedal neutralizes both triggers");
         }
+    }
+    private void SelectIosRow(int row){
+        var menu=host.PauseMenu;menu.SelectTab(8);for(int i=1;i<row;++i)menu.Navigate(1);
+        Check(menu.DiagnosticSelection==row,"Select iOS row "+row);
+    }
+    private void ApplyIosDraft(){
+        SelectIosRow(host.PauseMenu.DiagnosticRows+2);host.PauseMenu.Activate();
+        Check(!host.GameOptions.HasUnsavedChanges&&!host.GameOptions.DisplayConfirmationPending&&host.GameOptions.LastError==null,"iOS footer applies the settings draft");
+    }
+    private IEnumerator PedalTravelSettingsChecks(){
+        var options=host.GameOptions;var menu=host.PauseMenu;
+        Check(!options.Current.iosPedalTravel,"Pedal travel defaults off");
+        string legacyRoot=Path.Combine(root,"pedal-legacy");Directory.CreateDirectory(legacyRoot);
+        File.WriteAllText(Path.Combine(legacyRoot,"game-options.json"),"{\"version\":1,\"musicVolume\":0.7}");
+        var isolated=new Idas3GameOptions(new OptionsTestPlatform());isolated.Initialize(legacyRoot);
+        Check(!isolated.Current.iosPedalTravel&&isolated.Current.iosPedalTravelMode==0,"Old options retain digital pedals and both-pedal travel default");
+        Check(isolated.Current.iosPedalTopDeadzone==0&&isolated.Current.iosPedalBottomDeadzone==0,"Old options have no pedal deadzones");
+        var invalid=Idas3GameOptions.Normalize(new Idas3GameOptions.Values{iosPedalTopDeadzone=float.NaN,iosPedalBottomDeadzone=float.PositiveInfinity});
+        Check(invalid.iosPedalTopDeadzone==0&&invalid.iosPedalBottomDeadzone==0,"Nonfinite pedal deadzones normalize to zero");
+        invalid=Idas3GameOptions.Normalize(new Idas3GameOptions.Values{iosPedalTopDeadzone=-1,iosPedalBottomDeadzone=1});
+        Check(invalid.iosPedalTopDeadzone==0&&invalid.iosPedalBottomDeadzone==Idas3GameOptions.MaximumIosPedalDeadzone,"Pedal deadzones clamp independently without overlapping");
+        foreach(int mode in new[]{-1,3,int.MaxValue})
+            Check(Idas3GameOptions.Normalize(new Idas3GameOptions.Values{iosPedalTravelMode=mode}).iosPedalTravelMode==0,"Invalid pedal selection falls back to both");
+        isolated.BeginEdit();isolated.Draft.iosPedalTravelMode=1;
+        Check(isolated.HasUnsavedChanges,"Pedal selection participates in option comparison");
+        isolated.BeginEdit();isolated.Draft.iosPedalTopDeadzone=.05f;
+        Check(isolated.HasUnsavedChanges,"Top deadzone participates in option comparison");
+        isolated.BeginEdit();isolated.Draft.iosPedalBottomDeadzone=.05f;
+        Check(isolated.HasUnsavedChanges,"Bottom deadzone participates in option comparison");
+        isolated.BeginEdit();isolated.Draft.iosPedalTravel=true;
+        Check(isolated.HasUnsavedChanges,"Pedal travel participates in option comparison");
+        isolated.Draft.width=1920;
+        Check(isolated.ApplyDraft()&&isolated.DisplayConfirmationPending,"Prepare isolated display rollback");
+        Check(isolated.SetIosPedalTravel(false),"Save pedal mode during display confirmation");
+        Check(isolated.SetIosPedalDeadzones(.05f,.1f),"Save pedal deadzones during display confirmation");
+        isolated.RevertDisplay();Check(!isolated.Current.iosPedalTravel&&isolated.Current.iosPedalTopDeadzone==.05f&&isolated.Current.iosPedalBottomDeadzone==.1f,"Display rollback keeps independently saved pedal mode and deadzones");
+        Check(isolated.SetIosPedalTravel(true),"Save analog mode");isolated.Initialize(legacyRoot);
+        Check(isolated.Current.iosPedalTravel&&isolated.Current.iosPedalTopDeadzone==.05f&&isolated.Current.iosPedalBottomDeadzone==.1f,"Analog mode and deadzones reload");
+        Directory.CreateDirectory(isolated.FilePath+".tmp");
+        Check(!isolated.SetIosPedalTravel(false)&&isolated.Current.iosPedalTravel&&isolated.Draft.iosPedalTravel,"Save failure preserves current and draft pedal mode");
+        Check(!isolated.SetIosPedalDeadzones(.2f,.3f)&&isolated.Current.iosPedalTopDeadzone==.05f&&isolated.Current.iosPedalBottomDeadzone==.1f&&
+            isolated.Draft.iosPedalTopDeadzone==.05f&&isolated.Draft.iosPedalBottomDeadzone==.1f,"Save failure preserves both current and draft deadzones");
+        isolated.Draft.iosPedalTravelMode=2;isolated.Draft.iosPedalTravel=false;
+        Check(!isolated.ApplyDraft()&&isolated.Current.iosPedalTravel&&isolated.Current.iosPedalTravelMode==0,"Failed Apply rolls back pedal master and selection together");
+        Idas3MenuLocalization.SetLanguage(options.Current.customMenuLanguage);
+        menu.SelectTab(8);for(int i=0;i<4;++i)menu.Navigate(1);
+        Check(menu.DiagnosticRows==8&&menu.DiagnosticSelection==5,"Pedal travel follows virtual layout settings");
+        options.Draft.musicVolume=.6f;menu.Activate();
+        Check(!options.Current.iosPedalTravel&&options.Draft.iosPedalTravel&&menu.DiagnosticRows==12,"Draft reveals deadzones and both selection switches without changing live input");
+        menu.Navigate(1);for(int i=0;i<5;++i)menu.NavigateHorizontal(1);
+        Check(options.Draft.iosPedalTopDeadzone==.05f&&options.Current.iosPedalTopDeadzone==0,"Top deadzone edits in one-percent steps without applying");
+        menu.Navigate(1);for(int i=0;i<5;++i)menu.NavigateHorizontal(1);
+        Check(options.Draft.iosPedalBottomDeadzone==.05f&&options.Current.iosPedalBottomDeadzone==0,"Bottom deadzone is also a draft");
+        menu.Navigate(1);menu.Activate();Check(options.Draft.iosPedalTravelMode==1&&options.Current.iosPedalTravelMode==0,"Accelerator-only checkbox edits draft");
+        menu.Navigate(1);menu.Activate();Check(options.Draft.iosPedalTravelMode==2,"Brake-only clears accelerator-only");
+        menu.Activate();Check(options.Draft.iosPedalTravelMode==0,"Neither checkbox selects both pedals");
+        var reloaded=new Idas3GameOptions(new OptionsTestPlatform());reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(!reloaded.Current.iosPedalTravel&&reloaded.Current.iosPedalTravelMode==0&&reloaded.Current.iosPedalTopDeadzone==0&&reloaded.Current.musicVolume==1,"Unapplied iOS edits do not reach disk");
+        yield return Capture("mobile-pedal-travel-options");
+        SelectIosRow(8);menu.Activate();ApplyIosDraft();
+        reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(reloaded.Current.iosPedalTravel&&reloaded.Current.iosPedalTravelMode==1&&reloaded.Current.iosPedalTopDeadzone==.05f&&reloaded.Current.iosPedalBottomDeadzone==.05f&&
+            reloaded.Current.musicVolume==.6f,"Apply persists pedal master, selection, deadzones and shared settings draft");
+        SelectIosRow(9);menu.Activate();menu.Back();menu.Back();menu.OpenAttractOptions();SelectIosRow(9);
+        Check(options.Draft.iosPedalTravelMode==1&&options.Current.iosPedalTravelMode==1,"Leaving settings discards unapplied pedal selection");
+        SelectIosRow(5);menu.Activate();
+        Check(!options.Draft.iosPedalTravel&&options.Current.iosPedalTravel&&menu.DiagnosticRows==8&&options.Draft.iosPedalTravelMode==1&&options.Draft.iosPedalTopDeadzone==.05f,"Disabling draft hides four rows and retains their values");
+        ApplyIosDraft();reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(!reloaded.Current.iosPedalTravel&&reloaded.Current.iosPedalTravelMode==1&&reloaded.Current.iosPedalTopDeadzone==.05f,"Hidden selections persist after Apply");
+        SelectIosRow(5);menu.Activate();ApplyIosDraft();
+        SelectIosRow(menu.DiagnosticRows+1);menu.Activate();
+        Check(!options.Draft.iosPedalTravel&&options.Draft.iosPedalTravelMode==0&&options.Draft.iosPedalTopDeadzone==0&&options.Current.iosPedalTravel&&options.Current.iosPedalTravelMode==1,"Reset changes draft only");
+        Check(menu.DiagnosticRows==8&&menu.DiagnosticSelection==9,"Reset focus follows footer after conditional rows disappear");
+        yield return Capture("mobile-ios-reset-pending");ApplyIosDraft();
+        Check(!options.Current.iosPedalTravel&&options.Current.iosPedalTravelMode==0&&options.Current.iosPedalTopDeadzone==0&&options.Current.musicVolume==1,"Applying reset restores defaults");
+        menu.Navigate(1);Check(menu.DiagnosticSelection==11,"Back follows Apply");menu.Navigate(1);Check(menu.DiagnosticSelection==1,"Footer navigation wraps to first iOS row");
+    }
+    private IEnumerator SlidingPedalChecks(){
+        var options=host.GameOptions;
+        Rect gas=controls.ButtonRect("R2"),brake=controls.ButtonRect("L2");
+        Check(options.SetIosPedalTravel(true),"Enable sliding pedals in the running race");
+        Check(controls.ButtonRect("R2")==gas&&controls.ButtonRect("L2")==brake,"Mode leaves pedal bounds unchanged");
+        foreach(string name in new[]{"L2","R2"}){
+            Rect r=controls.ButtonRect(name);
+            foreach(float amount in new[]{0f,.25f,.5f,.75f,1f}){
+                var p=new Vector2(r.center.x,Mathf.Lerp(r.yMax-4*controls.LayoutUnit,r.y+4*controls.LayoutUnit,amount));
+                Touch(140,TouchPhase.Began,p);var direct=Packet();
+                Check(Math.Abs((int)(name=="L2"?direct.leftTrigger:direct.rightTrigger)-(amount==0?0:Mathf.RoundToInt(64+amount*107)))<=1,"Direct calibrated pedal position: "+name+" / "+amount);
+                yield return SimulationTicks(3);
+                Check(Idas3ArcadeHud.Read(out var live)&&Math.Abs((name=="L2"?live.brake:live.throttle)-amount)<.02f,
+                    "Actual race pedal follows direct position: "+name+" / "+amount+", observed="+(name=="L2"?live.brake:live.throttle)+", phase="+host.Status.racePhase+", submitted="+(name=="L2"?host.DiagnosticSubmittedInput.leftTrigger:host.DiagnosticSubmittedInput.rightTrigger));
+                Touch(140,TouchPhase.Ended,p);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Direct pedal releases: "+name);
+            }
+            Touch(140,TouchPhase.Began,new Vector2(r.center.x,r.yMax-1));
+            Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==0,"Bottom border is exactly zero: "+name);
+            foreach(float amount in new[]{.25f,.5f,.75f,1f,.5f,0f}){
+                Touch(140,TouchPhase.Moved,new Vector2(r.center.x,Mathf.Lerp(r.yMax-4*controls.LayoutUnit,r.y+4*controls.LayoutUnit,amount)));
+                Check(Math.Abs((int)(name=="L2"?Packet().leftTrigger:Packet().rightTrigger)-(amount==0?0:Mathf.RoundToInt(64+amount*107)))<=1,"Slide up/down follows calibrated position: "+name+" / "+amount);
+            }
+            Touch(140,TouchPhase.Moved,new Vector2(r.center.x,r.y+1));
+            Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==171,"Top border is exactly full: "+name);
+            Touch(140,TouchPhase.Moved,r.center+Vector2.right*r.width);
+            Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Sliding outside releases: "+name);
+            Touch(140,TouchPhase.Moved,r.center);
+            Check(Math.Abs((int)(name=="L2"?Packet().leftTrigger:Packet().rightTrigger)-118)<=1,"Re-entering captured pedal restores half: "+name);
+            Touch(140,TouchPhase.Canceled,r.center);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Canceled slide neutralizes: "+name);
+        }
+        // Retain the real running race; a visual fixture bypasses the countdown
+        // owner and is unsuitable for asserting the vehicle's actual pedals.
+        foreach(float amount in new[]{0f,.5f,1f}){
+            Touch(141,TouchPhase.Began,new Vector2(gas.center.x,Mathf.Lerp(gas.yMax-4*controls.LayoutUnit,gas.y+4*controls.LayoutUnit,amount)));
+            Touch(142,TouchPhase.Began,new Vector2(brake.center.x,Mathf.Lerp(brake.yMax-4*controls.LayoutUnit,brake.y+4*controls.LayoutUnit,amount)));
+            uint expected=amount==0?0:amount==.5f?118u:171u;
+            var f=Packet();Check(Math.Abs((int)f.rightTrigger-expected)<=1&&Math.Abs((int)f.leftTrigger-expected)<=1,"Both pedals accept independent positions");
+            yield return Capture("mobile-pedal-travel-"+Mathf.RoundToInt(amount*100));
+            controls.ResetInput();
+        }
+        Touch(141,TouchPhase.Began,gas.center);Touch(142,TouchPhase.Began,new Vector2(brake.center.x,brake.y+1));
+        yield return SimulationTicks(3);
+        Check(Math.Abs((int)host.DiagnosticSubmittedInput.rightTrigger-118)<=1&&host.DiagnosticSubmittedInput.leftTrigger==171,"Half gas and full brake reach actual native submission");
+        Check(Idas3ArcadeHud.Read(out var telemetry)&&Math.Abs(telemetry.throttle-.5f)<.02f&&telemetry.brake>.99f,"Native race telemetry receives analog gas and independent brake");
+        Touch(143,TouchPhase.Began,new Vector2(gas.center.x,gas.y+1));Check(Packet().rightTrigger==171,"Second pedal finger uses greatest amount");
+        Touch(143,TouchPhase.Ended,gas.center);Check(Math.Abs((int)Packet().rightTrigger-118)<=1,"Releasing second finger restores first amount");
+        Check(options.SetIosPedalTravel(false)&&Packet().rightTrigger==255,"Switching off restores full-strength held pedal");
+        Check(options.SetIosPedalTravel(true)&&Math.Abs((int)Packet().rightTrigger-118)<=1,"Switching on reads current touch position");
+        host.DiagnosticFocusOverride=false;Check(Packet().rightTrigger==0&&Packet().leftTrigger==0,"Focus gate blocks sliding pedals");
+        controls.ResetInput();host.DiagnosticFocusOverride=true;
+        Touch(141,TouchPhase.Began,gas.center);controls.ResetInput();
+        Touch(141,TouchPhase.Moved,gas.center);Check(Packet().rightTrigger==0,"Lifecycle reset releases captured analog pedal");
+        foreach(int profile in new[]{1,2,0}){
+            options.BeginEdit();options.Draft.controllerResponse=profile;
+            Check(options.ApplyDraft(),"Select controller response for virtual pedal check: "+profile);
+            Touch(141,TouchPhase.Began,gas.center);Touch(142,TouchPhase.Began,brake.center);yield return SimulationTicks(3);
+            uint half=profile==1?128u:118u;
+            Check(Math.Abs((int)Packet().rightTrigger-half)<=1&&Math.Abs((int)Packet().leftTrigger-half)<=1,"Touch travel matches selected controller response: "+profile);
+            Check(Idas3ArcadeHud.Read(out var live)&&Math.Abs(live.throttle-.5f)<.02f&&Math.Abs(live.brake-.5f)<.02f,"Actual half pedals in every response: "+profile);
+            controls.ResetInput();
+        }
+        yield return PedalDeadzoneChecks();yield return SelectivePedalChecks();
+        Check(options.SetIosPedalTravel(false),"Restore digital mode for existing regression checks");PedalChecks();
+    }
+    private IEnumerator PedalDeadzoneChecks(){
+        var options=host.GameOptions;
+        Check(options.SetIosPedalDeadzones(.05f,.05f),"Set five-percent top and bottom deadzones");
+        foreach(int profile in new[]{1,2,0}){
+            options.BeginEdit();options.Draft.controllerResponse=profile;Check(options.ApplyDraft(),"Apply response for deadzone checks: "+profile);
+            foreach(string name in new[]{"L2","R2"}){
+                Rect r=controls.ButtonRect(name);
+                float[] positions={.04f,.05f,.275f,.5f,.725f,.95f,.96f},amounts={1,1,.75f,.5f,.25f,0,0};
+                for(int i=0;i<positions.Length;++i){
+                    var point=new Vector2(r.center.x,r.y+r.height*positions[i]);Touch(144,TouchPhase.Began,point);
+                    yield return SimulationTicks(3);
+                    Check(Idas3ArcadeHud.Read(out var live)&&Math.Abs((name=="L2"?live.brake:live.throttle)-amounts[i])<.02f,
+                        "Five-percent deadzones reach actual pedals: "+name+" / "+positions[i]+" / response "+profile);
+                    Touch(144,TouchPhase.Ended,point);Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Deadzoned pedal releases");
+                }
+            }
+        }
+        Check(options.SetIosPedalDeadzones(.1f,.2f),"Top and bottom deadzones can differ");
+        foreach(string name in new[]{"L2","R2"}){
+            Rect r=controls.ButtonRect(name);Touch(144,TouchPhase.Began,new Vector2(r.center.x,r.y+r.height*.45f));
+            yield return SimulationTicks(3);
+            Check(Idas3ArcadeHud.Read(out var half)&&Math.Abs((name=="L2"?half.brake:half.throttle)-.5f)<.02f,"Remaining asymmetric travel stays linear");
+            Touch(144,TouchPhase.Moved,new Vector2(r.center.x,r.y+r.height*.81f));
+            Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==0,"Bottom deadzone stays neutral while sliding");
+            Touch(144,TouchPhase.Moved,new Vector2(r.center.x,r.y+r.height*.09f));
+            Check((name=="L2"?Packet().leftTrigger:Packet().rightTrigger)==171,"Top deadzone reaches full while sliding");
+            Touch(144,TouchPhase.Ended,r.center);
+        }
+        Check(options.SetIosPedalTravel(false),"Disable travel with saved deadzones");
+        PedalChecks();
+        Check(options.SetIosPedalTravel(true)&&options.SetIosPedalDeadzones(0,0),"Restore zero deadzones and travel for caller");
+    }
+    private IEnumerator SelectivePedalChecks(){
+        var options=host.GameOptions;
+        Check(options.SetIosPedalDeadzones(.05f,.05f),"Prepare selective pedal deadzones");
+        foreach(int profile in new[]{0,1,2}){
+            options.BeginEdit();options.Draft.controllerResponse=profile;options.Draft.iosPedalTravelMode=0;
+            Check(options.ApplyDraft(),"Select response for independent pedal modes");
+            options.Draft.iosPedalTravelMode=1;
+            foreach(string name in new[]{"R2","L2"})Touch(name=="R2"?145:146,TouchPhase.Began,controls.ButtonRect(name).center);
+            uint half=profile==1?128u:118u;
+            Check(Math.Abs((int)Packet().rightTrigger-half)<=1&&Math.Abs((int)Packet().leftTrigger-half)<=1,"Unapplied selection leaves both held pedals analog");
+            controls.ResetInput();
+            foreach(int mode in new[]{1,2,0}){
+                options.Draft.iosPedalTravelMode=mode;Check(options.ApplyDraft(),"Apply selective pedal mode "+mode);
+                foreach(float position in new[]{.04f,.5f,.96f}){
+                    foreach(string name in new[]{"R2","L2"}){
+                        Rect r=controls.ButtonRect(name);Touch(name=="R2"?145:146,TouchPhase.Began,new Vector2(r.center.x,r.y+r.height*position));
+                    }
+                    var input=Packet();float amount=position<.05f?1:position>.95f?0:.5f;
+                    uint analog=amount==0?0:profile==1?(uint)Mathf.RoundToInt(amount*255):(uint)Mathf.RoundToInt(64+amount*107);
+                    bool gasAnalog=mode!=2,brakeAnalog=mode!=1;
+                    Check(Math.Abs((int)input.rightTrigger-(gasAnalog?analog:255u))<=1&&Math.Abs((int)input.leftTrigger-(brakeAnalog?analog:255u))<=1,"Selected pedal uses calibrated travel, other remains digital255: "+profile+" / "+mode+" / "+position);
+                    yield return SimulationTicks(3);
+                    Check(Idas3ArcadeHud.Read(out var live)&&Math.Abs(live.throttle-(gasAnalog?amount:1))<.02f&&Math.Abs(live.brake-(brakeAnalog?amount:1))<.02f,"Selective pedal modes reach actual race telemetry");
+                    if(profile==0&&position==.5f)yield return Capture("mobile-pedal-selection-"+mode);
+                    controls.ResetInput();Check(Packet().leftTrigger==0&&Packet().rightTrigger==0,"Both pedal modes release cleanly");
+                }
+            }
+        }
+        options.BeginEdit();options.Draft.controllerResponse=0;options.Draft.iosPedalTravelMode=0;
+        Check(options.ApplyDraft()&&options.SetIosPedalDeadzones(0,0),"Restore both-pedal selection and zero deadzones");
     }
     private IEnumerator Run(){
         // Catch exceptions while advancing each nested iterator.
@@ -108,7 +316,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         foreach(string name in new[]{"L2","R2","L1","R1","LIGHT"})Touch(10+Array.IndexOf(Idas3TouchLayout.Ids,name),TouchPhase.Began,controls.ButtonRect(name).center);
         Check(Packet().padButtons==0&&Packet().leftTrigger==0&&Packet().rightTrigger==0&&!Key(Packet(),69)&&!Key(Packet(),81)&&!Key(Packet(),72),"Menu hidden driving buttons cannot send input");controls.ResetInput();
         // Hold the actual virtual View control through the normal title owner.
-        yield return OpenTitleOptions();host.PauseMenu.SelectTab(2);
+        yield return OpenTitleOptions();yield return PedalTravelSettingsChecks();host.PauseMenu.SelectTab(2);
         Check(host.PauseMenu.DiagnosticRows==8,"Gameplay contains upstream FOV and mobile gravity");
         host.PauseMenu.Navigate(1);host.PauseMenu.NavigateHorizontal(1);
         Check(host.GameOptions.Draft.cameraFovPercent==101,"Mobile menu adjusts upstream FOV");
@@ -132,7 +340,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         while((!host.MobileSteeringAllowed||host.Status.racePhase!=2)&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
         Check(host.MobileSteeringAllowed&&host.Status.racePhase==2,"Native race is running after countdown");yield return Frames(10);
         Check(Idas3ArcadeHud.Read(out var transmission)&&(transmission.flags&2u)==0,"Selected MT reaches the actual race telemetry");
-        VisibilityChecks(true,true);PedalChecks();
+        VisibilityChecks(true,true);PedalChecks();yield return SlidingPedalChecks();
         Touch(11,TouchPhase.Began,controls.ButtonRect("L1").center);Touch(12,TouchPhase.Began,controls.ButtonRect("R1").center);
         Check(Key(Packet(),81)&&Key(Packet(),69)&&(Packet().padButtons&0x300)==0x300,"MT shoulders map to both shift actions");controls.ResetInput();
         var nativeOptions=Idas3Native.ReadOptions();nativeOptions.cameraView=1;
@@ -328,8 +536,13 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
                 yield return Capture("locale-"+code+"-save");yield return OpenTitleOptions();menu.SelectTab(2);yield return Frames(3);
                 Check(host.GameOptions.SetGravitySteering(true),"Enable localized gravity settings");yield return Frames(3);
                 yield return Capture("locale-"+code+"-gameplay");menu.SelectTab(8);yield return Frames(3);
+                Check(host.GameOptions.SetIosPedalTravel(true)&&host.GameOptions.SetIosPedalDeadzones(.05f,.05f),"Show both localized pedal deadzone rows");
+                host.GameOptions.Draft.iosPedalTravelMode=language==1?2:1;
+                Check(Idas3MenuLocalization.T("ACCELERATOR TRAVEL ONLY")!=(language==0?"":"ACCELERATOR TRAVEL ONLY")&&
+                    Idas3MenuLocalization.T("BRAKE TRAVEL ONLY")!=(language==0?"":"BRAKE TRAVEL ONLY"),"Localized pedal-only labels");
                 yield return Capture("locale-"+code+"-touch");menu.Activate();Check(menu.TouchLayoutEditing,"Localized layout editor opens");yield return Frames(3);
                 yield return Capture("locale-"+code+"-layout");menu.TouchEditor.Close(false);menu.SetOpen(false);
+                Check(host.GameOptions.SetIosPedalTravel(false)&&host.GameOptions.SetIosPedalDeadzones(0,0),"Restore isolated pedal defaults after localized layout");
                 Check(host.GameOptions.SetPerformanceOsd(true),"Enable localized OSD");yield return Frames(5);
                 var osd=host.GetComponent<Idas3PerformanceOsd>();Rect safe=controls.SafeRect;
                 Check(osd.DisplayRect.height>=4*osd.LineHeight&&osd.LineHeight>0,"Four complete measured font lines: "+code);
@@ -365,6 +578,12 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         menu.SetOpen(false);yield return Frames(4);
         Check(host.MobileSteeringAllowed,"Resume MT race to test saved pedal bounds");
         Touch(62,TouchPhase.Began,new Vector2(saved.center.x,saved.yMax-1));Check(Packet().rightTrigger>=250,"Saved enlarged bounds operate trigger in a race");Touch(62,TouchPhase.Ended,saved.center);
+        Check(host.GameOptions.SetIosPedalTravel(true),"Enable travel on the moved and enlarged pedal");
+        Touch(62,TouchPhase.Began,saved.center);
+        Check(Math.Abs((int)Packet().rightTrigger-118)<=1&&controls.ButtonRect("R2")==saved,"Saved custom pedal uses its new center for half travel");
+        Touch(62,TouchPhase.Moved,new Vector2(saved.center.x,saved.yMax-1));Check(Packet().rightTrigger==0,"Saved enlarged pedal bottom is neutral");
+        Touch(62,TouchPhase.Moved,new Vector2(saved.center.x,saved.y+1));Check(Packet().rightTrigger==171,"Saved enlarged pedal top is full");
+        Touch(62,TouchPhase.Ended,saved.center);Check(host.GameOptions.SetIosPedalTravel(false),"Restore digital mode after custom layout travel");
         Touch(63,TouchPhase.Began,original.center);Check(Packet().rightTrigger==0,"Previous position no longer operates moved control");Touch(63,TouchPhase.Ended,original.center);
         Touch(66,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);Touch(66,TouchPhase.Ended,Vector2.zero);
         Check(menu.IsOpen,"Return to pause after saved pedal bounds check");menu.SelectTab(8);
@@ -453,17 +672,20 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(!menu.IsOpen&&host.Status.frontendStage==0,"Short VIEW tap does not open settings");
         Check(Idas3SceneModeFlowValue(14)!=condition,"Short VIEW retains actual ranking condition navigation");
         yield return OpenTitleOptions();yield return Capture("mobile-title-options");
-        menu.SelectTab(8);for(int i=0;i<4;++i)menu.Navigate(1);
+        SelectIosRow(6);
         host.GameOptions.Draft.musicVolume=.6f;menu.Activate();
-        Check(host.GameOptions.Current.showOsd&&host.GameOptions.Draft.showOsd,"OSD toggle applies immediately");
-        var reloaded=new Idas3GameOptions();reloaded.Initialize(Path.Combine(root,"userdata"));
-        Check(reloaded.Current.showOsd&&reloaded.Current.musicVolume!=.6f,"OSD persists independently of unrelated draft");
+        Check(!host.GameOptions.Current.showOsd&&host.GameOptions.Draft.showOsd,"OSD toggle edits draft only");
+        var reloaded=new Idas3GameOptions(new OptionsTestPlatform());reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(!reloaded.Current.showOsd&&reloaded.Current.musicVolume!=.6f,"Unapplied OSD and music remain unsaved");
+        ApplyIosDraft();reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(reloaded.Current.showOsd&&reloaded.Current.musicVolume==.6f,"Apply saves OSD with the shared draft");
         double until=Time.realtimeSinceStartupAsDouble+.8;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
         var osd=host.GetComponent<Idas3PerformanceOsd>();
         Check(osd.Visible&&osd.Text.Split('\n').Length==4&&osd.Text.Contains("CPU ")&&osd.Text.Contains("GPU ")&&osd.Text.Contains("RAM ")&&osd.Text.Contains("MiB"),"Four-line measured OSD");
         Check(osd.Text.Split('\n')[0]=="FPS "+menu.FrameRateText.Split(' ')[0],"OSD and original FPS share the same render sample");
         File.WriteAllText(Path.Combine(root,"osd-sample.txt"),osd.Text);yield return Capture("mobile-osd-options");
-        menu.Activate();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"OSD off hides immediately");
+        SelectIosRow(6);menu.Activate();Check(host.GameOptions.Current.showOsd&&osd.Visible,"Unapplied OSD off remains visible");
+        ApplyIosDraft();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"Apply hides OSD");
         yield return DiagnosticLoggingChecks();
         yield return ThermalFrameRateChecks();
         // Closing via the actual virtual Start must consume the press, leaving
@@ -489,12 +711,12 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         var menu=host.PauseMenu;var diagnostics=host.GetComponent<Idas3IosDiagnostics>();
         Check(diagnostics!=null&&!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Diagnostic logging defaults off");
         Check(!Directory.Exists(diagnostics.Folder),"Disabled logging creates no directory");
-        Check(menu.DiagnosticRows==7,"iOS menu includes seven rows");
-        menu.Navigate(1);Check(menu.DiagnosticSelection==6,"Logging has its own iOS row");
-        host.GameOptions.Draft.musicVolume=.6f;menu.Activate();
-        Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording,"Logging starts immediately");
-        var saved=new Idas3GameOptions();saved.Initialize(Path.Combine(root,"userdata"));
-        Check(saved.Current.diagnosticLogging&&saved.Current.musicVolume!=.6f,"Logging saves without applying the music draft");
+        Check(menu.DiagnosticRows==8,"iOS menu includes eight rows");
+        SelectIosRow(7);menu.Activate();yield return Frames(3);
+        Check(!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording&&!Directory.Exists(diagnostics.Folder),"Unapplied logging creates no files");
+        ApplyIosDraft();Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording,"Apply starts logging");
+        var saved=new Idas3GameOptions(new OptionsTestPlatform());saved.Initialize(Path.Combine(root,"userdata"));
+        Check(saved.Current.diagnosticLogging,"Applied logging persists");
         Debug.Log("IDAS3 DIAGNOSTIC FILE SMOKE");
         double until=Time.realtimeSinceStartupAsDouble+2.5;while(Time.realtimeSinceStartupAsDouble<until)yield return null;
         string runtime=Path.Combine(diagnostics.Folder,"runtime.log"),performance=Path.Combine(diagnostics.Folder,"performance.jsonl");
@@ -505,12 +727,17 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         File.Copy(performance,Path.Combine(root,"diagnostic-performance-observed.jsonl"));
         Check(host.GetComponent<Idas3SceneGame>().NativeStepMilliseconds>=0,"Native frame timings available");
         yield return Capture("mobile-diagnostic-logging");
-        menu.Activate();Check(!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Logging stops immediately");
+        SelectIosRow(7);menu.Activate();yield return Frames(3);
+        Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording&&File.Exists(runtime),"Unapplied logging off keeps recording and existing files");
+        ApplyIosDraft();Check(!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Apply stops logging");
         Check(!Directory.Exists(diagnostics.Folder),"Turning logging off deletes its generated files");
         saved.Initialize(Path.Combine(root,"userdata"));Check(!saved.Current.diagnosticLogging,"Logging off persists");
         yield return Frames(5);
         Check(!Directory.Exists(diagnostics.Folder),"Closed background writer cannot recreate deleted logs");
-        menu.Navigate(-1);
+        SelectIosRow(7);menu.Activate();ApplyIosDraft();
+        SelectIosRow(menu.DiagnosticRows+1);menu.Activate();
+        Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording&&!host.GameOptions.Draft.diagnosticLogging,"Reset keeps logs active until Apply");
+        ApplyIosDraft();Check(!diagnostics.Recording&&!Directory.Exists(diagnostics.Folder),"Applying reset stops writer and deletes generated logs");
     }
     private IEnumerator ThermalFrameRateChecks(){
         var options=host.GameOptions;var menu=host.PauseMenu;
@@ -528,27 +755,33 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(!isolated.SetIosThermalFrameRateAdjustment(true)&&!isolated.Current.iosThermalFrameRateAdjustment&&
             !isolated.Draft.iosThermalFrameRateAdjustment&&Idas3IosThermalFrameRate.Enabled,"Save failure preserves current, draft and native thermal state");
         Idas3MenuLocalization.SetLanguage(options.Current.customMenuLanguage);
-        menu.SelectTab(8);for(int i=0;i<6;++i)menu.Navigate(1);
-        Check(menu.DiagnosticSelection==7,"Thermal switch has its own iOS row");
+        menu.SelectTab(8);for(int i=0;i<7;++i)menu.Navigate(1);
+        Check(menu.DiagnosticSelection==8,"Thermal switch has its own iOS row");
         bool simulated=Idas3IosThermalFrameRate.DiagnosticThermalState(2);
         if(simulated){
             Idas3FramePacing.Configure(false,60);
             Check(Application.targetFrameRate==60&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Serious caps the actual display link at 30 while Unity target remains 60");
             yield return Capture("mobile-thermal-on");
         }
-        options.Draft.musicVolume=.6f;menu.Activate();
-        Check(!options.Current.iosThermalFrameRateAdjustment&&!options.Draft.iosThermalFrameRateAdjustment&&!Idas3IosThermalFrameRate.Enabled,"Menu disables native thermal cap immediately");
-        var reloaded=new Idas3GameOptions();reloaded.Initialize(Path.Combine(root,"userdata"));
-        Check(!reloaded.Current.iosThermalFrameRateAdjustment&&reloaded.Current.musicVolume!=.6f&&
-            options.Draft.musicVolume==.6f,"Thermal switch persists independently and preserves unrelated draft");
+        menu.Activate();
+        Check(options.Current.iosThermalFrameRateAdjustment&&!options.Draft.iosThermalFrameRateAdjustment&&Idas3IosThermalFrameRate.Enabled,"Disable checkbox edits draft without changing thermal cap");
+        ApplyIosDraft();
+        Check(!options.Current.iosThermalFrameRateAdjustment&&!Idas3IosThermalFrameRate.Enabled,"Apply disables native thermal cap");
+        var reloaded=new Idas3GameOptions(new OptionsTestPlatform());reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(!reloaded.Current.iosThermalFrameRateAdjustment,"Applied thermal choice persists");
         if(simulated){
             Check(Math.Abs(Idas3IosThermalFrameRate.PreferredFps-60)<.01,"Disabling thermal adjustment immediately restores 60 without leaving the race");
             yield return Capture("mobile-thermal-off");
-            menu.NavigateHorizontal(1);
+            SelectIosRow(8);menu.NavigateHorizontal(1);
+            Check(!options.Current.iosThermalFrameRateAdjustment&&options.Draft.iosThermalFrameRateAdjustment&&
+                Math.Abs(Idas3IosThermalFrameRate.PreferredFps-60)<.01,"Unchecking disable remains pending");
+            ApplyIosDraft();
             Check(options.Current.iosThermalFrameRateAdjustment&&Idas3IosThermalFrameRate.Enabled&&
-                Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Horizontal control re-enables the Serious cap immediately");
+                Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Apply re-enables Serious cap");
             Check(Idas3IosThermalFrameRate.DiagnosticThermalState(3)&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-15)<.01,"Critical caps the display link at 15");
-            menu.Activate();Check(!Idas3IosThermalFrameRate.Enabled&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-60)<.01,"Disabling also removes the Critical cap");
+            SelectIosRow(8);menu.Activate();
+            Check(Idas3IosThermalFrameRate.Enabled&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-15)<.01,"Pending disable keeps Critical cap");
+            ApplyIosDraft();Check(!Idas3IosThermalFrameRate.Enabled&&Math.Abs(Idas3IosThermalFrameRate.PreferredFps-60)<.01,"Applied disable removes Critical cap");
             Idas3FramePacing.Configure(false,30);Check(Math.Abs(Idas3IosThermalFrameRate.PreferredFps-30)<.01,"Thermal off preserves the explicit 30 FPS setting");
             Idas3FramePacing.Configure(false,0);
             Check(Math.Abs(Idas3IosThermalFrameRate.PreferredFps-Application.targetFrameRate)<.01,"Thermal off preserves the unlimited display-refresh mapping");
@@ -556,7 +789,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         }
         Check(options.SetIosThermalFrameRateAdjustment(true)&&Idas3IosThermalFrameRate.Enabled,"Restore isolated thermal default");
         Idas3FramePacing.Configure(options.Current.vSync,options.Current.frameRateLimit);
-        menu.Navigate(1);Check(menu.DiagnosticSelection==8,"Back follows the new thermal row");menu.Back();
+        SelectIosRow(9);Check(menu.DiagnosticSelection==9,"Reset follows the thermal row");menu.Back();
         Check(menu.DiagnosticSelection==0,"Back returns from iOS options to categories");
         menu.Activate();
     }

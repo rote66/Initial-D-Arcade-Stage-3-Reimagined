@@ -139,13 +139,25 @@ public sealed class Idas3VirtualControls : MonoBehaviour
     private void Release(int id){fingers.Remove(id);if(stickFinger==id){stickFinger=-1;stick=Vector2.zero;}}
     private void RebuildHeld(){
         held.Clear();brake=gas=0;
+        var settings=host?.GameOptions?.Current;
         foreach(var c in fingers.Values)foreach(var b in buttons)if(Visible(b.name)&&c.owner==b.name&&b.rect.Contains(c.point)){
             held.Add(b.name);
-            if(b.name=="L2")brake=1;
-            if(b.name=="R2")gas=1;
+            // Deadzones use the full button height; zero keeps the existing
+            // four-pixel border padding and proportional fill.
+            float value=b.trigger&&settings?.UsesIosPedalTravel(b.name=="R2")==true?Mathf.InverseLerp(
+                b.rect.yMax-(settings.iosPedalBottomDeadzone>0?b.rect.height*settings.iosPedalBottomDeadzone:4*scale),
+                b.rect.y+(settings.iosPedalTopDeadzone>0?b.rect.height*settings.iosPedalTopDeadzone:4*scale),c.point.y):1;
+            if(b.name=="L2")brake=Mathf.Max(brake,value);
+            if(b.name=="R2")gas=Mathf.Max(gas,value);
         }
     }
     internal void InjectGravity(double x,double y,int orientation){var settings=host.GameOptions.Current;gravity.Sample(x,y,orientation,settings.gravityDeadzone,settings.gravitySensitivity);}
+    private static uint PedalTrigger(float value,Idas3GameOptions.Values settings,bool accelerator){
+        // Flycast profiles calibrate the ADC's active pedal range to 64..171.
+        // Invert that range for touch travel; physical and digital inputs retain
+        // their existing mapping. The previous response uses the full byte.
+        return (uint)Mathf.RoundToInt(settings.UsesIosPedalTravel(accelerator)&&settings.controllerResponse!=1&&value>0?64+value*107:value*255);
+    }
     internal void Apply(ref Idas3Native.FrameInput frame,Idas3SceneGame game)
     {
         RefreshContext();RebuildHeld();
@@ -165,8 +177,8 @@ public sealed class Idas3VirtualControls : MonoBehaviour
                 if(axis.y<-.45f)frame.SetKey(69);if(axis.y>.45f)frame.SetKey(81);
             }
         }
-        if(held.Contains("R2"))frame.rightTrigger=255;
-        if(held.Contains("L2"))frame.leftTrigger=(uint)Mathf.RoundToInt(brake*255);
+        if(held.Contains("R2"))frame.rightTrigger=PedalTrigger(gas,game.GameOptions.Current,true);
+        if(held.Contains("L2"))frame.leftTrigger=PedalTrigger(brake,game.GameOptions.Current,false);
         if(held.Contains("B"))frame.padButtons|=0x2000;
         if(held.Contains("R1")){frame.padButtons|=0x200;frame.SetKey(69);}
         if(held.Contains("L1")){frame.padButtons|=0x100;frame.SetKey(81);}

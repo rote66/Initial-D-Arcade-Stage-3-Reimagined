@@ -839,6 +839,12 @@ DIAGNOSTIC LOGGING	診断ログ	生成诊断日志
 THERMAL FRAME RATE ADJUSTMENT	温度によるFPS調整	温度帧率调整
 DISABLE THERMAL FRAME RATE ADJUSTMENT	温度によるFPS調整を無効化	禁用温度帧率调整
 THERMAL FRAME RATE SAVED	温度によるFPS調整を保存しました	温度帧率调整已保存
+PEDAL TRAVEL	ペダルのスライド入力	滑动行程
+PEDAL TRAVEL SAVED	ペダルのスライド入力を保存しました	滑动行程已保存
+TOP DEADZONE	上端のデッドゾーン	顶部死区
+BOTTOM DEADZONE	下端のデッドゾーン	底部死区
+ACCELERATOR TRAVEL ONLY	アクセルのみスライド入力	仅油门滑动行程
+BRAKE TRAVEL ONLY	ブレーキのみスライド入力	仅刹车滑动行程
 DIAGNOSTIC LOGGING ON	診断ログを有効にしました	已开启诊断日志
 DIAGNOSTIC LOGS DELETED	診断ログを削除しました	诊断日志已关闭并删除
 Could not save diagnostic logging. {0}	診断ログ設定を保存できませんでした。{0}	无法保存日志设置：{0}

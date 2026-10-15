@@ -17,15 +17,17 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private static string[] Tabs=>MobileControls?MobileTabs:DesktopTabs;
     private static bool MobileControls=>Application.platform==RuntimePlatform.IPhonePlayer;
     private bool GravityResponseVisible=>MobileControls&&options.Current.gravitySteering;
+    private bool PedalDeadzonesVisible=>MobileControls&&options.Draft.iosPedalTravel;
+    private int IosExtraRows=>PedalDeadzonesVisible?4:0;
+    private float IosRowHeight=>PedalDeadzonesVisible?25:34;
+    private float IosRowY(int row)=>197+(row-1)*(PedalDeadzonesVisible?27:38);
     private void ToggleGravity(){notice=options.SetGravitySteering(!options.Current.gravitySteering)?"GRAVITY STEERING SAVED":options.LastError;}
     private void SetGravityResponse(float deadzone,float sensitivity){notice=options.SetGravityResponse(deadzone,sensitivity)?"GRAVITY STEERING SAVED":options.LastError;}
-    private void ToggleOsd(){notice=options.SetPerformanceOsd(!options.Current.showOsd)?"OSD SAVED":options.LastError;}
-    private void ToggleThermalFrameRate(){notice=options.SetIosThermalFrameRateAdjustment(!options.Current.iosThermalFrameRateAdjustment)?"THERMAL FRAME RATE SAVED":options.LastError;}
-    private void ToggleDiagnostics(){
-        if(!options.SetDiagnosticLogging(!options.Current.diagnosticLogging)){notice=options.LastError;return;}
-        var diagnostics=GetComponent<Idas3IosDiagnostics>();diagnostics?.Synchronize();
-        notice=diagnostics?.LastError??(options.Current.diagnosticLogging?"DIAGNOSTIC LOGGING ON":"DIAGNOSTIC LOGS DELETED");
+    private void SetPedalDeadzones(float top,float bottom){
+        options.Draft.iosPedalTopDeadzone=Mathf.Clamp(top,0,Idas3GameOptions.MaximumIosPedalDeadzone);
+        options.Draft.iosPedalBottomDeadzone=Mathf.Clamp(bottom,0,Idas3GameOptions.MaximumIosPedalDeadzone);notice="";
     }
+    private void TogglePedalTravelMode(int mode){options.Draft.iosPedalTravelMode=options.Draft.iosPedalTravelMode==mode?0:mode;notice="";}
     private static readonly int[] HudSizeGroups={1,2,3,6,7,4,9,8,10};
     private static readonly string[] HudSizeNames={"TIME / SECTION TIMES","SPEEDOMETER / GEAR","TIME ATTACK RECORDS","LEGEND OPPONENT PANEL","ONLINE OPPONENT PANEL","REAR-VIEW MIRROR","TIME EXTENDED","ACCEPTING CHALLENGERS","ORNAMENT / KEYCHAIN"};
     public string ReplayStatus {get;set;}="Finished recordings are saved on this computer.";
@@ -170,7 +172,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(Modal){modalSelection=1-modalSelection;return;}
         wheelEditing=false;
         if(showOptions&&selection==0){ChangeCategory(delta);return;}
-        selection=showOptions?1+Wrap(selection-1+Math.Sign(delta),Rows+(tab>=8?1:3)):Wrap(selection+Math.Sign(delta),online?4:5);
+        selection=showOptions?1+Wrap(selection-1+Math.Sign(delta),Rows+(tab>=8&&!(MobileControls&&tab==8)?1:3)):Wrap(selection+Math.Sign(delta),online?4:5);
     }
     public void NavigateHorizontal(int delta){
         if(TouchLayoutEditing){TouchEditor.NavigateHorizontal(delta);return;}
@@ -198,7 +200,10 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(selection==0){selection=1;return;}
         if(tab==2&&selection==5){if(FullTuneAvailable)queued=Command.FullTune;return;}
         if(MobileControls&&tab==9){if(selection==1)queued=Command.LocalNetwork;else Back();return;}
-        if(MobileControls&&tab==8){if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);else if(selection==5)ToggleOsd();else if(selection==6)ToggleDiagnostics();else if(selection==7)ToggleThermalFrameRate();else Back();return;}
+        if(MobileControls&&tab==8){
+            if(selection==1)OpenTouchEditor();else if(selection==2)ImportTouchLayout();else if(selection==3)ExportTouchLayout();else if(selection==4)OpenTouchEditor(true);
+            else if(selection<=Rows)Adjust(selection-1,1);else if(selection==Rows+1)ResetDefaults();else if(selection==Rows+2)Apply();else Back();return;
+        }
         if(tab==8&&selection==1){if(AttractOptions)Updates?.Activate();return;}
         if(tab==5&&selection==2){Application.OpenURL(Idas3CommunityTimes.ServiceUrl);return;}
         if(tab==6&&selection==1){queued=Command.Replays;return;}
@@ -242,7 +247,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
     private int BindingFirstSelection=>controllerDevices!=null?2:1;
     private bool DeviceRowSelected=>controllerDevices!=null&&selection==1;
-    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?7:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
+    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?8+IosExtraRows:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
     private static int Wrap(int value,int count)=>(value%count+count)%count;
     private void Update(){
         double now=Time.realtimeSinceStartupAsDouble;options?.Tick(now);
@@ -273,10 +278,13 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         }
         if(options.ApplyDraft()){
             modalSelection=0;notice=options.DisplayConfirmationPending?"Review the new display settings.":"OPTIONS SAVED";
+            var diagnostics=GetComponent<Idas3IosDiagnostics>();diagnostics?.Synchronize();
+            if(!string.IsNullOrEmpty(diagnostics?.LastError))notice=diagnostics.LastError;
         }else notice=options.LastError??"Could not apply options.";
     }
     private void ResetDefaults(){
         if(tab==3)bindings?.ResetDraft();else options.ResetDraft();
+        if(MobileControls&&tab==8)selection=Rows+1;
         notice="Defaults selected. Apply to save.";
     }
     public void BeginBindingCapture(Idas3ControlBindings.ActionId action,Idas3ControlBindings.Slot slot){
@@ -315,7 +323,18 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private void Adjust(int row,int direction){
         var v=options.Draft;
         if(MobileControls&&tab==9)return;
-        if(MobileControls&&tab==8){if(row==4)ToggleOsd();else if(row==5)ToggleDiagnostics();else if(row==6)ToggleThermalFrameRate();return;}
+        if(MobileControls&&tab==8){
+            if(row==4)v.iosPedalTravel=!v.iosPedalTravel;
+            else if(PedalDeadzonesVisible&&row==5)SetPedalDeadzones(Mathf.Round(v.iosPedalTopDeadzone*100+direction)/100f,v.iosPedalBottomDeadzone);
+            else if(PedalDeadzonesVisible&&row==6)SetPedalDeadzones(v.iosPedalTopDeadzone,Mathf.Round(v.iosPedalBottomDeadzone*100+direction)/100f);
+            else if(PedalDeadzonesVisible&&row==7)TogglePedalTravelMode(1);
+            else if(PedalDeadzonesVisible&&row==8)TogglePedalTravelMode(2);
+            else if(row==5+IosExtraRows)v.showOsd=!v.showOsd;
+            else if(row==6+IosExtraRows)v.diagnosticLogging=!v.diagnosticLogging;
+            else if(row==7+IosExtraRows)v.iosThermalFrameRateAdjustment=!v.iosThermalFrameRateAdjustment;
+            notice="";
+            return;
+        }
         if(tab==6){
             if(row==1&&!v.communityTimes)v.replayTimeAttack=!v.replayTimeAttack;
             if(row==2)v.replayOnline=!v.replayOnline;
@@ -513,15 +532,23 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         Fill(new Rect(405,y-8,573,1),Edge);Text(new Rect(405,y+1,180,22),name,small);
         Text(new Rect(570,y-2,405,31),value,label);
     }
-    private bool IosToggleRow(float y,string name,bool enabled,int row){
+    private bool IosToggleRow(string name,bool enabled,int row){
         if(loggingToggle==null)loggingToggle=new GUIStyle(button){alignment=TextAnchor.MiddleLeft};
-        var rect=new Rect(282,y,692,40);
+        var rect=new Rect(282,IosRowY(row),692,IosRowHeight);
         Fill(rect,Panel);Frame(rect,selection==row?Red:Edge);
-        var checkbox=new Rect(rect.x+12,rect.y+10,20,20);
+        var checkbox=new Rect(rect.x+12,rect.y+(rect.height-20)/2,20,20);
         Fill(checkbox,enabled?Red:Raised);Frame(checkbox,Color.white);
         if(enabled)Text(checkbox,"✓",button,translate:false);
         Text(new Rect(rect.x+44,rect.y,rect.width-52,rect.height),name,loggingToggle);
         return GUI.Toggle(rect,enabled,GUIContent.none,GUIStyle.none);
+    }
+    private void IosPedalDeadzoneRow(int row,string name,float value,Action<float> set){
+        float y=IosRowY(row);
+        if(selection==row)Frame(new Rect(278,y,714,IosRowHeight),Red);
+        Text(new Rect(304,y,274,IosRowHeight),name,button);
+        float next=GUI.HorizontalSlider(new Rect(595,y+9,279,20),value,0,Idas3GameOptions.MaximumIosPedalDeadzone);
+        if(!Mathf.Approximately(next,value)){selection=row;set(Mathf.Round(next*100)/100f);}
+        Text(new Rect(899,y,79,IosRowHeight),Mathf.RoundToInt(value*100)+"%",button);
     }
     private void OptionsView(){
         const float categoryTop=139;float categoryStep=MobileControls?38:40,categoryHeight=MobileControls?31:34;
@@ -538,17 +565,26 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(Button(new Rect(731,583,279,35),"BACK",selection==2))Back();return;
         }
         if(MobileControls&&tab==8){
-            if(Button(new Rect(282,197,692,40),"EDIT TOUCH LAYOUT",selection==1))OpenTouchEditor();
-            if(Button(new Rect(282,241,692,40),"IMPORT TOUCH LAYOUT",selection==2))ImportTouchLayout();
-            if(Button(new Rect(282,285,692,40),"EXPORT SAVED LAYOUT",selection==3))ExportTouchLayout();
-            if(Button(new Rect(282,329,692,40),"RESTORE DEFAULT LAYOUT",selection==4))OpenTouchEditor(true);
-            if(Button(new Rect(282,373,692,40),"OSD DISPLAY: "+(options.Current.showOsd?"ON":"OFF"),selection==5)){selection=5;ToggleOsd();}
-            bool logging=IosToggleRow(417,"DIAGNOSTIC LOGGING",options.Current.diagnosticLogging,6);
-            if(logging!=options.Current.diagnosticLogging){selection=6;ToggleDiagnostics();}
-            bool disabled=IosToggleRow(461,"DISABLE THERMAL FRAME RATE ADJUSTMENT",!options.Current.iosThermalFrameRateAdjustment,7);
-            if(disabled==options.Current.iosThermalFrameRateAdjustment){selection=7;ToggleThermalFrameRate();}
-            Text(new Rect(288,509,681,32),notice,wrapped);
-            if(Button(new Rect(731,583,279,35),"BACK",selection==8))Back();return;
+            var ios=options.Draft;
+            if(Button(new Rect(282,IosRowY(1),692,IosRowHeight),"EDIT TOUCH LAYOUT",selection==1))OpenTouchEditor();
+            if(Button(new Rect(282,IosRowY(2),692,IosRowHeight),"IMPORT TOUCH LAYOUT",selection==2))ImportTouchLayout();
+            if(Button(new Rect(282,IosRowY(3),692,IosRowHeight),"EXPORT SAVED LAYOUT",selection==3))ExportTouchLayout();
+            if(Button(new Rect(282,IosRowY(4),692,IosRowHeight),"RESTORE DEFAULT LAYOUT",selection==4))OpenTouchEditor(true);
+            bool pedalTravel=IosToggleRow("PEDAL TRAVEL",ios.iosPedalTravel,5);
+            if(pedalTravel!=ios.iosPedalTravel){selection=5;Adjust(4,1);}
+            if(PedalDeadzonesVisible){
+                IosPedalDeadzoneRow(6,"TOP DEADZONE",ios.iosPedalTopDeadzone,value=>SetPedalDeadzones(value,ios.iosPedalBottomDeadzone));
+                IosPedalDeadzoneRow(7,"BOTTOM DEADZONE",ios.iosPedalBottomDeadzone,value=>SetPedalDeadzones(ios.iosPedalTopDeadzone,value));
+                if(IosToggleRow("ACCELERATOR TRAVEL ONLY",ios.iosPedalTravelMode==1,8)!=(ios.iosPedalTravelMode==1)){selection=8;TogglePedalTravelMode(1);}
+                if(IosToggleRow("BRAKE TRAVEL ONLY",ios.iosPedalTravelMode==2,9)!=(ios.iosPedalTravelMode==2)){selection=9;TogglePedalTravelMode(2);}
+            }
+            int osd=6+IosExtraRows,loggingRow=7+IosExtraRows,thermalRow=8+IosExtraRows;
+            if(Button(new Rect(282,IosRowY(osd),692,IosRowHeight),"OSD DISPLAY: "+(ios.showOsd?"ON":"OFF"),selection==osd)){selection=osd;Adjust(osd-1,1);}
+            bool logging=IosToggleRow("DIAGNOSTIC LOGGING",ios.diagnosticLogging,loggingRow);
+            if(logging!=ios.diagnosticLogging){selection=loggingRow;Adjust(loggingRow-1,1);}
+            bool disabled=IosToggleRow("DISABLE THERMAL FRAME RATE ADJUSTMENT",!ios.iosThermalFrameRateAdjustment,thermalRow);
+            if(disabled==ios.iosThermalFrameRateAdjustment){selection=thermalRow;Adjust(thermalRow-1,1);}
+            OptionsFooter();return;
         }
         var v=options.Draft;
         if(tab==0){
@@ -635,6 +671,9 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             Text(new Rect(288,367,681,30),"INSTALLED VERSION",small);
             Text(new Rect(288,398,681,40),"v"+Application.version,label);
         }
+        OptionsFooter();
+    }
+    private void OptionsFooter(){
         bool unsaved=tab==3?bindings!=null&&bindings.HasUnsavedChanges:options.HasUnsavedChanges;
         string error=tab==3?bindings?.LastError:options.LastError;
         string captureError=tab==3?bindings?.CaptureError:null;

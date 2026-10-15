@@ -9,6 +9,7 @@ public sealed class Idas3GameOptions
 {
     public const float MaximumVolume=2;
     public const int MinimumCameraFovPercent=50,MaximumCameraFovPercent=200;
+    public const float MaximumIosPedalDeadzone=.4f;
     [Serializable] public sealed class Values
     {
         public int version=1;
@@ -31,6 +32,10 @@ public sealed class Idas3GameOptions
         public string wheelFeedbackDevice="";
         public bool showFps,showOsd,muteWhenUnfocused,diagnosticLogging;
         public bool iosThermalFrameRateAdjustment=true;
+        public bool iosPedalTravel;
+        public float iosPedalTopDeadzone,iosPedalBottomDeadzone;
+        public int iosPedalTravelMode; // 0 = both, 1 = accelerator only, 2 = brake only.
+        public bool UsesIosPedalTravel(bool accelerator)=>iosPedalTravel&&(iosPedalTravelMode==0||iosPedalTravelMode==(accelerator?1:2));
         public bool discordPresence=true;
         public bool hideLightsOffAdvantage=true;
         public bool communityTimes=true;
@@ -227,6 +232,24 @@ public sealed class Idas3GameOptions
         try{SaveCurrent();draft.showOsd=enabled;if(rollback!=null)rollback.showOsd=enabled;return true;}
         catch(Exception error){current.showOsd=previous;LastError="Could not save OSD. "+error.Message;return false;}
     }
+    public bool SetIosPedalTravel(bool enabled){
+        EnsureInitialized();LastError=null;bool previous=current.iosPedalTravel;current.iosPedalTravel=enabled;
+        try{SaveCurrent();draft.iosPedalTravel=enabled;if(rollback!=null)rollback.iosPedalTravel=enabled;return true;}
+        catch(Exception error){current.iosPedalTravel=previous;LastError="Could not save pedal travel. "+error.Message;return false;}
+    }
+    public bool SetIosPedalDeadzones(float top,float bottom){
+        EnsureInitialized();LastError=null;
+        float previousTop=current.iosPedalTopDeadzone,previousBottom=current.iosPedalBottomDeadzone;
+        current.iosPedalTopDeadzone=IosPedalDeadzone(top);current.iosPedalBottomDeadzone=IosPedalDeadzone(bottom);
+        try{
+            SaveCurrent();draft.iosPedalTopDeadzone=current.iosPedalTopDeadzone;draft.iosPedalBottomDeadzone=current.iosPedalBottomDeadzone;
+            if(rollback!=null){rollback.iosPedalTopDeadzone=current.iosPedalTopDeadzone;rollback.iosPedalBottomDeadzone=current.iosPedalBottomDeadzone;}
+            return true;
+        }catch(Exception error){
+            current.iosPedalTopDeadzone=previousTop;current.iosPedalBottomDeadzone=previousBottom;
+            LastError="Could not save pedal travel. "+error.Message;return false;
+        }
+    }
     public bool SetDiagnosticLogging(bool enabled){
         EnsureInitialized();LastError=null;bool previous=current.diagnosticLogging;current.diagnosticLogging=enabled;
         try{SaveCurrent();draft.diagnosticLogging=enabled;if(rollback!=null)rollback.diagnosticLogging=enabled;return true;}
@@ -352,6 +375,9 @@ public sealed class Idas3GameOptions
         value.aiDifficulty=Math.Max(0,Math.Min(2,value.aiDifficulty));
         value.gravityDeadzone=Idas3GravitySteering.Deadzone(value.gravityDeadzone);
         value.gravitySensitivity=Idas3GravitySteering.Sensitivity(value.gravitySensitivity);
+        value.iosPedalTopDeadzone=IosPedalDeadzone(value.iosPedalTopDeadzone);
+        value.iosPedalBottomDeadzone=IosPedalDeadzone(value.iosPedalBottomDeadzone);
+        if(value.iosPedalTravelMode<0||value.iosPedalTravelMode>2)value.iosPedalTravelMode=0;
         if(!Idas3ArcadeMeterCatalog.IsValidStyle(value.hudMeterStyle))value.hudMeterStyle=0;
         if(value.hudMeterLayout==-1)value.hudMeterLayout=value.HudOffset(2)==Vector2.zero&&value.HudSizePercent(2)==100?1:0;
         else if(value.hudMeterLayout!=0&&value.hudMeterLayout!=1)value.hudMeterLayout=1;
@@ -401,6 +427,7 @@ public sealed class Idas3GameOptions
         return value;
     }
     private static float Deadzone(float value,float fallback)=>float.IsNaN(value)||float.IsInfinity(value)?fallback:Math.Max(0,Math.Min(.3f,value));
+    private static float IosPedalDeadzone(float value)=>float.IsNaN(value)||float.IsInfinity(value)?0:Math.Max(0,Math.Min(MaximumIosPedalDeadzone,value));
     public static bool DisplayChanged(Values a,Values b)=>a.displayMode!=b.displayMode||a.width!=b.width||a.height!=b.height;
     private static bool SameHudPositions(Values a,Values b){for(int i=0;i<Values.HudLayoutGroupCount;++i)if(a.HudOffset(i)!=b.HudOffset(i))return false;return true;}
     private static bool SameHudSizes(Values a,Values b){for(int i=1;i<Values.HudLayoutGroupCount;++i)if(a.HudSizePercent(i)!=b.HudSizePercent(i))return false;return true;}
@@ -416,6 +443,7 @@ public sealed class Idas3GameOptions
         a.wheelFeedbackInvert==b.wheelFeedbackInvert&&a.wheelFeedbackDevice==b.wheelFeedbackDevice&&
         a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.diagnosticLogging==b.diagnosticLogging&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
         a.iosThermalFrameRateAdjustment==b.iosThermalFrameRateAdjustment&&
+        a.iosPedalTravel==b.iosPedalTravel&&a.iosPedalTopDeadzone==b.iosPedalTopDeadzone&&a.iosPedalBottomDeadzone==b.iosPedalBottomDeadzone&&a.iosPedalTravelMode==b.iosPedalTravelMode&&
         a.discordPresence==b.discordPresence&&a.hideLightsOffAdvantage==b.hideLightsOffAdvantage&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
         a.hudMeterStyle==b.hudMeterStyle&&a.hudMeterLayout==b.hudMeterLayout&&a.hudOrnamentId==b.hudOrnamentId&&a.hudShiftLights==b.hudShiftLights&&a.hudPedalIndicators==b.hudPedalIndicators&&a.hudNameplateStyle==b.hudNameplateStyle&&
         SameHudPositions(a,b)&&SameHudSizes(a,b)&&a.hudOrnamentSize==b.hudOrnamentSize&&a.hudTimeExtensionSize==b.hudTimeExtensionSize&&a.hudTimerSize==b.hudTimerSize&&a.hudSpeedometerSize==b.hudSpeedometerSize&&a.hudRecordsSize==b.hudRecordsSize&&a.hudLegendSize==b.hudLegendSize&&a.hudOnlineSize==b.hudOnlineSize&&a.hudMirrorSize==b.hudMirrorSize&&a.hudMessagesSize==b.hudMessagesSize&&a.hudChallengersSize==b.hudChallengersSize&&
