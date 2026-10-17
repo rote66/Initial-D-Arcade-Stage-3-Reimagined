@@ -838,6 +838,7 @@ Leave the room or queue before changing your online username.	オンラインユ
 DIAGNOSTIC LOGGING	診断ログ	生成诊断日志
 THERMAL FRAME RATE ADJUSTMENT	温度によるFPS調整	温度帧率调整
 DISABLE THERMAL FRAME RATE ADJUSTMENT	温度によるFPS調整を無効化	禁用温度帧率调整
+MOBILE PERFORMANCE OPTIMIZATION (experimental)	モバイル性能最適化(experimental)	移动端性能优化(experimental)
 THERMAL FRAME RATE SAVED	温度によるFPS調整を保存しました	温度帧率调整已保存
 PEDAL TRAVEL	ペダルのスライド入力	滑动行程
 PEDAL TRAVEL SAVED	ペダルのスライド入力を保存しました	滑动行程已保存

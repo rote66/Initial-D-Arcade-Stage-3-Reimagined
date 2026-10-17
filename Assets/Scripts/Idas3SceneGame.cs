@@ -181,6 +181,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             diagnostic = Idas3RaceMusicSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3AttractOptionsSmoke.Configure(ref saves) || diagnostic;
             diagnosticMode = diagnostic || (importedTest && (Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-smoke")>=0||Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-hakone-menu-smoke")>=0));
+            Idas3MobilePerformance.Apply(false);
             performanceDiagnostics = diagnostic && (Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-scene-perf-check") >= 0 || Array.IndexOf(Idas3LaunchArguments.GetArguments(), "-idas3-multiplayer-profile") >= 0);
             MatchOutputResolution();
             if (!diagnostic && !Directory.Exists(saves))
@@ -621,6 +622,9 @@ public sealed class Idas3SceneGame : MonoBehaviour
             throw new InvalidOperationException("Could not apply minimap size. " + Idas3Native.Error());
         if (Idas3Native.Idas3SceneSetLightsOffAdvantage(values.hideLightsOffAdvantage?1:0) != 1)
             throw new InvalidOperationException(Idas3Native.Error());
+        bool mobilePerformance=Application.platform==RuntimePlatform.IPhonePlayer&&values.iosMobilePerformanceOptimization;
+        Idas3MobilePerformance.Apply(mobilePerformance);
+        scene?.ConfigureMobilePerformance(mobilePerformance);
         if(scene!=null)scene.HudOptions=values.Clone();
         if(timeAttackGhost!=null)timeAttackGhost.ShowGhost=values.timeAttackGhost;
         wheelFeedback?.Stop();
@@ -1096,9 +1100,13 @@ public sealed class Idas3SceneGame : MonoBehaviour
         if (Status.state != 1 || Status.reserved != 1)
             throw new InvalidOperationException("Unity scene simulation did not initialize correctly. " + Idas3Native.Error());
         bool collectTimings=CollectPerformanceTimings;
+        scene.CanPrepareResources=(Status.flags&1)!=0||Status.racePhase<2;
+        if(pauseMenu!=null)pauseMenu.CanPrepareResources=scene.CanPrepareResources;
         double began = collectTimings ? Time.realtimeSinceStartupAsDouble : 0;
-        scene.ApplyFrame();
         timeAttackGhost?.ApplyFrame();
+        scene.CanUseOrderedSubmission=Status.course>=0&&Status.course<=8&&
+            (Status.flags&(16384u|IdasSpecialStageEnnaCourse.SceneFlag))==0&&timeAttackGhost?.Visible!=true;
+        scene.ApplyFrame();
         if (collectTimings) RendererMilliseconds = (float)((Time.realtimeSinceStartupAsDouble - began) * 1000);
         began = collectTimings ? Time.realtimeSinceStartupAsDouble : 0;
         ui.ApplyFrame();

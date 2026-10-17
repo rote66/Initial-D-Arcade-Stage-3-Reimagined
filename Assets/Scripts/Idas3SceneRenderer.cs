@@ -51,6 +51,36 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     public int UploadedVertexCount { get; private set; }
     public int GeometryUploadCount { get; private set; }
     public int MaterialUpdateCount { get; private set; }
+    internal int MaterialConfigurationCount {get;private set;}
+    internal int QueueUpdateCount {get;private set;}
+    internal int CreatedRangeObjects {get;private set;}
+    internal int CreatedRenderers {get;private set;}
+    internal int ResidentRenderers {get;private set;}
+    internal int MeshBufferResizes {get;private set;}
+    internal int VertexCacheResizes {get;private set;}
+    internal long MeshBufferBytes {get;private set;}
+    internal long VertexCacheBytes {get;private set;}
+    internal long InactiveBufferBytes {get;private set;}
+    internal long ActiveVertexBytes {get;private set;}
+    internal long ScratchBufferBytes=>(indexScratch.IsCreated?(long)indexScratch.Length*4:0)+
+        (metalScratch.IsCreated?(long)metalScratch.Length*UnsafeUtility.SizeOf<MetalVertex>():0);
+    internal int TrimmedRanges {get;private set;}
+    internal const long InactiveBufferBudget=16*1024*1024;
+    internal int SourceRangeCount {get;private set;}
+    internal int SceneCommandDraws {get;private set;}
+    internal int SceneCommandRebuilds {get;private set;}
+    internal int SharedMaterialEntries=>sharedMaterials.Count;
+    internal int SharedMaterialRanges {get;private set;}
+    internal int SharedMaterialConfigurations {get;private set;}
+    internal bool SharedMaterialBaseline {get;set;}
+    internal int SkippedQueueUpdates {get;private set;}
+    internal int WarmupStates {get;private set;}
+    internal int TotalWarmupStates=>warmedPipelines.Count;
+    internal bool CanPrepareResources {get;set;}
+    internal bool RendererReuse {get;set;}
+    internal bool OrderedSubmission {get;set;}
+    internal bool CanUseOrderedSubmission {get;set;}
+    internal bool OrderedSubmissionActive {get;private set;}
     public int DepthCandidateCount => depthCandidates.Count;
     public int DepthDrawCount { get; private set; }
     public int DepthBufferRebuildCount { get; private set; }
@@ -60,6 +90,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     public int MirrorViewExcludedRanges { get; private set; }
     public int MirrorViewExcludedVertices { get; private set; }
     public int UploadedTextureCount => textureCache.Count;
+    internal int CachedRangeObjects=>objects.Count;
     private Camera main, mirror, backdrop, canvasClear;
     private Shader sceneShader, directSceneShader, headlightShader, opaqueAlphaDepthShader;
     private bool metalGeometry;
@@ -116,26 +147,77 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     };
     private readonly Dictionary<ulong, RangeObject> geometryLookup = new Dictionary<ulong, RangeObject>();
     private readonly List<RangeObject> selectedRanges = new List<RangeObject>();
-    private int selectionStamp, freeRangeCursor;
+    private int selectionStamp, trimCursor,freeRangeCursor;
+    private bool appliedRendererReuse,releaseInactiveBuffers;
+    private readonly RangeObject[] freeRanges=new RangeObject[23];
     private bool rangeCacheOff;
     private bool geometryIdsOff, validateGeometryIds;
     private IntPtr geometryIds;
+    private CommandBuffer mainSceneCommands,mirrorSceneCommands;
+    private readonly List<RangeObject> frameDraws=new List<RangeObject>();
+    private readonly List<RangeObject> mainSceneDraws=new List<RangeObject>(),mirrorSceneDraws=new List<RangeObject>();
+    private bool sceneCommandsDirty;
+    private const int SharedMaterialLimit=1024,SharedMaterialRetained=512;
+    private readonly Dictionary<SharedMaterialKey,SharedMaterialState> sharedMaterials=new Dictionary<SharedMaterialKey,SharedMaterialState>();
+    private readonly List<SharedMaterialKey> retiredMaterials=new List<SharedMaterialKey>(16);
+    private int materialStamp;
+    private struct SharedMaterialKey : IEquatable<SharedMaterialKey> {
+        internal SceneRange range;
+        internal ulong generation;
+        internal Shader shader;
+        internal SharedMaterialKey(SceneRange source,ulong textureGeneration,Shader materialShader){
+            range=source;range.first=range.count=range.sourceIndex=0;
+            generation=textureGeneration;shader=materialShader;
+        }
+        public bool Equals(SharedMaterialKey other)=>generation==other.generation&&shader==other.shader&&SameMaterial(range,other.range);
+        public override bool Equals(object other)=>other is SharedMaterialKey value&&Equals(value);
+        public override unsafe int GetHashCode(){
+            var value=range;var words=(uint*)&value;
+            unchecked{
+                uint hash=2166136261;
+                for(int i=0;i<16;++i)hash=(hash^words[i])*16777619;
+                return (int)hash^generation.GetHashCode()^(shader!=null?shader.GetHashCode():0);
+            }
+        }
+    }
+    private sealed class SharedMaterialState {
+        internal Material scene,depth;
+        internal int usedStamp;
+        internal bool retired;
+    }
+    private NativeArray<uint> indexScratch;
+    private NativeArray<MetalVertex> metalScratch;
+    private RenderTexture warmupTarget;
+    private CommandBuffer warmupCommands;
+    private bool warmupPending=true;
+    private readonly HashSet<PipelineKey> warmedPipelines=new HashSet<PipelineKey>();
+    private struct PipelineKey : IEquatable<PipelineKey> {
+        internal Shader shader;
+        internal uint state;
+        public bool Equals(PipelineKey other)=>shader==other.shader&&state==other.state;
+        public override bool Equals(object other)=>other is PipelineKey value&&Equals(value);
+        public override int GetHashCode()=>unchecked((shader!=null?shader.GetHashCode():0)*397^(int)state);
+    }
     private sealed class RangeObject {
         public GameObject gameObject;
         public Mesh mesh;
         public MeshRenderer renderer;
         public Material material;
         public Material depthMaterial;
-        public int count, selectedStamp;
+        public int count, capacity, selectedStamp;
         public ulong geometryKey;
         public ulong geometryId;
         public RangeObject nextGeometry;
+        public RangeObject nextFree;
         public NativeArray<SceneVertex> vertexCache;
         public bool cachedBillboard;
         public SceneRange materialRange;
         public ulong materialTextureGeneration;
         public int materialQueue;
         public bool materialConfigured, depthMaterialDirty, depthCandidate;
+        public bool sharedMaterialDirty=true;
+        public SharedMaterialState sharedMaterial;
+        public Material commandMaterial,commandDepthMaterial;
         public uint parentScope = uint.MaxValue;
         public int layer = SceneLayer;
         public bool active = true;
@@ -266,11 +348,80 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
             (float)(near * far / (far - near)), (float)(near / (far - near)), 0,
             diagnosticDepthCancellationBaseline ? 0 : 1));
     }
+    internal void ConfigureMobilePerformance(bool enabled)
+    {
+        RendererReuse=OrderedSubmission=enabled;
+        if(!enabled)ReleaseWarmup();
+    }
+    private void ApplyReuseTransition()
+    {
+        if(appliedRendererReuse==RendererReuse)return;
+        appliedRendererReuse=RendererReuse;
+        // Drop recorded references before changing buffer ownership. The next
+        // submission rebuilds both camera paths from the same native frame.
+        mainSceneCommands?.Clear();mirrorSceneCommands?.Clear();
+        opaqueAlphaDepth.Clear();mirrorAlphaDepth.Clear();
+        mainSceneDraws.Clear();mirrorSceneDraws.Clear();mainDepthDraws.Clear();mirrorDepthDraws.Clear();
+        selectedRanges.Clear();geometryLookup.Clear();sceneCommandsDirty=true;
+        foreach(var item in objects){
+            item.geometryId=item.geometryKey=0;item.count=-1;item.materialConfigured=false;
+            item.sharedMaterial=null;item.sharedMaterialDirty=true;
+            item.commandMaterial=item.material;item.commandDepthMaterial=item.depthMaterial;
+            if(!RendererReuse&&item.vertexCache.IsCreated)item.vertexCache.Dispose();
+            if(RendererReuse&&OrderedSubmission&&CanUseOrderedSubmission&&item.gameObject!=null){
+                item.renderer.enabled=false;Destroy(item.gameObject);
+                item.gameObject=null;item.renderer=null;--ResidentRenderers;
+            }
+        }
+        if(!RendererReuse){
+            if(indexScratch.IsCreated)indexScratch.Dispose();
+            if(metalScratch.IsCreated)metalScratch.Dispose();
+            foreach(var state in sharedMaterials.Values){
+                state.retired=true;Destroy(state.scene);if(state.depth!=null)Destroy(state.depth);
+            }
+            sharedMaterials.Clear();retiredMaterials.Clear();
+            ReleaseWarmup();releaseInactiveBuffers=true;
+        }
+    }
+    private void ReleaseWarmup()
+    {
+        warmupCommands?.Release();warmupCommands=null;
+        if(warmupTarget!=null){warmupTarget.Release();Destroy(warmupTarget);warmupTarget=null;}
+        warmedPipelines.Clear();warmupPending=true;
+    }
+    private void CreateSceneCommands()
+    {
+        mainSceneCommands=new CommandBuffer{name="Original ordered scene submission"};
+        mirrorSceneCommands=new CommandBuffer{name="Original ordered mirror submission"};
+        main.AddCommandBuffer(CameraEvent.BeforeForwardOpaque,mainSceneCommands);
+        mirror.AddCommandBuffer(CameraEvent.BeforeForwardOpaque,mirrorSceneCommands);
+    }
+    private void ReleaseSceneCommands()
+    {
+        if(mainSceneCommands!=null){main.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque,mainSceneCommands);mainSceneCommands.Release();mainSceneCommands=null;}
+        if(mirrorSceneCommands!=null){mirror.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque,mirrorSceneCommands);mirrorSceneCommands.Release();mirrorSceneCommands=null;}
+        mainSceneDraws.Clear();mirrorSceneDraws.Clear();
+    }
     public unsafe void ApplyFrame()
     {
         if (!initialized) throw new InvalidOperationException("Initialize the Unity scene renderer first.");
-        Idas3.Multiplayer.Idas3OnlineTransportPump.KeepAliveDuringNativeLoad();
+        ApplyReuseTransition();
         UploadedVertexCount = GeometryUploadCount = MaterialUpdateCount = 0;
+        MaterialConfigurationCount=QueueUpdateCount=SkippedQueueUpdates=CreatedRangeObjects=SourceRangeCount=WarmupStates=0;
+        CreatedRenderers=MeshBufferResizes=VertexCacheResizes=TrimmedRanges=0;
+        SceneCommandDraws=SceneCommandRebuilds=SharedMaterialRanges=SharedMaterialConfigurations=0;
+        frameDraws.Clear();
+        bool ordered=OrderedSubmission&&CanUseOrderedSubmission&&!diagnosticPerfBaseline;
+        if(OrderedSubmissionActive!=ordered){
+            OrderedSubmissionActive=ordered;sceneCommandsDirty=true;
+            if(ordered)CreateSceneCommands();else ReleaseSceneCommands();
+            foreach(var item in objects){
+                if(!ordered&&item.active)EnsureRenderer(item);
+                if(item.renderer!=null)item.renderer.enabled=!ordered;
+                if(!ordered&&item.materialConfigured){item.material.renderQueue=item.materialQueue;++MaterialUpdateCount;++QueueUpdateCount;}
+            }
+        }
+        Idas3.Multiplayer.Idas3OnlineTransportPump.KeepAliveDuringNativeLoad();
         MainViewExcludedRanges = MainViewExcludedVertices = MirrorViewExcludedRanges = MirrorViewExcludedVertices = 0;
         var frame = new SceneFrame { size = 256 };
         if (Idas3SceneGetFrame(ref frame) != 1 || frame.version != 1) throw new InvalidOperationException("Native scene frame is unavailable.");
@@ -324,11 +475,13 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                 if (nativeList != list || range.count == 0 || range.viewMask == 0) continue;
                 if ((ulong)range.first + range.count > frame.vertexCount || range.lightScope > 3)
                     throw new InvalidOperationException("Scene range is outside its vertex/light bounds.");
-                var item = diagnosticPerfBaseline || rangeCacheOff ? GetRangeObject(ActiveMeshCount) : selectedRanges[i] ?? ClaimRangeObject();
+                var item = diagnosticPerfBaseline || rangeCacheOff ? GetRangeObject(ActiveMeshCount) : selectedRanges[i] ?? ClaimRangeObject((int)range.count);
                 if(!diagnosticPerfBaseline&&!rangeCacheOff)selectedRanges[i]=item;
-                ++ActiveMeshCount;
+                if(!OrderedSubmissionActive||!RendererReuse)EnsureRenderer(item);
+                ++ActiveMeshCount;++SourceRangeCount;
+                if(OrderedSubmissionActive)frameDraws.Add(item);
                 int layer = diagnosticViewCullingBaseline ? SceneLayer : LayerForViewMask(range.viewMask);
-                if (item.layer != layer) { item.gameObject.layer = layer; item.layer = layer; }
+                if (item.layer != layer) { if(item.gameObject!=null)item.gameObject.layer = layer; item.layer = layer; }
                 if (!diagnosticViewCullingBaseline) {
                     if ((range.viewMask & 1) == 0) { ++MainViewExcludedRanges; MainViewExcludedVertices += (int)range.count; }
                     if (frame.viewCount == 2 && (range.viewMask & 2) == 0) { ++MirrorViewExcludedRanges; MirrorViewExcludedVertices += (int)range.count; }
@@ -345,28 +498,17 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                     item.parentScope == range.lightScope && item.materialConfigured &&
                     item.materialTextureGeneration == textureGeneration && SameRange(item.materialRange, range)) {
                     if (item.materialQueue != queue) {
-                        item.material.renderQueue = queue; item.materialQueue = queue; ++MaterialUpdateCount;
+                        SetQueue(item,queue);
                     }
                     if (item.depthCandidate) depthCandidates.Add(item);
                     continue;
                 }
-                if (diagnosticPerfBaseline || !item.active) { item.gameObject.SetActive(true); item.active = true; }
+                if (diagnosticPerfBaseline || !item.active) { if(item.gameObject!=null)item.gameObject.SetActive(true); item.active = true; }
                 if (diagnosticPerfBaseline || item.parentScope != range.lightScope) {
-                    item.gameObject.transform.SetParent(owners[range.lightScope], false);
+                    if(item.gameObject!=null)item.gameObject.transform.SetParent(owners[range.lightScope], false);
                     item.parentScope = range.lightScope;
                 }
-                if (item.count != range.count)
-                {
-                    if (item.vertexCache.IsCreated) item.vertexCache.Dispose();
-                    item.mesh.Clear(); item.mesh.SetVertexBufferParams((int)range.count, meshLayout);
-                    item.mesh.SetIndexBufferParams((int)range.count, IndexFormat.UInt32);
-                    var indices = new NativeArray<uint>((int)range.count, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                    for (int j = 0; j < indices.Length; ++j) indices[j] = (uint)j;
-                    item.mesh.SetIndexBufferData(indices, 0, 0, indices.Length, UploadFlags); indices.Dispose();
-                    item.mesh.subMeshCount = 1;
-                    item.mesh.SetSubMesh(0, new SubMeshDescriptor(0, (int)range.count, MeshTopology.Triangles), UploadFlags);
-                    item.count = (int)range.count;
-                }
+                bool countChanged=SetRangeCount(item,(int)range.count);
                 bool billboard = (range.flags & 4) != 0;
                 var rangeVertices = (SceneVertex*)frame.vertices.ToPointer() + (int)range.first;
                 long vertexBytes = (long)range.count * 64;
@@ -374,11 +516,11 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                 // including static course geometry. Immutable cached ranges
                 // have native identities; dynamic/untagged ranges still get
                 // an exact byte comparison. Lighting/camera buffers update.
-                bool immutableMatch = geometryId != 0 && geometryId == item.geometryId && item.vertexCache.IsCreated && item.cachedBillboard == billboard;
+                bool immutableMatch = !countChanged&&geometryId != 0 && geometryId == item.geometryId && item.vertexCache.IsCreated && item.cachedBillboard == billboard;
                 if (validateGeometryIds && immutableMatch &&
                     UnsafeUtility.MemCmp(rangeVertices, NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(item.vertexCache), vertexBytes) != 0)
                     throw new InvalidOperationException("An immutable native geometry identity changed its vertices.");
-                bool geometryChanged = diagnosticPerfBaseline || !item.vertexCache.IsCreated || item.cachedBillboard != billboard || (!immutableMatch &&
+                bool geometryChanged = diagnosticPerfBaseline || countChanged || !item.vertexCache.IsCreated || item.cachedBillboard != billboard || (!immutableMatch &&
                     UnsafeUtility.MemCmp(rangeVertices, NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(item.vertexCache), vertexBytes) != 0);
                 if (geometryChanged) {
                     item.mesh.SetVertexBufferData(source, (int)range.first, 0, (int)range.count, 0, UploadFlags);
@@ -401,7 +543,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                         : new Bounds((low + high) * .5f, Vector3.Max(high - low, Vector3.one * .001f));
                     item.mesh.bounds = item.bounds;
                     if (!diagnosticPerfBaseline) {
-                        if (!item.vertexCache.IsCreated) item.vertexCache = new NativeArray<SceneVertex>((int)range.count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                        EnsureVertexCache(item,(int)range.count);
                         UnsafeUtility.MemCpy(NativeArrayUnsafeUtility.GetUnsafePtr(item.vertexCache), rangeVertices, vertexBytes);
                         item.cachedBillboard = billboard;
                         item.geometryKey = GeometryKey(rangeVertices, (int)range.count, billboard);
@@ -413,15 +555,16 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                 // submission order and texture ownership in the exact key.
                 // Lighting and diagnostic camera changes are shader globals.
                 if (diagnosticPerfBaseline || !item.materialConfigured ||
-                    item.materialTextureGeneration != textureGeneration || !SameRange(item.materialRange, range)) {
-                    ConfigureMaterial(item.material, range, queue); ++MaterialUpdateCount;
+                    item.materialTextureGeneration != textureGeneration ||
+                    !(RendererReuse?SameMaterial(item.materialRange,range):SameRange(item.materialRange,range))) {
+                    ConfigureMaterial(item.material, range, queue); ++MaterialUpdateCount;++MaterialConfigurationCount;
                     item.materialRange = range; item.materialQueue = queue; item.materialTextureGeneration = textureGeneration;
-                    item.materialConfigured = true; item.depthMaterialDirty = true;
+                    item.materialConfigured = true; item.depthMaterialDirty = item.sharedMaterialDirty = true;
                 }
                 else if (item.materialQueue != queue) {
-                    item.material.renderQueue = queue; item.materialQueue = queue;
-                    ++MaterialUpdateCount;
+                    SetQueue(item,queue);
                 }
+                item.materialRange=range;
                 item.depthCandidate = !diagnosticAlphaDepthOff && (range.flags & 1) != 0 && IsCourseGeometry(range) && nativeList == 2 &&
                     ((range.tsp >> 29) & 7) == 4 && ((range.tsp >> 26) & 7) == 5;
                 if (item.depthCandidate)
@@ -436,7 +579,11 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
             for (int i = 0; i < objects.Count; ++i) {
                 var item = objects[i];
                 if (diagnosticPerfBaseline || rangeCacheOff ? i < ActiveMeshCount : item.selectedStamp == selectionStamp) continue;
-                if (diagnosticPerfBaseline || item.active) { item.gameObject.SetActive(false); item.active = false; }
+                if (diagnosticPerfBaseline || item.active) { if(item.gameObject!=null)item.gameObject.SetActive(false); item.active = false; }
+            }
+            if(RendererReuse&&CanPrepareResources){
+                int target=Math.Min(4000,ActiveMeshCount+128),limit=Math.Min(target,objects.Count+32);
+                while(objects.Count<limit)GetRangeObject(objects.Count);
             }
         }
         finally
@@ -462,9 +609,209 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         mirror.enabled = ShowGameHud && frame.viewCount == 2;
         if (mirror.enabled) SetCamera(mirror, frame.mirrorCamera, 1, clear, frame.width, frame.height);
         DepthDrawCount = DepthBufferRebuildCount = 0;
+        if(OrderedSubmissionActive)UpdateCommandMaterials();
         UpdateDepthCommands(main, 1, opaqueAlphaDepth, mainDepthDraws, true);
         UpdateDepthCommands(mirror, 2, mirrorAlphaDepth, mirrorDepthDraws, mirror.enabled);
+        UpdateSceneCommands(main,1,mainSceneCommands,mainSceneDraws,OrderedSubmissionActive);
+        UpdateSceneCommands(mirror,2,mirrorSceneCommands,mirrorSceneDraws,OrderedSubmissionActive&&mirror.enabled);
+        sceneCommandsDirty=false;
         UpdateLampObjects();
+        if(RendererReuse||releaseInactiveBuffers){
+            UpdateBufferAccounting();
+            TrimInactiveBuffers(RendererReuse?InactiveBufferBudget:0);
+            releaseInactiveBuffers=!RendererReuse&&InactiveBufferBytes>0;
+        }
+        if(RendererReuse)TrimSharedMaterials();
+        WarmPipelines();
+    }
+    internal void VerifyMobileKeys(Action<bool,string> check)
+    {
+        var range=new SceneRange{count=3,flags=1,lightScope=1,viewMask=3,tsp=1u<<29};
+        var changed=range;changed.first=99;changed.count=6;changed.sourceIndex=37;
+        check(SameMaterial(range,changed)&&!SameRange(range,changed),"Geometry size is not part of the material key");
+        changed=range;changed.texture=1;check(!SameMaterial(range,changed),"Texture is part of the exact material key");
+        changed=range;changed.viewMask=1;check(!SameMaterial(range,changed),"View mask is part of the exact material key");
+        changed=range;changed.lightDirection.x=1;check(!SameMaterial(range,changed),"Light direction is part of the exact material key");
+        changed=range;changed.flags|=4;check(!SameMaterial(range,changed),"Billboards retain their shader state");
+        changed=range;changed.pcw=2u<<24;check(!SameMaterial(range,changed),"Transparent list retains its shader state");
+        changed=range;changed.isp=1u<<26;check(!SameMaterial(range,changed),"Depth-write state is part of the exact material key");
+        changed=range;changed.lightScope=2;check(!SameMaterial(range,changed),"Actor lighting ownership is part of the exact material key");
+        var key=new SharedMaterialKey(range,7,directSceneShader);
+        changed=range;changed.first=99;changed.count=6;changed.sourceIndex=37;
+        var same=new SharedMaterialKey(changed,7,directSceneShader);
+        check(key.Equals(same)&&key.GetHashCode()==same.GetHashCode(),"Shared state ignores geometry offsets and counts");
+        check(!key.Equals(new SharedMaterialKey(range,8,directSceneShader)),"Shared state retains texture ownership");
+        check(!key.Equals(new SharedMaterialKey(range,7,headlightShader)),"Shared state retains its shader");
+        bool reuse=RendererReuse;
+        var item=new RangeObject{mesh=new Mesh()};
+        try {
+            RendererReuse=true;
+            check(SetRangeCount(item,6),"Initial mesh count is configured");EnsureVertexCache(item,6);
+            int buffers=MeshBufferResizes,caches=VertexCacheResizes;
+            check(item.capacity==8&&item.vertexCache.Length==8,"Range buffers use bounded power-of-two capacity");
+            long stride=4;
+            for(int stream=0;stream<item.mesh.vertexBufferCount;++stream)stride+=item.mesh.GetVertexBufferStride(stream);
+            check(MeshBytes(item)==stride*item.capacity,"Requested mesh bytes match actual Unity vertex/index layouts");
+            check(SetRangeCount(item,3),"A shrinking range updates its logical count");EnsureVertexCache(item,3);
+            check(SetRangeCount(item,6),"A growing range within capacity updates its logical count");EnsureVertexCache(item,6);
+            check(MeshBufferResizes==buffers&&VertexCacheResizes==caches,"Size changes within capacity preserve GPU and CPU buffers");
+            check(item.mesh.GetIndexCount(0)==6,"Unused capacity does not enter the draw");
+            check(SetRangeCount(item,9),"An oversized range grows capacity");EnsureVertexCache(item,9);
+            check(item.capacity==16&&item.vertexCache.Length==16&&MeshBufferResizes==buffers+1&&VertexCacheResizes==caches+1,
+                "Capacity growth replaces each buffer once");
+            SetRangeCount(item,3000);EnsureVertexCache(item,3000);
+            SetRangeCount(item,6);EnsureVertexCache(item,6);
+            check(item.capacity==8&&item.vertexCache.Length==8,"Historical large buffers shrink when far above the current range");
+            RendererReuse=false;SetRangeCount(item,3);EnsureVertexCache(item,3);
+            check(item.capacity==3&&item.vertexCache.Length==3,"Baseline retains exact-size buffers");
+        } finally {RendererReuse=reuse;if(item.vertexCache.IsCreated)item.vertexCache.Dispose();Destroy(item.mesh);}
+    }
+    internal void VerifyBufferPool(Action<bool,string> check)
+    {
+        var holder=new GameObject("Isolated range capacity regression");
+        var probe=holder.AddComponent<Idas3SceneRenderer>();
+        probe.sceneShader=sceneShader;probe.meshLayout=meshLayout;probe.metalGeometry=metalGeometry;
+        probe.RendererReuse=probe.OrderedSubmissionActive=true;
+        try {
+            for(int frame=0;frame<256;++frame){
+                ++probe.selectionStamp;
+                foreach(var item in probe.objects)item.active=false;
+                probe.BuildFreeRanges();
+                for(int slot=0;slot<32;++slot){
+                    int count=slot==frame%32?12288:3;
+                    var item=probe.ClaimRangeObject(count);
+                    check(item.selectedStamp==probe.selectionStamp,"Claimed range belongs to this selection");
+                    probe.SetRangeCount(item,count);probe.EnsureVertexCache(item,count);item.active=true;
+                    check(item.capacity>=count&&item.capacity<=(long)Mathf.NextPowerOfTwo(count)*4,
+                        "Active capacity remains bounded by current geometry, not history");
+                }
+                probe.UpdateBufferAccounting();
+                check(probe.objects.Count==32,"Size-aware selection does not grow the object pool");
+                check(probe.MeshBufferBytes+probe.VertexCacheBytes<4*1024*1024,
+                    "A moving large range must not inflate all 32 retained buffers");
+            }
+            foreach(var item in probe.objects)item.active=false;
+            probe.UpdateBufferAccounting();
+            for(int frame=0;frame<4&&probe.InactiveBufferBytes>0;++frame){
+                probe.TrimmedRanges=0;probe.TrimInactiveBuffers(0);
+                check(probe.TrimmedRanges<=16,"Inactive releases are bounded per frame");
+            }
+            check(probe.MeshBufferBytes==0&&probe.VertexCacheBytes==0&&probe.InactiveBufferBytes==0,
+                "Inactive pool payload can be fully released");
+            ++probe.selectionStamp;probe.BuildFreeRanges();
+            var restored=probe.ClaimRangeObject(6);probe.SetRangeCount(restored,6);probe.EnsureVertexCache(restored,6);
+            check(restored.mesh!=null&&restored.capacity==8&&restored.vertexCache.Length==8,
+                "A trimmed range recreates its mesh and CPU cache on demand");
+        } finally {Destroy(holder);}
+    }
+    private bool SetRangeCount(RangeObject item,int count)
+    {
+        int wanted=RendererReuse?Mathf.NextPowerOfTwo(count):count;
+        bool resize=item.capacity<count||item.capacity>(long)wanted*4||!RendererReuse&&item.capacity!=count;
+        if(item.count==count&&!resize)return false;
+        if(!RendererReuse&&item.vertexCache.IsCreated)item.vertexCache.Dispose();
+        if(resize){
+            if(item.mesh==null){
+                item.mesh=NewRangeMesh();
+                if(item.gameObject!=null)item.gameObject.GetComponent<MeshFilter>().sharedMesh=item.mesh;
+            }
+            item.capacity=wanted;
+            item.mesh.Clear();item.mesh.SetVertexBufferParams(item.capacity,meshLayout);
+            item.mesh.SetIndexBufferParams(item.capacity,IndexFormat.UInt32);++MeshBufferResizes;
+            if(RendererReuse){
+                EnsureIndexScratch(item.capacity);
+                item.mesh.SetIndexBufferData(indexScratch,0,0,item.capacity,UploadFlags);
+            }else{
+                var indices=new NativeArray<uint>(item.capacity,Allocator.Temp,NativeArrayOptions.UninitializedMemory);
+                for(int j=0;j<indices.Length;++j)indices[j]=(uint)j;
+                item.mesh.SetIndexBufferData(indices,0,0,indices.Length,UploadFlags);indices.Dispose();
+            }
+        }
+        item.mesh.subMeshCount=1;
+        item.mesh.SetSubMesh(0,new SubMeshDescriptor(0,count,MeshTopology.Triangles),UploadFlags);
+        item.count=count;return true;
+    }
+    private void EnsureVertexCache(RangeObject item,int count)
+    {
+        int capacity=RendererReuse?item.capacity:count;
+        if(item.vertexCache.IsCreated&&item.vertexCache.Length==capacity)return;
+        if(item.vertexCache.IsCreated)item.vertexCache.Dispose();
+        item.vertexCache=new NativeArray<SceneVertex>(capacity,
+            Allocator.Persistent,NativeArrayOptions.UninitializedMemory);++VertexCacheResizes;
+    }
+    private void SetQueue(RangeObject item,int queue)
+    {
+        if(OrderedSubmissionActive)++SkippedQueueUpdates;
+        else {item.material.renderQueue=queue;++MaterialUpdateCount;++QueueUpdateCount;}
+        item.materialQueue=queue;
+    }
+    private void UpdateCommandMaterials()
+    {
+        ++materialStamp;
+        bool share=RendererReuse&&OrderedSubmissionActive&&!SharedMaterialBaseline;
+        foreach(var item in objects){
+            if(!item.active)continue;
+            Material scene=item.material,depth=item.depthMaterial;
+            if(share){
+                var state=item.sharedMaterial;
+                if(state==null||state.retired||item.sharedMaterialDirty){
+                    var key=new SharedMaterialKey(item.materialRange,textureGeneration,item.material.shader);
+                    if(!sharedMaterials.TryGetValue(key,out state)&&sharedMaterials.Count<SharedMaterialLimit){
+                        // Populate runtime-only uniforms from the source
+                        // state explicitly, including true integer words.
+                        state=new SharedMaterialState{scene=new Material(item.material.shader)};
+                        ConfigureMaterial(state.scene,item.materialRange,item.materialQueue);
+                        sharedMaterials.Add(key,state);++SharedMaterialConfigurations;
+                    }
+                    item.sharedMaterial=state;item.sharedMaterialDirty=false;
+                }
+                if(state!=null&&!state.retired){
+                    state.usedStamp=materialStamp;scene=state.scene;++SharedMaterialRanges;
+                    if(item.depthCandidate){
+                        if(state.depth==null){
+                            state.depth=new Material(item.depthMaterial.shader);
+                            state.depth.CopyPropertiesFromMaterial(item.depthMaterial);++SharedMaterialConfigurations;
+                        }
+                        depth=state.depth;
+                    }
+                }
+            }
+            if(item.commandMaterial!=scene||item.commandDepthMaterial!=depth)sceneCommandsDirty=true;
+            item.commandMaterial=scene;item.commandDepthMaterial=depth;
+        }
+    }
+    private void TrimSharedMaterials()
+    {
+        // Current camera commands no longer reference retired states. Never
+        // mutate a shared material still used by another cached command.
+        retiredMaterials.Clear();
+        foreach(var pair in sharedMaterials){
+            if(pair.Value.usedStamp==materialStamp)continue;
+            if(pair.Key.generation==textureGeneration&&sharedMaterials.Count-retiredMaterials.Count<=SharedMaterialRetained)continue;
+            retiredMaterials.Add(pair.Key);if(retiredMaterials.Count==16)break;
+        }
+        foreach(var key in retiredMaterials){
+            var state=sharedMaterials[key];state.retired=true;
+            Destroy(state.scene);if(state.depth!=null)Destroy(state.depth);
+            sharedMaterials.Remove(key);
+        }
+    }
+    private void UpdateSceneCommands(Camera camera,uint viewBit,CommandBuffer commands,List<RangeObject> previous,bool enabled)
+    {
+        if(commands==null)return;
+        depthScratch.Clear();SetSidePlanes(camera);
+        if(enabled)foreach(var item in frameDraws)
+            if((item.materialRange.viewMask&viewBit)!=0&&(diagnosticNoCull||!OutsideDepthView(item.bounds)))depthScratch.Add(item);
+        SceneCommandDraws+=depthScratch.Count;
+        bool changed=sceneCommandsDirty||previous.Count!=depthScratch.Count;
+        if(!changed)for(int i=0;i<previous.Count;++i)
+            if(previous[i]!=depthScratch[i]){changed=true;break;}
+        if(!changed)return;
+        commands.Clear();previous.Clear();
+        foreach(var item in depthScratch){
+            commands.DrawMesh(item.mesh,Matrix4x4.identity,item.commandMaterial,0,-1);previous.Add(item);
+        }
+        ++SceneCommandRebuilds;
     }
     private void UpdateDepthCommands(Camera camera, uint viewBit, CommandBuffer commands, List<RangeObject> previous, bool enabled)
     {
@@ -472,17 +819,14 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         // Homogeneous side planes are conservative for custom reversed depth.
         // Use the color renderer's world/billboard bounds without reducing LOD
         // or distance. Keep all near/far candidates for the GPU to clip.
-        Matrix4x4 vp = camera.cullingMatrix;
-        Vector4 w = vp.GetRow(3), x = vp.GetRow(0), y = vp.GetRow(1);
-        depthSidePlanes[0] = w + x; depthSidePlanes[1] = w - x;
-        depthSidePlanes[2] = w + y; depthSidePlanes[3] = w - y;
+        SetSidePlanes(camera);
         if (enabled) foreach (var item in depthCandidates) {
             if (!diagnosticDepthSubmissionBaseline && !diagnosticNoCull &&
                 ((item.materialRange.viewMask & viewBit) == 0 || OutsideDepthView(item.bounds))) continue;
             depthScratch.Add(item);
         }
         DepthDrawCount += depthScratch.Count;
-        bool changed = diagnosticDepthSubmissionBaseline || previous.Count != depthScratch.Count;
+        bool changed = sceneCommandsDirty || diagnosticDepthSubmissionBaseline || previous.Count != depthScratch.Count;
         if (!changed) for (int i = 0; i < previous.Count; ++i)
             if (previous[i] != depthScratch[i]) { changed = true; break; }
         if (!changed) return;
@@ -490,10 +834,14 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         // update. Re-record only when the ordered visible draw list changes.
         commands.Clear(); previous.Clear();
         foreach (var item in depthScratch) {
-            commands.DrawMesh(item.mesh, Matrix4x4.identity, item.depthMaterial, 0, 0);
+            commands.DrawMesh(item.mesh, Matrix4x4.identity, OrderedSubmissionActive?item.commandDepthMaterial:item.depthMaterial, 0, 0);
             previous.Add(item);
         }
         ++DepthBufferRebuildCount;
+    }
+    private void SetSidePlanes(Camera camera){
+        Matrix4x4 vp=camera.cullingMatrix;Vector4 w=vp.GetRow(3),x=vp.GetRow(0),y=vp.GetRow(1);
+        depthSidePlanes[0]=w+x;depthSidePlanes[1]=w-x;depthSidePlanes[2]=w+y;depthSidePlanes[3]=w-y;
     }
     private bool OutsideDepthView(Bounds bounds)
     {
@@ -505,6 +853,12 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         return false;
     }
     // Called only by isolated smoke/performance checks, outside timed frames.
+    private static readonly string[] MaterialIntegerWords={
+        "pcw","tsp","gmp","original","emissive","billboard","courseLightRange","_LightScope","viewMask","courseCullMode"
+    };
+    private static readonly string[] MaterialFloatWords={
+        "glossCoefficient","_SrcBlend","_DstBlend","_SrcBlendAlpha","_DstBlendAlpha","_TrackSurface","_ZTest","_ZWrite"
+    };
     internal void VerifyViewCulling(Action<bool, string> check)
     {
         for (uint mask = 0; mask < 4; ++mask) {
@@ -520,12 +874,39 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         foreach (var item in objects) {
             if (!item.active) continue;
             ++active;
+            check(OrderedSubmissionActive?item.renderer==null||!item.renderer.enabled:item.renderer!=null&&item.renderer.enabled,
+                "Scene range renderer and command-buffer ownership overlap");
             uint mask = item.materialRange.viewMask;
-            bool mainIncluded = (main.cullingMask & (1 << item.gameObject.layer)) != 0;
-            bool mirrorIncluded = (mirror.cullingMask & (1 << item.gameObject.layer)) != 0;
+            check(item.gameObject==null||item.gameObject.layer==item.layer,"Lazy renderer layer differs from range ownership");
+            bool mainIncluded = (main.cullingMask & (1 << item.layer)) != 0;
+            bool mirrorIncluded = (mirror.cullingMask & (1 << item.layer)) != 0;
+            check(item.capacity>=item.count&&item.mesh.GetIndexCount(0)==(uint)item.count,"Mesh capacity changed the logical index count");
+            check(!item.vertexCache.IsCreated||item.vertexCache.Length>=item.count,"Vertex cache cannot hold its logical range");
             check(mainIncluded == (diagnosticViewCullingBaseline || (mask & 1) != 0), "Active range has incorrect main-view ownership.");
             check(mirrorIncluded == (diagnosticViewCullingBaseline || (mask & 2) != 0), "Active range has incorrect mirror ownership.");
             check(unchecked((uint)item.material.GetInteger("viewMask")) == mask, "Source shader view-mask guard changed.");
+            if(OrderedSubmissionActive&&item.commandMaterial!=null){
+                check(item.commandMaterial.shader==item.material.shader&&item.commandMaterial.mainTexture==item.material.mainTexture,
+                    "Shared commands retain the original shader and texture");
+                foreach(string word in MaterialIntegerWords){
+                    bool exact=item.commandMaterial.GetInteger(word)==item.material.GetInteger(word);
+                    check(exact,exact?"Shared command integers match":"Shared command integer differs: "+word);
+                    if(item.depthCandidate){
+                        exact=item.commandDepthMaterial.GetInteger(word)==item.depthMaterial.GetInteger(word);
+                        check(exact,exact?"Shared depth integers match":"Shared depth integer differs: "+word);
+                    }
+                }
+                foreach(string word in MaterialFloatWords){
+                    bool exact=item.commandMaterial.GetFloat(word)==item.material.GetFloat(word);
+                    check(exact,exact?"Shared command scalars match":"Shared command scalar differs: "+word);
+                    if(item.depthCandidate){
+                        exact=item.commandDepthMaterial.GetFloat(word)==item.depthMaterial.GetFloat(word);
+                        check(exact,exact?"Shared depth scalars match":"Shared depth scalar differs: "+word);
+                    }
+                }
+                check(item.commandMaterial.GetVector("_LightOverride")==item.material.GetVector("_LightOverride"),
+                    "Shared commands retain the exact light override");
+            }
             if (!mainIncluded) { ++mainRanges; mainVertices += item.count; }
             if (mirror.enabled && !mirrorIncluded) { ++mirrorRanges; mirrorVertices += item.count; }
         }
@@ -545,7 +926,8 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
     }
     private unsafe void SelectCachedRanges(SceneFrame frame) {
         if(diagnosticPerfBaseline || rangeCacheOff)return;
-        ++selectionStamp;freeRangeCursor=0;
+        ++selectionStamp;
+        freeRangeCursor=0;
         while(selectedRanges.Count<frame.rangeCount)selectedRanges.Add(null);
         bool lookupNeeded=false;
         // Most frames keep the same ordering. Immutable identities avoid
@@ -571,7 +953,7 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
             if(match){previous.selectedStamp=selectionStamp;selectedRanges[i]=previous;}
             else if(IsCourseGeometry(r))lookupNeeded=true;
         }
-        if(!lookupNeeded)return; // Moving actors alone do not need a world lookup.
+        if(!lookupNeeded){BuildFreeRanges();return;} // Moving actors alone do not need a world lookup.
         geometryLookup.Clear();
         foreach(var item in objects) {
             if(!item.vertexCache.IsCreated||item.selectedStamp==selectionStamp)continue;
@@ -597,22 +979,89 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                 candidate=candidate.nextGeometry;
             }
         }
+        BuildFreeRanges();
     }
-    private RangeObject ClaimRangeObject() {
-        while(freeRangeCursor<objects.Count&&objects[freeRangeCursor].selectedStamp==selectionStamp)++freeRangeCursor;
-        var item=GetRangeObject(freeRangeCursor++);item.selectedStamp=selectionStamp;return item;
+    private static int CapacityBucket(int count){
+        int bucket=0;while(count>1){count=(count+1)>>1;++bucket;}return bucket;
+    }
+    private void BuildFreeRanges(){
+        if(!RendererReuse)return;
+        Array.Clear(freeRanges,0,freeRanges.Length);
+        for(int i=objects.Count-1;i>=0;--i){
+            var item=objects[i];if(item.selectedStamp==selectionStamp)continue;
+            int bucket=CapacityBucket(item.capacity);
+            item.nextFree=freeRanges[bucket];freeRanges[bucket]=item;
+        }
+    }
+    private RangeObject ClaimRangeObject(int count) {
+        if(!RendererReuse){
+            while(freeRangeCursor<objects.Count&&objects[freeRangeCursor].selectedStamp==selectionStamp)++freeRangeCursor;
+            var original=GetRangeObject(freeRangeCursor++);
+            original.selectedStamp=selectionStamp;return original;
+        }
+        int wanted=CapacityBucket(count),bucket=-1;
+        // Preserve similarly sized buffers before growing a smaller slot. An
+        // unrelated large draw must not ratchet every pool slot's high water.
+        for(int i=wanted;i<=Math.Min(wanted+1,freeRanges.Length-1);++i)
+            if(freeRanges[i]!=null){bucket=i;break;}
+        if(bucket<0)for(int i=wanted-1;i>=0;--i)
+            if(freeRanges[i]!=null){bucket=i;break;}
+        if(bucket<0)for(int i=wanted+2;i<freeRanges.Length;++i)
+            if(freeRanges[i]!=null){bucket=i;break;}
+        RangeObject item;
+        if(bucket<0)item=GetRangeObject(objects.Count);
+        else {item=freeRanges[bucket];freeRanges[bucket]=item.nextFree;item.nextFree=null;}
+        item.selectedStamp=selectionStamp;return item;
+    }
+    private int MeshPayloadStride=>68+(metalGeometry?UnsafeUtility.SizeOf<MetalVertex>():0);
+    private long MeshBytes(RangeObject item)=>(long)item.capacity*MeshPayloadStride;
+    private static long CacheBytes(RangeObject item)=>item.vertexCache.IsCreated?(long)item.vertexCache.Length*64:0;
+    private void UpdateBufferAccounting(){
+        MeshBufferBytes=VertexCacheBytes=InactiveBufferBytes=ActiveVertexBytes=0;
+        foreach(var item in objects){
+            long mesh=MeshBytes(item),cache=CacheBytes(item);
+            MeshBufferBytes+=mesh;VertexCacheBytes+=cache;
+            if(item.active)ActiveVertexBytes+=(long)item.count*(MeshPayloadStride+64);
+            else InactiveBufferBytes+=mesh+cache;
+        }
+    }
+    private void TrimInactiveBuffers(long budget){
+        // Commands for this frame no longer refer to inactive ranges. Bound
+        // release work per frame; Mesh destruction is deferred by Unity.
+        int inspected=0;
+        while(InactiveBufferBytes>budget&&inspected++<objects.Count&&TrimmedRanges<16){
+            if(trimCursor>=objects.Count)trimCursor=0;
+            var item=objects[trimCursor++];if(item.active||item.capacity==0)continue;
+            long mesh=MeshBytes(item),cache=CacheBytes(item);
+            if(item.vertexCache.IsCreated)item.vertexCache.Dispose();
+            if(item.gameObject!=null)item.gameObject.GetComponent<MeshFilter>().sharedMesh=null;
+            Destroy(item.mesh);item.mesh=null;item.count=item.capacity=0;item.geometryId=item.geometryKey=0;
+            MeshBufferBytes-=mesh;VertexCacheBytes-=cache;InactiveBufferBytes-=mesh+cache;++TrimmedRanges;
+        }
+    }
+    private static Mesh NewRangeMesh(){
+        var mesh=new Mesh{name="Original authored geometry"};mesh.MarkDynamic();return mesh;
     }
     private RangeObject GetRangeObject(int index)
     {
         if (index < objects.Count) return objects[index];
-        var obj = new GameObject("Original range"); obj.layer = SceneLayer; obj.transform.SetParent(worldRoot, false);
-        var mesh = new Mesh { name = "Original authored geometry" }; mesh.MarkDynamic();
-        obj.AddComponent<MeshFilter>().sharedMesh = mesh;
-        var renderer = obj.AddComponent<MeshRenderer>(); renderer.shadowCastingMode = ShadowCastingMode.Off;
-        renderer.receiveShadows = false; renderer.lightProbeUsage = LightProbeUsage.Off; renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
-        var material = new Material(sceneShader); renderer.sharedMaterial = material;
-        var result = new RangeObject { gameObject = obj, mesh = mesh, renderer = renderer, material = material };
-        objects.Add(result); return result;
+        var mesh = NewRangeMesh();
+        var result = new RangeObject {mesh=mesh,material=new Material(sceneShader),active=false};
+        objects.Add(result);++CreatedRangeObjects;
+        if(!OrderedSubmissionActive||!RendererReuse)EnsureRenderer(result);
+        return result;
+    }
+    private void EnsureRenderer(RangeObject item)
+    {
+        if(item.renderer!=null)return;
+        var obj=new GameObject("Original range");obj.layer=item.layer;
+        obj.transform.SetParent(owners[item.parentScope<4?item.parentScope:0],false);
+        obj.AddComponent<MeshFilter>().sharedMesh=item.mesh;
+        var value=obj.AddComponent<MeshRenderer>();value.shadowCastingMode=ShadowCastingMode.Off;
+        value.receiveShadows=false;value.lightProbeUsage=LightProbeUsage.Off;value.reflectionProbeUsage=ReflectionProbeUsage.Off;
+        value.enabled=!OrderedSubmissionActive;value.sharedMaterial=item.material;
+        obj.SetActive(item.active);item.gameObject=obj;item.renderer=value;
+        ++CreatedRenderers;++ResidentRenderers;
     }
     private static void PackWords(int[] source, UInt4[] target)
     {
@@ -626,10 +1075,24 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         a.first=b.first=0;a.sourceIndex=b.sourceIndex=0;
         return UnsafeUtility.MemCmp(&a, &b, 64) == 0;
     }
-    private static unsafe void UploadMetalVertices(Mesh mesh,SceneVertex* vertices,int count)
+    private static unsafe bool SameMaterial(SceneRange a,SceneRange b){
+        a.first=b.first=a.count=b.count=a.sourceIndex=b.sourceIndex=0;
+        return UnsafeUtility.MemCmp(&a,&b,64)==0;
+    }
+    private void EnsureIndexScratch(int count){
+        if(indexScratch.IsCreated&&indexScratch.Length>=count)return;
+        if(indexScratch.IsCreated)indexScratch.Dispose();
+        indexScratch=new NativeArray<uint>(Mathf.NextPowerOfTwo(count),Allocator.Persistent,NativeArrayOptions.UninitializedMemory);
+        for(int i=0;i<indexScratch.Length;++i)indexScratch[i]=(uint)i;
+    }
+    private unsafe void UploadMetalVertices(Mesh mesh,SceneVertex* vertices,int count)
     {
         if(count%3!=0)throw new InvalidOperationException("Native scene ranges must contain complete triangles.");
-        var data=new NativeArray<MetalVertex>(count,Allocator.Temp,NativeArrayOptions.UninitializedMemory);
+        if(RendererReuse&&(!metalScratch.IsCreated||metalScratch.Length<count)){
+            if(metalScratch.IsCreated)metalScratch.Dispose();
+            metalScratch=new NativeArray<MetalVertex>(Mathf.NextPowerOfTwo(count),Allocator.Persistent,NativeArrayOptions.UninitializedMemory);
+        }
+        var data=RendererReuse?metalScratch:new NativeArray<MetalVertex>(count,Allocator.Temp,NativeArrayOptions.UninitializedMemory);
         try{
             for(int i=0;i<count;i+=3){
                 var last=vertices[i+2];
@@ -638,7 +1101,57 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
                 data[i]=data[i+1]=data[i+2]=triangle;
             }
             mesh.SetVertexBufferData(data,0,0,count,1,UploadFlags);
-        }finally{data.Dispose();}
+        }finally{if(!RendererReuse)data.Dispose();}
+    }
+    private static PipelineKey Pipeline(Material material)
+    {
+        uint state=0;
+        string[] properties=PipelineProperties;
+        for(int i=0;i<properties.Length;++i)
+            if(material.HasProperty(properties[i]))state|=((uint)material.GetFloat(properties[i])&15u)<<(i*4);
+        return new PipelineKey{shader=material.shader,state=state};
+    }
+    private static readonly string[] PipelineProperties={"_SrcBlend","_DstBlend","_SrcBlendAlpha","_DstBlendAlpha","_ZWrite","_ZTest"};
+    private void WarmPipelines()
+    {
+        if(!metalGeometry||!CanPrepareResources||!Idas3MobilePerformance.Enabled)return;
+        if(MaterialConfigurationCount!=0)warmupPending=true;
+        int samples=main.targetTexture!=null?main.targetTexture.antiAliasing:Math.Max(1,QualitySettings.antiAliasing);
+        if(!warmupPending&&warmupTarget!=null&&warmupTarget.antiAliasing==samples&&
+            (main.targetTexture==null||warmupTarget.graphicsFormat==main.targetTexture.graphicsFormat&&
+                warmupTarget.depthStencilFormat==main.targetTexture.depthStencilFormat))return;
+        var descriptor=main.targetTexture!=null?main.targetTexture.descriptor:
+            new RenderTextureDescriptor(16,16,RenderTextureFormat.Default,24);
+        descriptor.width=descriptor.height=16;descriptor.msaaSamples=samples;
+        descriptor.useMipMap=descriptor.autoGenerateMips=false;descriptor.memoryless=RenderTextureMemoryless.None;
+        if(warmupTarget==null||warmupTarget.graphicsFormat!=descriptor.graphicsFormat||
+            warmupTarget.depthStencilFormat!=descriptor.depthStencilFormat||warmupTarget.antiAliasing!=samples){
+            if(warmupTarget!=null){warmupTarget.Release();Destroy(warmupTarget);}
+            warmupTarget=new RenderTexture(descriptor){name="IDAS3 bounded pipeline warmup"};
+            if(!warmupTarget.Create()){Destroy(warmupTarget);warmupTarget=null;return;}
+            warmedPipelines.Clear();
+        }
+        if(warmupCommands==null)warmupCommands=new CommandBuffer{name="IDAS3 observed Metal pipeline warmup"};
+        warmupCommands.Clear();
+        warmupCommands.SetRenderTarget(warmupTarget);
+        warmupCommands.ClearRenderTarget(true,true,Color.clear);
+        warmupCommands.SetViewProjectionMatrices(main.worldToCameraMatrix,GL.GetGPUProjectionMatrix(main.projectionMatrix,true));
+        BeforeCamera(main);
+        foreach(var item in objects){
+            if(!item.active||!item.materialConfigured)continue;
+            WarmMaterial(item.mesh,item.material);
+            if(item.depthCandidate&&item.depthMaterial!=null)WarmMaterial(item.mesh,item.depthMaterial);
+            if(WarmupStates>=4||warmedPipelines.Count>=128)break;
+        }
+        if(WarmupStates!=0)Graphics.ExecuteCommandBuffer(warmupCommands);
+        warmupCommands.Clear();
+        warmupPending=WarmupStates>=4;
+    }
+    private void WarmMaterial(Mesh mesh,Material material)
+    {
+        if(WarmupStates>=4||warmedPipelines.Count>=128||!warmedPipelines.Add(Pipeline(material)))return;
+        for(int pass=0;pass<material.passCount;++pass)warmupCommands.DrawMesh(mesh,Matrix4x4.identity,material,0,pass);
+        ++WarmupStates;
     }
     private void ConfigureMaterial(Material m, SceneRange r, int queue)
     {
@@ -656,8 +1169,8 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         if ((r.flags & 7) == 3 && r.pcw == 0x8a00071eu && (r.gmp & 512) != 0 &&
             r.tsp >> 29 == 2 && ((r.tsp >> 26) & 7) == 1 && ((r.tsp >> 22) & 3) == 2)
             wanted = headlightShader;
-        if (m.shader != wanted) m.shader = wanted;
-        m.renderQueue = queue;
+        if (m.shader != wanted) {m.shader = wanted;sceneCommandsDirty=true;}
+        if(!OrderedSubmissionActive)m.renderQueue = queue;
         // SetInt aliases SetFloat in Unity. Source material words require the
         // true integer setter or their low bits are lost above2^24.
         m.SetInteger("pcw", unchecked((int)r.pcw)); m.SetInteger("tsp", unchecked((int)r.tsp)); m.SetInteger("gmp", unchecked((int)r.gmp));
@@ -754,7 +1267,8 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         bool filtered = (sampler & 16) != 0 || Screen.height > 480;
         texture.filterMode = filtered ? FilterMode.Trilinear : FilterMode.Point;
         texture.anisoLevel = filtered ? 16 : 1;
-        texture.Apply(true, true); textureCache.Add(key, texture); return texture;
+        texture.Apply(true, true); textureCache.Add(key, texture);
+        return texture;
     }
     private static Matrix4x4 NativeMatrix(float[] words, int offset)
     {
@@ -882,10 +1396,20 @@ public sealed class Idas3SceneRenderer : MonoBehaviour
         }
         framesBuffer?.Release(); lightsBuffer?.Release(); fogBuffer?.Release();
         emptyLampCells?.Release(); emptyLampLights?.Release();
+        if(indexScratch.IsCreated)indexScratch.Dispose();
+        if(metalScratch.IsCreated)metalScratch.Dispose();
+        if(mainSceneCommands!=null){if(main)main.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque,mainSceneCommands);mainSceneCommands.Release();}
+        if(mirrorSceneCommands!=null){if(mirror)mirror.RemoveCommandBuffer(CameraEvent.BeforeForwardOpaque,mirrorSceneCommands);mirrorSceneCommands.Release();}
+        warmupCommands?.Release();
+        if(warmupTarget!=null){warmupTarget.Release();Destroy(warmupTarget);}
         foreach (var item in objects) {
             if (item.vertexCache.IsCreated) item.vertexCache.Dispose();
             if (item.material != null) Destroy(item.material); if (item.depthMaterial != null) Destroy(item.depthMaterial); if (item.mesh != null) Destroy(item.mesh);
         }
+        foreach(var state in sharedMaterials.Values){
+            Destroy(state.scene);if(state.depth!=null)Destroy(state.depth);
+        }
+        sharedMaterials.Clear();
         foreach (var texture in textureCache.Values) if (texture != null) Destroy(texture);
         if (worldRoot != null) Destroy(worldRoot.gameObject);
         if (mirror != null) Destroy(mirror.gameObject); if (backdrop != null) Destroy(backdrop.gameObject);

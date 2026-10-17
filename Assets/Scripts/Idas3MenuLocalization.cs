@@ -15,7 +15,18 @@ public static class Idas3MenuLocalization
     public static int Language {get;private set;}
     private static Dictionary<string,string[]> catalog;
     private static Font japanese,chinese;
+    internal static bool IsMenuFont(Font font)=>font!=null&&(font==japanese||font==chinese);
     private static readonly ConditionalWeakTable<GUIStyle,GUIStyle[]> styles=new ConditionalWeakTable<GUIStyle,GUIStyle[]>();
+    private sealed class FitCache {
+        internal Font font;
+        internal FontStyle style;
+        internal int size;
+        internal readonly GUIContent content=new GUIContent();
+        internal readonly Dictionary<string,Fit> labels=new Dictionary<string,Fit>();
+    }
+    private struct Fit {internal float width;internal int size;}
+    private static ConditionalWeakTable<GUIStyle,FitCache> fits=new ConditionalWeakTable<GUIStyle,FitCache>();
+    internal static void ClearFitCache(){fits=new ConditionalWeakTable<GUIStyle,FitCache>();}
     private sealed class Pattern {public Regex regex;public string[] translations;public int count;}
     private static readonly List<Pattern> patterns=new List<Pattern>();
     private static readonly Dictionary<string,string[]> dynamicText=new Dictionary<string,string[]>();
@@ -108,6 +119,27 @@ public static class Idas3MenuLocalization
     {
         var localized=Style(style);string value=translate?T(text):text??"";
         int original=localized.fontSize;
+        if(Idas3MobilePerformance.Enabled){
+            if(!fits.TryGetValue(localized,out var cache)){cache=new FitCache();fits.Add(localized,cache);}
+            if(cache.font!=localized.font||cache.style!=localized.fontStyle||cache.size!=original){
+                cache.labels.Clear();cache.font=localized.font;cache.style=localized.fontStyle;cache.size=original;
+            }
+            cache.content.text=value;
+            if(!localized.wordWrap&&original>0){
+                if(!cache.labels.TryGetValue(value,out var fit)||fit.width!=rect.width){
+                    while(localized.fontSize>9){
+                        if(localized.CalcSize(cache.content).x<=rect.width)break;
+                        --localized.fontSize;
+                    }
+                    fit=new Fit{width=rect.width,size=localized.fontSize};
+                    if(cache.labels.Count>=256)cache.labels.Clear();
+                    cache.labels[value]=fit;
+                }
+                localized.fontSize=fit.size;
+            }
+            try{GUI.Label(rect,cache.content,localized);}finally{localized.fontSize=original;}
+            return;
+        }
         // Fixed menu rows keep their anchors; fit translated labels rather than
         // allowing glyphs to run into arrows, adjacent columns or buttons.
         if(!localized.wordWrap&&original>0)

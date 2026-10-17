@@ -14,6 +14,8 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     private Idas3SceneGame host;
     private string root;
     private bool frozen, finished;
+    private bool menuCacheRequested,menuCacheVerified;
+    private bool memoryCheck;
     private bool realtimeAudio;
     private int held, pulse, checks;
     private uint padPulse;
@@ -24,6 +26,11 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     private bool languageCheck;
     private readonly float[] driveTelemetry=new float[12];
     [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneCourseDriveDiagnostic(int enabled,[Out] float[] values,int count);
+#if UNITY_IOS && !UNITY_EDITOR
+    [DllImport("__Internal")] private static extern double Idas3ProcessMemoryMiB();
+#else
+    private static double Idas3ProcessMemoryMiB()=>-1;
+#endif
     private bool rivalCheck, rivalPostResult, rivalFastForward, retireCheck;
     private int rivalRecord;
     private Idas3RivalAudioProbe rivalAudio;
@@ -171,6 +178,12 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             File.WriteAllText(Path.Combine(saves,"game-options.json"),"{\"version\":1,\"arcadeTextLanguage\":"+language+",\"discordPresence\":false,\"communityTimes\":false}");
         }
         if(Array.IndexOf(args,"-idas3-scene-night-check")>=0){Directory.CreateDirectory(saves);File.WriteAllText(Path.Combine(saves,"settings.txt"),"3 0 0 0 1 1 1 0\n");}
+        if(Array.IndexOf(args,"-idas3-mobile-render-check")>=0||Array.IndexOf(args,"-idas3-memory-retention-check")>=0||
+            Array.IndexOf(args,"-idas3-mobile-toggle-check")>=0){
+            Directory.CreateDirectory(saves);
+            File.WriteAllText(Path.Combine(saves,"settings.txt"),"3 0 0 0 0 1 1 0\n");
+            File.WriteAllText(Path.Combine(saves,"game-options.json"),"{\"version\":1,\"discordPresence\":false,\"communityTimes\":false,\"iosMobilePerformanceOptimization\":true}");
+        }
         bool requestedDepth=Array.IndexOf(args,"-idas3-scene-depth-check")>=0;
         bool requestedPerf=Array.IndexOf(args,"-idas3-scene-perf-check")>=0;
         bool requestedRival=Array.IndexOf(args,"-idas3-scene-rival-check")>=0;
@@ -214,6 +227,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         active=host.gameObject.AddComponent<Idas3SceneSmoke>();
         active.host=host;active.root=output;active.began=Time.realtimeSinceStartupAsDouble;
         active.languageCheck=Array.IndexOf(args,"-idas3-scene-language")>=0;
+        active.memoryCheck=Array.IndexOf(args,"-idas3-memory-retention-check")>=0;
         active.realtimeAudio=Array.IndexOf(args,"-idas3-scene-realtime-audio")>=0;
         active.legendCheck=Array.IndexOf(args,"-idas3-scene-legend-check")>=0;
         active.driveInspect=Array.IndexOf(args,"-idas3-scene-drive-inspect")>=0;
@@ -262,7 +276,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         if(finished)return;
         if(host.Failure!=null){Finish(false,host.Failure);return;}
         if(Time.realtimeSinceStartupAsDouble-began>(legendCheck||headlightCheck?2400:600)){Finish(false,"Scene smoke exceeded its time budget.");return;}
-        if(!perfCheck&&host.Ready&&host.SubmissionMilliseconds>0&&host.Status.racePhase==2&&(host.Status.flags&1)==0)
+        if(!perfCheck&&!memoryCheck&&host.Ready&&host.SubmissionMilliseconds>0&&host.Status.racePhase==2&&(host.Status.flags&1)==0)
             submitTimes.Add(host.SubmissionMilliseconds);
     }
     private void Check(bool condition,string why){
@@ -389,8 +403,9 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             Check(record.audio.consumedFrames>0,"Unity audio callback has consumed no original PCM.");
         }
         if(world){
-            Check(record.meshRenderers>0,"No Unity mesh renderers exist.");Check(record.textures>1,"No scene textures imported.");
             var scene=host.GetComponent<Idas3SceneRenderer>();scene.VerifyViewCulling(Check);
+            Check(scene.ActiveMeshCount>0&&(scene.OrderedSubmissionActive?scene.SceneCommandDraws>0:record.meshRenderers>0),
+                "No scene geometry is submitted by the active path.");Check(record.textures>1,"No scene textures imported.");
             record.mainViewExcludedRanges=scene.MainViewExcludedRanges;record.mainViewExcludedVertices=scene.MainViewExcludedVertices;
             record.mirrorViewExcludedRanges=scene.MirrorViewExcludedRanges;record.mirrorViewExcludedVertices=scene.MirrorViewExcludedVertices;
             foreach(var geometry in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None)){
@@ -440,6 +455,8 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         }else capture=ScreenCapture.CaptureScreenshotAsTexture();
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-ui-submission-check")>=0)
             VerifyUiSubmissionPixels(target,capture);
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-mobile-render-check")>=0)
+            VerifyMobileSubmissionPixels(name,target);
         if(restoreCaptureSamples){target.Release();target.antiAliasing=captureSamples;Check(target.Create(),"Restore measured AA4 target");}
         Check(capture!=null&&capture.width>0,"Unity screen capture failed.");
         if(cullCheck||perfCheck||languageCheck){
@@ -482,11 +499,78 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             }
         } finally {ui.SubmissionCacheBaseline=previous;RenderTexture.active=prior;Destroy(compare);}
     }
+    [Serializable] private sealed class MobileComparison {
+        public string name;
+        public bool rendererReuse,orderedSubmission;
+        public int meshes,sourceRanges,sceneCommandDraws,sceneCommandRebuilds,geometryUploads,materialConfigurations,queueUpdates,createdRanges,differentBytes,
+            residentRenderers,createdRenderers,meshBufferResizes,vertexCacheResizes,
+            sharedMaterialEntries,sharedMaterialRanges;
+    }
+    private void VerifyMobileSubmissionPixels(string name,RenderTexture target)
+    {
+        Check(target!=null&&target.antiAliasing==1,"Mobile comparison uses an isolated AA1 target");
+        var scene=host.GetComponent<Idas3SceneRenderer>();var ui=host.GetComponent<Idas3UnityUi>();
+        var cameras=new List<Camera>();
+        foreach(var camera in Resources.FindObjectsOfTypeAll<Camera>())
+            if(camera.enabled&&camera.gameObject.activeInHierarchy&&camera.targetTexture==target)cameras.Add(camera);
+        cameras.Sort((a,b)=>{int order=a.depth.CompareTo(b.depth);return order!=0?order:string.CompareOrdinal(a.name,b.name);});
+        bool reuse=scene.RendererReuse,ordered=scene.OrderedSubmission,allowed=scene.CanUseOrderedSubmission,sharedBaseline=scene.SharedMaterialBaseline;
+        var prior=RenderTexture.active;
+        var image=new Texture2D(target.width,target.height,TextureFormat.RGB24,false);
+        var records=new List<MobileComparison>();
+        byte[] expected=null;
+        try {
+            scene.VerifyMobileKeys(Check);
+            for(int mode=0;mode<6;++mode){
+                scene.RendererReuse=mode>=4||(mode&1)!=0;scene.OrderedSubmission=mode>=4||(mode&2)!=0;
+                scene.CanUseOrderedSubmission=mode!=4&&allowed;
+                scene.SharedMaterialBaseline=mode==5;
+                scene.ApplyFrame();scene.ApplyFrame();ui.ApplyFrame();
+                scene.VerifyViewCulling(Check);
+                foreach(var camera in cameras)camera.Render();
+                RenderTexture.active=target;image.ReadPixels(new Rect(0,0,target.width,target.height),0,0);image.Apply();
+                var bytes=image.GetRawTextureData<byte>();
+                var record=new MobileComparison{name=name,rendererReuse=scene.RendererReuse,orderedSubmission=scene.OrderedSubmissionActive,
+                    meshes=scene.ActiveMeshCount,sourceRanges=scene.SourceRangeCount,sceneCommandDraws=scene.SceneCommandDraws,
+                    sceneCommandRebuilds=scene.SceneCommandRebuilds,
+                    geometryUploads=scene.GeometryUploadCount,materialConfigurations=scene.MaterialConfigurationCount,
+                    queueUpdates=scene.QueueUpdateCount,createdRanges=scene.CreatedRangeObjects,
+                    residentRenderers=scene.ResidentRenderers,createdRenderers=scene.CreatedRenderers,
+                    meshBufferResizes=scene.MeshBufferResizes,vertexCacheResizes=scene.VertexCacheResizes,
+                    sharedMaterialEntries=scene.SharedMaterialEntries,sharedMaterialRanges=scene.SharedMaterialRanges};
+                if(expected==null)expected=bytes.ToArray();
+                else for(int i=0;i<expected.Length;++i)if(expected[i]!=bytes[i])++record.differentBytes;
+                Check(record.differentBytes==0,"Mobile optimization changed "+record.differentBytes+" RGB bytes, mode="+mode);
+                Check(record.geometryUploads==0&&record.materialConfigurations==0&&record.queueUpdates==0,
+                    "Unchanged frame uploaded geometry or changed material state, mode="+mode);
+                Check(record.createdRanges==0,"An unchanged frame created range objects, mode="+mode);
+                Check(record.createdRenderers==0&&record.meshBufferResizes==0&&record.vertexCacheResizes==0,
+                    "An unchanged frame rebuilt a component or mesh buffer, mode="+mode);
+                if(scene.OrderedSubmission&&scene.CanUseOrderedSubmission){
+                    Check(record.orderedSubmission&&record.sceneCommandDraws>0,"Ordered submission exercised visible scene commands");
+                    Check(record.sceneCommandRebuilds==0,"Unchanged scene re-recorded its ordered command buffers");
+                }
+                if(mode==4)Check(!record.orderedSubmission&&record.sceneCommandDraws==0,"External-geometry fallback restored renderer submission");
+                Check(record.sharedMaterialEntries<=1024,"Shared immutable material cache remains bounded");
+                if(mode==3)Check(record.sharedMaterialRanges>0,"Shared command materials were exercised");
+                if(mode==5)Check(record.sharedMaterialRanges==0,"Original independent command materials were exercised");
+                if(records.Count!=0)Check(record.meshes==records[0].meshes,"Ordered submission changed source geometry ownership");
+                records.Add(record);
+                File.WriteAllText(Path.Combine(root,name+"-mobile-mode"+mode+".json"),JsonUtility.ToJson(record,true));
+            }
+        }finally{
+            scene.RendererReuse=reuse;scene.OrderedSubmission=ordered;scene.CanUseOrderedSubmission=allowed;
+            scene.SharedMaterialBaseline=sharedBaseline;scene.ApplyFrame();
+            RenderTexture.active=prior;Destroy(image);
+        }
+    }
     private IEnumerator Run()
     {
         yield return Frames(3);Check(host.Ready,"Scene host did not initialize.");
         host.DiagnosticFocusOverride=true;
         Check(host.ControllerDevices.Select("keyboard"),"Isolate physical controller input");yield return Frames(4);
+        if(memoryCheck){yield return MemoryRetentionCheck();yield break;}
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-mobile-toggle-check")>=0){yield return MobileToggleCheck();yield break;}
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-language")>=0){yield return LanguageCheck();yield break;}
         if(rivalCheck){yield return RivalCheck();yield break;}
         if(perfCheck){yield return PerformanceCheck();yield break;}
@@ -535,7 +619,18 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         }
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-render-check")>=0)
         {
-            yield return Key(116);held=87;yield return Frames(360);held=0;
+            if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-mobile-render-check")>=0){
+                menuCacheRequested=true;
+                int menuWait=0;while(!menuCacheVerified&&!finished&&menuWait++<120)yield return null;
+                Check(menuCacheVerified,"Menu cache Repaint comparison completed");
+                hires=new RenderTexture(1280,720,24,RenderTextureFormat.ARGB32){name="Mobile exact-pixel comparison",antiAliasing=1};
+                Check(hires.Create(),"Mobile comparison target creation");
+                host.GetComponent<Camera>().targetTexture=hires;yield return Frames(3);
+                yield return MobileComparisonRace();
+            }else{
+                yield return Key(116);
+            }
+            held=87;yield return Frames(360);held=0;
             yield return Capture("race-bumper",true);
             yield return Key(67);yield return Frames(20);yield return Capture("race-chase",true);
             Finish(true,null);yield break;
@@ -582,6 +677,55 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         yield return Capture("legend-bumper-mirror",true);
         yield return Key(67);yield return Frames(10);yield return Capture("legend-chase",true);
         Finish(true,null);
+    }
+    private void OnGUI()
+    {
+        if(!menuCacheRequested||Event.current.type!=EventType.Repaint)return;
+        menuCacheRequested=false;
+        try{VerifyMenuCachePixels();menuCacheVerified=true;}
+        catch(Exception error){Finish(false,error.ToString());}
+    }
+    private void VerifyMenuCachePixels()
+    {
+        var prior=RenderTexture.active;var matrix=GUI.matrix;
+        var color=GUI.color;var contentColor=GUI.contentColor;
+        int language=Idas3MenuLocalization.Language;
+        bool reuse=Idas3MobilePerformance.Enabled;
+        var target=new RenderTexture(512,160,0,RenderTextureFormat.ARGB32);
+        var image=new Texture2D(512,160,TextureFormat.RGB24,false);
+        var style=new GUIStyle(GUI.skin.label){fontSize=24,fontStyle=FontStyle.Bold,wordWrap=false,padding=new RectOffset(0,0,0,0)};
+        style.normal.textColor=Color.white;
+        Check(target.Create(),"Menu comparison target creation");
+        GL.PushMatrix();
+        try {
+            for(int selectedLanguage=0;selectedLanguage<3;++selectedLanguage){
+                Idas3MenuLocalization.SetLanguage(selectedLanguage);
+                byte[] expected=null;
+                for(int mode=0;mode<3;++mode){
+                    Idas3MobilePerformance.Apply(mode!=0);
+                    RenderTexture.active=target;GL.LoadPixelMatrix(0,512,160,0);GL.Clear(false,true,Color.black);
+                    GUI.matrix=Matrix4x4.identity;GUI.color=GUI.contentColor=Color.white;
+                    Idas3MenuLocalization.Label(new Rect(8,8,90,48),"DISPLAY & GRAPHICS",style);
+                    Idas3MenuLocalization.Label(new Rect(8,64,420,48),"RESET DEFAULTS",style);
+                    image.ReadPixels(new Rect(0,0,512,160),0,0);image.Apply();
+                    var actual=image.GetRawTextureData<byte>();
+                    int different=0,visible=0;
+                    for(int i=0;i<actual.Length;++i){
+                        if(actual[i]>24)++visible;
+                        if(expected!=null&&expected[i]!=actual[i])++different;
+                    }
+                    Check(visible>100,"Menu labels rendered visible pixels");
+                    Check(different==0,"Menu cache changed "+different+" RGB bytes, language="+selectedLanguage+", mode="+mode);
+                    Check(style.fontSize==24,"Menu fitting changed the caller's font size");
+                    if(expected==null)expected=actual.ToArray();
+                }
+                File.WriteAllBytes(Path.Combine(root,"menu-cache-language"+selectedLanguage+".png"),image.EncodeToPNG());
+            }
+        }finally{
+            GL.PopMatrix();GUI.matrix=matrix;GUI.color=color;GUI.contentColor=contentColor;RenderTexture.active=prior;
+            Idas3MobilePerformance.Apply(reuse);Idas3MenuLocalization.SetLanguage(language);
+            Destroy(image);target.Release();Destroy(target);
+        }
     }
     private IEnumerator LanguageCheck(){
         hires=new RenderTexture(Screen.width,Screen.height,24,RenderTextureFormat.ARGB32){name="Language artwork verification",antiAliasing=1};
@@ -1036,6 +1180,169 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         result.p95=values[Math.Max(0,(int)Math.Ceiling(count*.95)-1)];
         result.p99=values[Math.Max(0,(int)Math.Ceiling(count*.99)-1)];return result;
     }
+    private IEnumerator MobileComparisonRace()
+    {
+        bool night=Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-scene-night-check")>=0;
+        int course=night?3:8;
+        yield return Key(116);
+        int wait=0;
+        while(host.Status.racePhase!=2&&wait++<1800)yield return null;
+        Check(host.Status.racePhase==2,"Mobile setup shortcut reached Running");
+        var pause=host.GetComponent<Idas3PauseMenu>();pause.SetOpen(true);yield return Frames(4);
+        Check(Idas3Native.Idas3SceneReturnToCourse()==1,"Mobile setup return-to-course");
+        pause.SetOpen(false);yield return Frames(30);
+        Check((host.Status.flags&1)!=0&&host.Status.frontendStage==6,"Mobile setup reached Time Attack course selection");
+        for(int i=0;Idas3SceneModeFlowValue(30)!=course&&i<Idas3CourseCatalog.Count;++i){
+            yield return Key(39);yield return Frames(6);
+        }
+        Check(Idas3SceneModeFlowValue(30)==course,"Mobile setup selected the requested course");
+        for(int choice=0;(host.Status.flags&1)!=0&&choice<6;++choice){
+            int stage=host.Status.frontendStage,conditions=Idas3SceneModeFlowValue(31);
+            Check(stage>=6&&stage<=9,"Mobile setup owns a Time Attack selection stage");
+            if((stage==8&&(conditions&1)!=0)||(stage==9&&night!=((conditions&2)!=0))){
+                yield return Key(39);yield return Frames(6);
+            }
+            yield return Key(13);yield return Frames(60);
+        }
+        wait=0;
+        while(((host.Status.flags&1)!=0||host.Status.racePhase!=2)&&wait++<1800)yield return null;
+        Check(host.Status.course==course&&(host.Status.flags&1)==0&&(host.Status.flags&16)!=0&&host.Status.racePhase==2,
+            "Mobile comparison reached the requested race with original handling");
+        Check(Idas3SceneModeFlowValue(31)==((course==8?1:0)|((night||Idas3CourseCatalog.RequiresNight(course))?2:0)),
+            "Mobile comparison weather/time match the requested course");
+    }
+    private IEnumerator MobileToggleCheck()
+    {
+        var scene=host.GetComponent<Idas3SceneRenderer>();
+        yield return MobileComparisonRace();
+        held=87;yield return Frames(360);held=0;
+        host.PauseMenu.SetOpen(true);yield return Frames(4);
+        hires=new RenderTexture(1280,720,24,RenderTextureFormat.ARGB32){name="Live experimental toggle comparison",antiAliasing=1};
+        Check(hires.Create(),"Live toggle target creation");
+        scene.MainCamera.targetTexture=hires;yield return Frames(3);
+        ulong ticks=host.Status.simulationTicks,generation=scene.CurrentFrame.frameGeneration;
+        frozen=true;
+        var prior=RenderTexture.active;
+        var image=new Texture2D(hires.width,hires.height,TextureFormat.RGB24,false);
+        byte[] expected=null;
+        try {
+            for(int mode=0;mode<8;++mode){
+                bool enabled=(mode&1)!=0;
+                host.GameOptions.BeginEdit();host.GameOptions.Draft.iosMobilePerformanceOptimization=enabled;
+                Check(host.GameOptions.ApplyDraft(),"Live switch applies through production options");
+                scene.ApplyFrame();scene.ApplyFrame();host.GetComponent<Idas3UnityUi>().ApplyFrame();
+                Check(Idas3MobilePerformance.Enabled==enabled&&scene.RendererReuse==enabled&&scene.OrderedSubmissionActive==enabled,
+                    "Applied option reaches all runtime paths");
+                Check(scene.CurrentFrame.frameGeneration==generation&&host.Status.simulationTicks==ticks,
+                    "Applying optimizations leaves the native frame and physical tick unchanged");
+                if(!enabled)Check(scene.SharedMaterialEntries==0&&scene.ScratchBufferBytes==0&&scene.TotalWarmupStates==0&&
+                    scene.ResidentRenderers>=scene.ActiveMeshCount,"Disabled optimization restores components and drops experimental resources");
+                var cameras=new List<Camera>();
+                foreach(var camera in Resources.FindObjectsOfTypeAll<Camera>())
+                    if(camera.enabled&&camera.gameObject.activeInHierarchy&&camera.targetTexture==hires)cameras.Add(camera);
+                cameras.Sort((a,b)=>a.depth.CompareTo(b.depth));
+                foreach(var camera in cameras)camera.Render();
+                RenderTexture.active=hires;image.ReadPixels(new Rect(0,0,hires.width,hires.height),0,0);image.Apply();
+                var bytes=image.GetRawTextureData<byte>();
+                int different=0,visible=0;
+                for(int i=0;i<bytes.Length;++i){
+                    if(bytes[i]>24)++visible;
+                    if(expected!=null&&bytes[i]!=expected[i])++different;
+                }
+                Check(visible>1000&&different==0,"Repeated production toggles preserve nonblank exact RGB output");
+                if(expected==null)expected=bytes.ToArray();
+                File.WriteAllBytes(Path.Combine(root,"mobile-toggle-"+mode+".png"),image.EncodeToPNG());
+                yield return Frames(2);
+            }
+            host.GameOptions.BeginEdit();host.GameOptions.Draft.iosMobilePerformanceOptimization=false;
+            Check(host.GameOptions.ApplyDraft(),"Restore default-off after toggle regression");scene.ApplyFrame();
+        }finally{RenderTexture.active=prior;Destroy(image);frozen=false;}
+        host.PauseMenu.SetOpen(false);held=87;yield return Frames(120);held=0;
+        Check(host.Status.simulationTicks>ticks&&!scene.OrderedSubmissionActive,"Race resumes on the restored original path");
+        Finish(true,null);
+    }
+    [Serializable] private sealed class MemoryPoint {
+        public int pass,frame,meshResizes,cacheResizes,trimmedRanges,cachedRanges;
+        public bool paused;
+        public ulong simulationTicks;
+        public float distance,travel;
+        public double seconds,footprintMiB;
+        public long meshBytes,cacheBytes,inactiveBytes,activeBytes,scratchBytes,unityAllocatedBytes,graphicsDriverBytes;
+    }
+    [Serializable] private sealed class MemoryReport {
+        public string scope="Simulator capacity-retention regression: 256 adversarial size permutations, three 7200-tick Snow driving segments with real rendering, pause/resume and race restarts. Requested payload bytes are not driver residency. No GC.Collect or asset unloading; not A15 performance or full-course coverage.";
+        public MemoryPoint[] points;
+        public int passes=3,framesPerPass=7200;
+    }
+    private MemoryPoint ReadMemoryPoint(Idas3SceneRenderer scene,int pass,int frame,bool paused){
+        Check(Idas3SceneCourseDriveDiagnostic(-1,driveTelemetry,12)==1,"Memory driver telemetry is available");
+        return new MemoryPoint{
+            pass=pass,frame=frame,paused=paused,seconds=Time.realtimeSinceStartupAsDouble,
+            simulationTicks=host.Status.simulationTicks,distance=driveTelemetry[0],travel=driveTelemetry[9],
+            footprintMiB=Idas3ProcessMemoryMiB(),meshBytes=scene.MeshBufferBytes,
+            cacheBytes=scene.VertexCacheBytes,inactiveBytes=scene.InactiveBufferBytes,activeBytes=scene.ActiveVertexBytes,
+            scratchBytes=scene.ScratchBufferBytes,meshResizes=scene.MeshBufferResizes,cacheResizes=scene.VertexCacheResizes,
+            trimmedRanges=scene.TrimmedRanges,cachedRanges=scene.CachedRangeObjects,
+            unityAllocatedBytes=UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong(),
+            graphicsDriverBytes=UnityEngine.Profiling.Profiler.GetAllocatedMemoryForGraphicsDriver()};
+    }
+    private IEnumerator MemoryRetentionCheck(){
+        var scene=host.GetComponent<Idas3SceneRenderer>();
+        Check(scene.RendererReuse&&scene.OrderedSubmission,"Memory test uses production mobile optimizations");
+        scene.VerifyBufferPool(Check);
+        yield return Frames(4);
+        QualitySettings.antiAliasing=0;
+        yield return MobileComparisonRace();
+        var pause=host.GetComponent<Idas3PauseMenu>();
+        var points=new List<MemoryPoint>(128);double firstEnd=-1;
+        perfMainCamera=scene.MainCamera;perfMainRenders=0;Camera.onPostRender+=CountPerformanceRender;
+        try {
+            for(int pass=0;pass<3;++pass){
+                if(pass!=0){
+                    Check(Idas3SceneCourseDriveDiagnostic(0,null,0)==1,"Memory driver stops before restart");
+                    pause.SetOpen(true);
+                    Check(Idas3Native.Idas3SceneRestart()==1,"Memory regression restarts the same race");
+                    pause.SetOpen(false);
+                    int wait=0;while(host.Status.racePhase!=2&&wait++<1200)yield return null;
+                    Check(host.Status.racePhase==2,"Restart reached Running");
+                }
+                Check(Idas3SceneCourseDriveDiagnostic(2,driveTelemetry,12)==1,"Memory route-following driver starts");
+                held=87;
+                for(int frame=0;frame<7200;++frame){
+                    yield return null;
+                    Check(host.Status.course==8&&host.Status.racePhase==2&&(host.Status.flags&1)==0,
+                        "Memory regression remains in the original Snow race");
+                    Check(scene.MeshBufferBytes+scene.VertexCacheBytes-scene.InactiveBufferBytes<=scene.ActiveVertexBytes*8,
+                        "Active retained payload is bounded by current geometry");
+                    Check(scene.SharedMaterialEntries<=1024,"Driving retains a bounded immutable material cache");
+                    if(frame%240==0)points.Add(ReadMemoryPoint(scene,pass,frame,false));
+                    if(frame==3600){
+                        pause.SetOpen(true);yield return Frames(20);
+                        ulong ticks=host.Status.simulationTicks;
+                        long bytes=scene.MeshBufferBytes+scene.VertexCacheBytes;
+                        yield return Frames(240);
+                        Check(host.Status.simulationTicks==ticks,"Memory pause does not advance the driving simulation");
+                        Check(scene.MeshBufferBytes+scene.VertexCacheBytes==bytes&&scene.MeshBufferResizes==0&&scene.VertexCacheResizes==0,
+                            "Frozen pause does not grow/reallocate scene buffers");
+                        points.Add(ReadMemoryPoint(scene,pass,frame,true));
+                        pause.SetOpen(false);
+                    }
+                }
+                var endpoint=ReadMemoryPoint(scene,pass,7200,false);points.Add(endpoint);
+                File.WriteAllText(Path.Combine(root,"memory.json"),JsonUtility.ToJson(new MemoryReport{points=points.ToArray()},true));
+                Check(endpoint.travel>1000,"Memory regression drives through changing scenery");
+                Check(scene.InactiveBufferBytes<=Idas3SceneRenderer.InactiveBufferBudget,"Idle payload settles within its budget");
+                Check(endpoint.footprintMiB>0,"Actual process footprint is available");
+                if(pass==0)firstEnd=endpoint.footprintMiB;
+                else Check(endpoint.footprintMiB<=firstEnd+128,"Repeated identical driving grows footprint by over 128 MiB");
+                Debug.Log("IDAS3 memory pass "+pass+": footprint="+endpoint.footprintMiB+" MiB, payload="+
+                    (endpoint.meshBytes+endpoint.cacheBytes)+", travel="+endpoint.travel);
+            }
+            Check(perfMainRenders>=21600,"Memory regression actually rendered the driving frames");
+            scene.VerifyViewCulling(Check);
+        } finally {Camera.onPostRender-=CountPerformanceRender;held=0;Idas3SceneCourseDriveDiagnostic(0,null,0);}
+        Finish(true,null);
+    }
     private IEnumerator PerformanceCheck()
     {
         Idas8ImportedTreeChecks.Run();
@@ -1229,9 +1536,11 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         foreach(var camera in renderStack)camera.enabled=true;
         scene.VerifyViewCulling(Check);
         Check(host.Status.speedMetresPerSecond>1,"Performance warmup did not accelerate the original car.");
-        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-imported-headlight-check")>=0)
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-imported-headlight-check")>=0){
+            Check(perfCourse<9||!scene.OrderedSubmissionActive,"Imported geometry uses the original renderer submission");
             Idas3ImportedHeadlightChecks.Run(scene,hires,root,perfCourse,perfCourse>=9&&(scene.CurrentFrame.frameConstants!=IntPtr.Zero)&&
                 (perfNight||perfCourse>=11&&perfCourse<=14),Check);
+        }
         if(captureScreens&&perfWet)yield return Capture("wet-moving-bumper",true);
         if(captureScreens&&perfLegend)yield return Capture("legend-mirror-moving",true);
         if(captureScreens&&manualRender&&!perfWet&&!perfLegend)yield return Capture("dry-moving-bumper",true);

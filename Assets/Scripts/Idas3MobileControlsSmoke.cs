@@ -117,9 +117,9 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Check(!isolated.ApplyDraft()&&isolated.Current.iosPedalTravel&&isolated.Current.iosPedalTravelMode==0,"Failed Apply rolls back pedal master and selection together");
         Idas3MenuLocalization.SetLanguage(options.Current.customMenuLanguage);
         menu.SelectTab(8);for(int i=0;i<4;++i)menu.Navigate(1);
-        Check(menu.DiagnosticRows==8&&menu.DiagnosticSelection==5,"Pedal travel follows virtual layout settings");
+        Check(menu.DiagnosticRows==9&&menu.DiagnosticSelection==5,"Pedal travel follows virtual layout settings");
         options.Draft.musicVolume=.6f;menu.Activate();
-        Check(!options.Current.iosPedalTravel&&options.Draft.iosPedalTravel&&menu.DiagnosticRows==12,"Draft reveals deadzones and both selection switches without changing live input");
+        Check(!options.Current.iosPedalTravel&&options.Draft.iosPedalTravel&&menu.DiagnosticRows==13,"Draft reveals deadzones and both selection switches without changing live input");
         menu.Navigate(1);for(int i=0;i<5;++i)menu.NavigateHorizontal(1);
         Check(options.Draft.iosPedalTopDeadzone==.05f&&options.Current.iosPedalTopDeadzone==0,"Top deadzone edits in one-percent steps without applying");
         menu.Navigate(1);for(int i=0;i<5;++i)menu.NavigateHorizontal(1);
@@ -137,16 +137,16 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         SelectIosRow(9);menu.Activate();menu.Back();menu.Back();menu.OpenAttractOptions();SelectIosRow(9);
         Check(options.Draft.iosPedalTravelMode==1&&options.Current.iosPedalTravelMode==1,"Leaving settings discards unapplied pedal selection");
         SelectIosRow(5);menu.Activate();
-        Check(!options.Draft.iosPedalTravel&&options.Current.iosPedalTravel&&menu.DiagnosticRows==8&&options.Draft.iosPedalTravelMode==1&&options.Draft.iosPedalTopDeadzone==.05f,"Disabling draft hides four rows and retains their values");
+        Check(!options.Draft.iosPedalTravel&&options.Current.iosPedalTravel&&menu.DiagnosticRows==9&&options.Draft.iosPedalTravelMode==1&&options.Draft.iosPedalTopDeadzone==.05f,"Disabling draft hides four rows and retains their values");
         ApplyIosDraft();reloaded.Initialize(Path.Combine(root,"userdata"));
         Check(!reloaded.Current.iosPedalTravel&&reloaded.Current.iosPedalTravelMode==1&&reloaded.Current.iosPedalTopDeadzone==.05f,"Hidden selections persist after Apply");
         SelectIosRow(5);menu.Activate();ApplyIosDraft();
         SelectIosRow(menu.DiagnosticRows+1);menu.Activate();
         Check(!options.Draft.iosPedalTravel&&options.Draft.iosPedalTravelMode==0&&options.Draft.iosPedalTopDeadzone==0&&options.Current.iosPedalTravel&&options.Current.iosPedalTravelMode==1,"Reset changes draft only");
-        Check(menu.DiagnosticRows==8&&menu.DiagnosticSelection==9,"Reset focus follows footer after conditional rows disappear");
+        Check(menu.DiagnosticRows==9&&menu.DiagnosticSelection==10,"Reset focus follows footer after conditional rows disappear");
         yield return Capture("mobile-ios-reset-pending");ApplyIosDraft();
         Check(!options.Current.iosPedalTravel&&options.Current.iosPedalTravelMode==0&&options.Current.iosPedalTopDeadzone==0&&options.Current.musicVolume==1,"Applying reset restores defaults");
-        menu.Navigate(1);Check(menu.DiagnosticSelection==11,"Back follows Apply");menu.Navigate(1);Check(menu.DiagnosticSelection==1,"Footer navigation wraps to first iOS row");
+        menu.Navigate(1);Check(menu.DiagnosticSelection==12,"Back follows Apply");menu.Navigate(1);Check(menu.DiagnosticSelection==1,"Footer navigation wraps to first iOS row");
     }
     private IEnumerator SlidingPedalChecks(){
         var options=host.GameOptions;
@@ -688,6 +688,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         ApplyIosDraft();Check(!host.GameOptions.Current.showOsd&&!osd.Visible,"Apply hides OSD");
         yield return DiagnosticLoggingChecks();
         yield return ThermalFrameRateChecks();
+        yield return MobilePerformanceChecks();
         // Closing via the actual virtual Start must consume the press, leaving
         // the title intact and not reopening settings while it is held.
         Touch(82,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
@@ -711,7 +712,7 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         var menu=host.PauseMenu;var diagnostics=host.GetComponent<Idas3IosDiagnostics>();
         Check(diagnostics!=null&&!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording,"Diagnostic logging defaults off");
         Check(!Directory.Exists(diagnostics.Folder),"Disabled logging creates no directory");
-        Check(menu.DiagnosticRows==8,"iOS menu includes eight rows");
+        Check(menu.DiagnosticRows==9,"iOS menu includes nine rows");
         SelectIosRow(7);menu.Activate();yield return Frames(3);
         Check(!host.GameOptions.Current.diagnosticLogging&&!diagnostics.Recording&&!Directory.Exists(diagnostics.Folder),"Unapplied logging creates no files");
         ApplyIosDraft();Check(host.GameOptions.Current.diagnosticLogging&&diagnostics.Recording,"Apply starts logging");
@@ -789,9 +790,51 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         }
         Check(options.SetIosThermalFrameRateAdjustment(true)&&Idas3IosThermalFrameRate.Enabled,"Restore isolated thermal default");
         Idas3FramePacing.Configure(options.Current.vSync,options.Current.frameRateLimit);
-        SelectIosRow(9);Check(menu.DiagnosticSelection==9,"Reset follows the thermal row");menu.Back();
+        SelectIosRow(10);Check(menu.DiagnosticSelection==10,"Reset follows the experimental performance row");menu.Back();
         Check(menu.DiagnosticSelection==0,"Back returns from iOS options to categories");
         menu.Activate();
+    }
+    private IEnumerator MobilePerformanceChecks(){
+        var options=host.GameOptions;var menu=host.PauseMenu;
+        var scene=host.GetComponent<Idas3SceneRenderer>();
+        Check(!options.Current.iosMobilePerformanceOptimization&&!Idas3MobilePerformance.Enabled&&
+            !scene.RendererReuse&&!scene.OrderedSubmission,"Experimental performance defaults off in settings and renderer");
+        string legacyRoot=Path.Combine(root,"performance-legacy");Directory.CreateDirectory(legacyRoot);
+        File.WriteAllText(Path.Combine(legacyRoot,"game-options.json"),"{\"version\":1,\"musicVolume\":0.7}");
+        var reloaded=new Idas3GameOptions(new OptionsTestPlatform());reloaded.Initialize(legacyRoot);
+        Check(!reloaded.Current.iosMobilePerformanceOptimization,"Old preferences keep experimental performance off");
+        reloaded.BeginEdit();reloaded.Draft.iosMobilePerformanceOptimization=true;
+        Check(reloaded.HasUnsavedChanges,"Experimental choice participates in draft comparison");
+        reloaded.Draft.width=1920;
+        Check(reloaded.ApplyDraft()&&reloaded.DisplayConfirmationPending,"Performance participates in the shared display draft");
+        reloaded.RevertDisplay();
+        Check(!reloaded.Current.iosMobilePerformanceOptimization,"Display rollback restores the performance switch");
+        Directory.CreateDirectory(reloaded.FilePath+".tmp");
+        reloaded.BeginEdit();reloaded.Draft.iosMobilePerformanceOptimization=true;
+        Check(!reloaded.ApplyDraft()&&!reloaded.Current.iosMobilePerformanceOptimization,"Failed save rolls back experimental choice");
+        Idas3MenuLocalization.SetLanguage(options.Current.customMenuLanguage);
+        SelectIosRow(9);menu.Activate();
+        Check(options.Draft.iosMobilePerformanceOptimization&&!options.Current.iosMobilePerformanceOptimization&&
+            !Idas3MobilePerformance.Enabled,"Checkbox edits only the draft");
+        menu.Back();menu.Back();menu.OpenAttractOptions();
+        Check(!options.Draft.iosMobilePerformanceOptimization&&!Idas3MobilePerformance.Enabled,"Leaving discards the unapplied experimental choice");
+        SelectIosRow(9);menu.Activate();ApplyIosDraft();yield return Frames(4);
+        Check(options.Current.iosMobilePerformanceOptimization&&Idas3MobilePerformance.Enabled&&scene.RendererReuse&&scene.OrderedSubmission,
+            "Apply activates all experimental paths without restarting");
+        reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(reloaded.Current.iosMobilePerformanceOptimization,"Applied experimental choice persists");
+        yield return Capture("mobile-performance-enabled");
+        SelectIosRow(menu.DiagnosticRows+1);menu.Activate();
+        Check(!options.Draft.iosMobilePerformanceOptimization&&options.Current.iosMobilePerformanceOptimization&&
+            Idas3MobilePerformance.Enabled,"Reset does not deactivate the running experiment before Apply");
+        ApplyIosDraft();yield return Frames(4);
+        Check(!Idas3MobilePerformance.Enabled&&!scene.RendererReuse&&!scene.OrderedSubmissionActive&&
+            scene.SharedMaterialEntries==0&&scene.ScratchBufferBytes==0&&scene.TotalWarmupStates==0,
+            "Applying reset returns to traditional submission and releases experiment-only resources");
+        reloaded.Initialize(Path.Combine(root,"userdata"));
+        Check(!reloaded.Current.iosMobilePerformanceOptimization,"Experimental off persists");
+        yield return Capture("mobile-performance-disabled");
+        menu.Back();menu.Activate();
     }
     private void Update(){if(finished)return;if(host?.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>160)Finish(false,"Mobile diagnostic timeout");}
     private void Finish(bool passed,string error){

@@ -32,6 +32,7 @@ public sealed class Idas3GameOptions
         public string wheelFeedbackDevice="";
         public bool showFps,showOsd,muteWhenUnfocused,diagnosticLogging;
         public bool iosThermalFrameRateAdjustment=true;
+        public bool iosMobilePerformanceOptimization;
         public bool iosPedalTravel;
         public float iosPedalTopDeadzone,iosPedalBottomDeadzone;
         public int iosPedalTravelMode; // 0 = both, 1 = accelerator only, 2 = brake only.
@@ -443,6 +444,7 @@ public sealed class Idas3GameOptions
         a.wheelFeedbackInvert==b.wheelFeedbackInvert&&a.wheelFeedbackDevice==b.wheelFeedbackDevice&&
         a.showFps==b.showFps&&a.showOsd==b.showOsd&&a.diagnosticLogging==b.diagnosticLogging&&a.muteWhenUnfocused==b.muteWhenUnfocused&&a.communityTimes==b.communityTimes&&
         a.iosThermalFrameRateAdjustment==b.iosThermalFrameRateAdjustment&&
+        a.iosMobilePerformanceOptimization==b.iosMobilePerformanceOptimization&&
         a.iosPedalTravel==b.iosPedalTravel&&a.iosPedalTopDeadzone==b.iosPedalTopDeadzone&&a.iosPedalBottomDeadzone==b.iosPedalBottomDeadzone&&a.iosPedalTravelMode==b.iosPedalTravelMode&&
         a.discordPresence==b.discordPresence&&a.hideLightsOffAdvantage==b.hideLightsOffAdvantage&&a.replayTimeAttack==b.replayTimeAttack&&a.replayOnline==b.replayOnline&&a.replayLegend==b.replayLegend&&
         a.hudMeterStyle==b.hudMeterStyle&&a.hudMeterLayout==b.hudMeterLayout&&a.hudOrnamentId==b.hudOrnamentId&&a.hudShiftLights==b.hudShiftLights&&a.hudPedalIndicators==b.hudPedalIndicators&&a.hudNameplateStyle==b.hudNameplateStyle&&
