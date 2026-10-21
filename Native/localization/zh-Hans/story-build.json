@@ -1,0 +1,61 @@
+{
+  "records": 1152,
+  "independent_records": 1152,
+  "review_entries": 3965,
+  "unique_source_passages": 3788,
+  "retained_legacy_records": 0,
+  "sources": {
+    "scripts.json": "039d4a5ef14a172c5be255cd4d4438851406fed54a207680bf3467fe884b20c1",
+    "bunta-scripts.json": "09396a8d429a67caf5ba71f7bb76a2b517b0b52fa442c50deb2f5242a75b359c"
+  },
+  "translations": {
+    "Native/localization/zh-Hans/stories/00.txt": "e84d308f9e1ce24b22ca15bc0705b156a296eca43c2d6d93f6b03f75d76bdfd7",
+    "Native/localization/zh-Hans/stories/01.txt": "62cf6d1d67e7fb788f102d81c23f7802d1ef562b0d5f6865c1a047c8f9682833",
+    "Native/localization/zh-Hans/stories/02.txt": "ec8f9799cd13f59b560286951369d9b3aa496c1ee872e2e992f0b088630d5329",
+    "Native/localization/zh-Hans/stories/03.txt": "7ef0e28f533a5b4324a99e41fc566c98c90381de547aee47923abbad5483bdbe",
+    "Native/localization/zh-Hans/stories/04.txt": "650bcc95ab1b9c5a0c9e97e3c9c1af5a18790504efb7703d276726066c28b257",
+    "Native/localization/zh-Hans/stories/05.txt": "097ad40b48b43ef3631eb807f97b8a1a0241c997ee2479d82986b48e1e38521c",
+    "Native/localization/zh-Hans/stories/06.txt": "143f015b389724eea5b1aecba55b17c634bc0e467fe459292eb9865d514569c9",
+    "Native/localization/zh-Hans/stories/07.txt": "29c5820900e120009103bf4ed712a4a62ebd80f6bb6b8f92f76c7d76f0d67f6e",
+    "Native/localization/zh-Hans/stories/08.txt": "2c750298dcb6095ea5dab38cc39238145d99a04dac70e0974a9592d43c3ede04",
+    "Native/localization/zh-Hans/stories/09.txt": "57899aaddab709bd1d21c96433fcb8b909b0da21400d6a2fce293b8acb4cd91a",
+    "Native/localization/zh-Hans/stories/10.txt": "613ba92e37bb7f01fdd2db2f9e47560d9a361b882d2d0897b19418e6f28c7f36",
+    "Native/localization/zh-Hans/stories/11.txt": "1adee31b07aaeeedeb60649443f52065671a122adee93ea45e60fcb626803c68",
+    "Native/localization/zh-Hans/stories/12.txt": "92a63338cc0c07c6e43f098acc57f6db513e7e85bb7c3f018e408b029f6aef78",
+    "Native/localization/zh-Hans/stories/13.txt": "e0245071b85f1ea5290227c7a86f51a186b9bab8dcd0b4c3ba332e32b430008d",
+    "Native/localization/zh-Hans/stories/14.txt": "b20fbfb8265e3bfa91c7d59067d821d86ad53635c5270a81cb221055e5d55a73",
+    "Native/localization/zh-Hans/stories/15.txt": "30e7f90c18a2452584cd84aa7690c028aeca2961196df0e9763129c3cf4be41c",
+    "Native/localization/zh-Hans/stories/16.txt": "a44d61b64a349111447cee5eeb3276527367750e1de2256daee3ec123627fd96",
+    "Native/localization/zh-Hans/stories/18.txt": "7e388399616f21ad5f0b6a82d1f80569c21bddebca8e263e4b463109298e4a82",
+    "Native/localization/zh-Hans/stories/19.txt": "f56324dd09e5ee2e691352ced6b4d09375d052aac3b819afb5f8e2827a6f0288",
+    "Native/localization/zh-Hans/stories/20.txt": "87e6edc30307f421fa588667c05b76c2f3fda650e9ee743066cef8f122521f25",
+    "Native/localization/zh-Hans/stories/21.txt": "96ffd8319d36914c016d69694c7582c53dc767d510146079c393b93891dae293",
+    "Native/localization/zh-Hans/stories/22.txt": "857c09d37b1a0c3fe826f6808f99ecf8f71222d9718d491c232f01f4c828d1b7",
+    "Native/localization/zh-Hans/stories/23.txt": "f9436e5549712efb2fd3bdc201cdcaf27bfaea01ebc47506da25a24829d186d8",
+    "Native/localization/zh-Hans/stories/24.txt": "7e9f0f62b14372f0e3b29947a97253fa7a1023a4506e4ef90866e658c80aa014",
+    "Native/localization/zh-Hans/stories/25.txt": "ea3799ddce0d25a6e28d97a71f813e5cbfb468507f0f9ee808ac4a8a64195b52",
+    "Native/localization/zh-Hans/stories/26.txt": "e4b0beecd7e04c455442ea42982040227aaba01a0642d2e31edb6111671ec248",
+    "Native/localization/zh-Hans/stories/27.txt": "a78b02f5ff0e25fee42926c8e073ceb746042913311927b61c0d0d4a8d89b048",
+    "Native/localization/zh-Hans/stories/28.txt": "b29b45159be9ff1bf1b25d97c5168f0dacc0ad5347cf7b9f020fe91d07760eed",
+    "Native/localization/zh-Hans/stories/29.txt": "3fb6900430d11ec8c666cefd5139abdd0e377d8232d191527c92ff8cb5750873",
+    "Native/localization/zh-Hans/stories/30.txt": "b2055ca9f30d914438616636ae2f4a2b5cf7f56b4dcd1a19a293c4f2ad3fc5ad",
+    "Native/localization/zh-Hans/stories/bunta.txt": "bf2a1133b13b4fd64c88d42193359abc6bc035ed1553a457ed0b6ec01d76833c",
+    "Native/localization/zh-Hans/miki.json": "67c6a57a098355161f8202ec4717f9129ec2910cbec9f0790905581f04ea7a1a"
+  },
+  "independent_unicode_glyphs": 1287,
+  "retained_legacy_glyph_slots": 0,
+  "fonts": {
+    "caption": {
+      "file": "Native/localization/zh-Hans/fonts/SourceHanSerifSC-Heavy.otf",
+      "sha256": "d033af54f96530476faed924ab5d5e9e6ef0833495670fd57bab9a7758398048"
+    },
+    "body": {
+      "file": "Assets/Resources/Fonts/NotoSansSC-Regular.otf",
+      "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9"
+    }
+  },
+  "name_label_font": {
+    "file": "$IDAS3_BRUSH_FONT",
+    "sha256": "c98c343f2ce468b8db651c20ed287015b913e8e4189bfd54911eaa3270ff7e20"
+  }
+}

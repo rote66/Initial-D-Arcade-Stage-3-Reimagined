@@ -22,7 +22,7 @@ public sealed class Idas3GameOptions
         public int steeringSettingsVersion=1;
         public int aiDifficulty;
         public int customMenuLanguage; // English / Japanese / Simplified Chinese; custom menus only.
-        public int arcadeTextLanguage; // 0 = English, 1 = original Japanese artwork; restart required.
+        public int arcadeTextLanguage; // English / Japanese / Simplified Chinese; restart required.
         public float steeringDeadzoneGamepad=.1f,steeringDeadzonePrevious=.13f,steeringDeadzoneWheel;
         public float steeringSmoothing;
         public bool gravitySteering;
@@ -179,7 +179,7 @@ public sealed class Idas3GameOptions
             string path=Path.Combine(saveRoot,"game-options.json");
             if(!File.Exists(path))return 0;
             var saved=new Values{version=0};JsonUtility.FromJsonOverwrite(File.ReadAllText(path),saved);
-            return saved.version==1&&saved.arcadeTextLanguage==1?1:0;
+            return saved.version==1&&saved.arcadeTextLanguage>=0&&saved.arcadeTextLanguage<=2?saved.arcadeTextLanguage:0;
         }catch(Exception e){Debug.LogWarning("Using English arcade text: "+e.Message);return 0;}
     }
     public void Initialize(string saveRoot){
@@ -415,7 +415,7 @@ public sealed class Idas3GameOptions
         value.importedSceneryDetail=Math.Max(0,Math.Min(2,value.importedSceneryDetail));
         value.trackLighting=Math.Max(0,Math.Min(1,value.trackLighting));
         if(value.customMenuLanguage<0||value.customMenuLanguage>2)value.customMenuLanguage=0;
-        if(value.arcadeTextLanguage!=1)value.arcadeTextLanguage=0;
+        if(value.arcadeTextLanguage<0||value.arcadeTextLanguage>2)value.arcadeTextLanguage=0;
         if(value.controllerResponse<0||value.controllerResponse>2)value.controllerResponse=0;
         if(value.steeringSettingsVersion<1){value.steeringDeadzoneGamepad=.1f;value.steeringDeadzonePrevious=.13f;value.steeringDeadzoneWheel=0;}
         value.steeringSettingsVersion=1;

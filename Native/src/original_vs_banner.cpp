@@ -1,5 +1,7 @@
 #include "imported_course_catalog.h"
 #include "original_vs_banner.h"
+#include "chinese_arcade_font.h"
+#include "utf8_text.h"
 #include "original_gasstand_data.h"
 #include <algorithm>
 #include <bit>
@@ -11,6 +13,7 @@
 
 namespace idas3 {
 namespace {
+#include "chinese_arcade_names.inc"
 constexpr const char* directory = "data/original_assets/hud/start2d";
 constexpr const char* nameDirectory = "data/original_assets/hud/start_names";
 constexpr const char* recordFontPath = "data/original_assets/attract/alphabet/textures/textures.idastex";
@@ -108,6 +111,10 @@ bool OriginalVsBanner::available(const std::filesystem::path& root) {
 
 void OriginalVsBanner::load(const std::filesystem::path& root) {
     if (loaded_) return;
+    simplifiedChinese_=originalUiLanguage()==2;
+    if(simplifiedChinese_){
+        chinese_=loadChineseArcadeFont(root);
+    }
     battleRecordLayout_={};
     const auto folder = root / directory;
     model_ = NativeModel::load(folder / "start2d.idasmesh");
@@ -218,7 +225,7 @@ void OriginalVsBanner::begin(const OriginalVsBannerSetup& setup) {
     }
     displayNames_[0]=decodeName(names_[0]);
     displayNames_[1]=setup.opponentNameUtf8.empty()?
-        localizedRivalNames[setup.profile.words[0]==2?30u:setup.enemy]:decodeName(names_[1]);
+        rivalDisplayName(setup.profile.words[0]==2?30u:setup.enemy):decodeName(names_[1]);
 }
 
 void OriginalVsBanner::tick() {
@@ -367,6 +374,7 @@ std::string OriginalVsBanner::profileDisplayName(const original::OriginalBattleP
     return decodeName(glyphs);
 }
 const char* OriginalVsBanner::rivalDisplayName(unsigned enemy){
+    if(originalUiLanguage()==2)return enemy<std::size(chineseRivalNames)?chineseRivalNames[enemy]:"OPPONENT";
     return enemy<std::size(localizedRivalNames)?localizedRivalNames[enemy]:"OPPONENT";
 }
 
@@ -428,6 +436,28 @@ OriginalVsMetadataPlacement OriginalVsBanner::metadataPlacement(int chunk) const
     const auto& bounds=chunkBounds_.at(std::size_t(chunk));
     OriginalVsMetadataPlacement out{chunk,20.f,8.f,bounds[2]-bounds[0],bounds[3]-bounds[1]};
     if(chunk==boostOffChunk||chunk==boostOffFlashChunk)return projectedMetadataPlacement(chunk);
+    if(simplifiedChinese_&&setup_.compactHeader){
+        const std::array<int,3> fields{directionChunk[setup_.direction],
+            dayNightChunk[setup_.night?1:0],weatherChunk[setup_.snow||setup_.course==8?2:setup_.wet?1:0]};
+        const auto found=std::find(fields.begin(),fields.end(),chunk);
+        if(found!=fields.end()){
+            const auto title=setup_.customCourseName.empty()?sourceTitleInkPlacement():importedTitlePlacement();
+            // Keep D3's projected 24-unit word height and baseline. Chinese
+            // advances are measured from the independently typeset word cells.
+            const auto source=projectedMetadataPlacement(chunk);
+            const float scale=source.height/(bounds[3]-bounds[1]);
+            float total=0,advance=0;
+            for(unsigned i=setup_.drawDirection?0u:1u;i<fields.size();++i){
+                const auto& field=chunkBounds_[fields[i]];
+                if(fields[i]==chunk)advance=total;
+                total+=(field[2]-field[0]+2.f)*scale;
+            }
+            out.left=std::min(title.left+title.width+16.f*scale,620.f-total)+advance;
+            out.top=source.top;
+            out.width*=scale;out.height=source.height;
+            return out;
+        }
+    }
     if(setup_.compactHeader){
         out=projectedMetadataPlacement(chunk);
         if(!setup_.customCourseName.empty()){
@@ -509,6 +539,18 @@ void OriginalVsBanner::paintDisplayName(std::span<std::uint32_t> target,int widt
 void OriginalVsBanner::paintNames(std::span<std::uint32_t> target,int width,int height) const {
     const float fit=std::min(float(width)/640.f,float(height)/480.f);
     for(unsigned line=0;line<3;++line){
+        if(simplifiedChinese_&&setup_.opponentNameUtf8.empty()&&line>0){
+            if(line==2||nameAlpha_[1]<=0)continue;
+            const auto enemy=setup_.profile.words[0]==2?30u:setup_.enemy;
+            const std::string label=utf8Code(0xf200+enemy);
+            const float size=std::min(26.f,400.f/std::max(1.f,chinese_->width(label,1.f)));
+            const auto color=(std::uint32_t(std::clamp(std::lround(nameAlpha_[1]*255),0l,255l))<<24)|0xffffffu;
+            chinese_->paint(target,width,height,label,
+                (float(width)-640.f*fit)*.5f+(416.f-chinese_->width(label,size)*.5f+nameX_[1])*fit,
+                (float(height)-480.f*fit)*.5f+(312.f+nameY_[1])*fit,size*fit,
+                color);
+            continue;
+        }
         const auto& name=names_[line];if(name.empty())continue;
         const unsigned side=line?1:0;
         const float center=side?416.f:224.f;

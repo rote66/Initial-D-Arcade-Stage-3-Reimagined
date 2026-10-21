@@ -1,6 +1,8 @@
 #include "original_rival_dialog_scene.h"
 #include "original_matrix.h"
 #include "unity_ui_capture.h"
+#include "utf8_text.h"
+#include "chinese_arcade_font.h"
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
@@ -33,6 +35,9 @@ void OriginalRivalDialogScene::load(const fs::path& root){
         NativeTextureBank::load(base/"banks/v3sK17continue/textures/textures.idastex")};
     alphabet_=NativeTextureBank::load(base/"fonts/alphabet/textures/textures.idastex");
     namekana_=NativeTextureBank::load(base/"fonts/namekana/textures/textures.idastex");
+    if(data_.simplifiedChinese()){
+        chinese_=loadChineseArcadeFont(root);
+    }
     loaded_=true;
 }
 
@@ -74,10 +79,17 @@ void OriginalRivalDialogScene::paint(std::span<std::uint32_t> target,int width,i
     ordered.reserve(all.size());
     for(const auto pass:{OriginalRivalDialogBank::Background,OriginalRivalDialogBank::Portrait,
         OriginalRivalDialogBank::Scene,OriginalRivalDialogBank::Alphabet,
-        OriginalRivalDialogBank::Namekana})
+        OriginalRivalDialogBank::Namekana,OriginalRivalDialogBank::Chinese})
         for(const auto& draw:all)if(draw.bank==pass)ordered.push_back(&draw);
     for(const auto* entry:ordered){
         const auto& draw=*entry;
+        if(draw.bank==OriginalRivalDialogBank::Chinese){
+            // The source alphabet has transparent top rows before its ink.
+            chinese_->paint(target,width,height,utf8Code(draw.chunk),
+                left+(320.f+draw.x*100.f)*fit,top+(244.f-draw.y*100.f)*fit,
+                draw.glyphSize*fit,draw.color,0xff101018,fit*.6f);
+            continue;
+        }
         const bool glyph=draw.bank==OriginalRivalDialogBank::Alphabet
             ||draw.bank==OriginalRivalDialogBank::Namekana;
         if(glyph){

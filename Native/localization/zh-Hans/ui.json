@@ -1,0 +1,1475 @@
+{
+  "v3sS04maker": {
+    "17": {
+      "text": "请选择制造商",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 7.119999999999999,
+      "tracking": 0.39,
+      "shadow": true
+    }
+  },
+  "v3sS05cars": {
+    "43": {
+      "text": "请选择车型",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选车／换色"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 5.88,
+      "tracking": 0.39,
+      "shadow": true
+    }
+  },
+  "v3sS06mission": {
+    "5": {
+      "text": "请选择变速箱",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 7.119999999999999,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "0": {
+      "text": "AT",
+      "role": "latin",
+      "italic": true,
+      "metallic": true,
+      "subtitle": "自动挡",
+      "ink_aspect": 2.15
+    },
+    "2": {
+      "text": "",
+      "role": "label",
+      "glow_of": 0,
+      "color": "#ffae62"
+    },
+    "1": {
+      "text": "MT",
+      "role": "latin",
+      "italic": true,
+      "metallic": true,
+      "subtitle": "手动挡",
+      "ink_aspect": 2.15
+    },
+    "3": {
+      "text": "",
+      "role": "label",
+      "glow_of": 1,
+      "color": "#6bc0ff"
+    }
+  },
+  "v3sS07tune": {
+    "1": {
+      "text": "请选择改装方案",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 8.36,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "2": {
+      "text": "A",
+      "role": "latin",
+      "subtitle": "方案",
+      "preserve_primary": true,
+      "trim_primary_top": 0.27
+    },
+    "68": {
+      "text": "A",
+      "role": "label",
+      "glow_of": 2,
+      "color": "#ffc65b"
+    },
+    "3": {
+      "text": "B",
+      "role": "latin",
+      "subtitle": "方案",
+      "preserve_primary": true,
+      "trim_primary_top": 0.27
+    },
+    "69": {
+      "text": "B",
+      "role": "label",
+      "glow_of": 3,
+      "color": "#ffc65b"
+    },
+    "4": {
+      "text": "C",
+      "role": "latin",
+      "subtitle": "方案",
+      "preserve_primary": true,
+      "trim_primary_top": 0.27
+    },
+    "70": {
+      "text": "C",
+      "role": "label",
+      "glow_of": 4,
+      "color": "#ffc65b"
+    },
+    "5": {
+      "text": "D",
+      "role": "latin",
+      "subtitle": "方案",
+      "preserve_primary": true,
+      "trim_primary_top": 0.27
+    },
+    "71": {
+      "text": "D",
+      "role": "label",
+      "glow_of": 5,
+      "color": "#ffc65b"
+    },
+    "6": {
+      "text": "原厂",
+      "role": "label",
+      "subtitle": "方案",
+      "metallic": true,
+      "italic": true
+    },
+    "72": {
+      "text": "原厂",
+      "role": "label",
+      "glow_of": 6,
+      "color": "#ffc65b"
+    },
+    "50": {
+      "text": "无装配部分",
+      "role": "body"
+    },
+    "7": {
+      "layers": [
+        {
+          "text": "装配部分 ▲",
+          "role": "body",
+          "batch": 1
+        },
+        {
+          "text": "部件制造商 ▼",
+          "role": "body",
+          "batch": 2
+        }
+      ]
+    }
+  },
+  "v3sS08name": {
+    "6": {
+      "text": "请输入车手名",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选字"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 7.119999999999999,
+      "tracking": 0.39,
+      "shadow": true
+    }
+  },
+  "v3sS11mode": {
+    "18": {
+      "text": "请选择游戏模式",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 8.36,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "1": {
+      "text": "驾驶爱车挑战各地对手，争夺公路最速。\n每场比赛都可获得点数，用来改装车辆。",
+      "role": "caption",
+      "font_size": 12,
+      "horizontal_scale": 1.16,
+      "paragraph_align": "left",
+      "line_pitch": 14,
+      "paragraph_left": 112,
+      "paragraph_baseline": 35
+    },
+    "2": {
+      "text": "独自挑战计时，刷新自己的最快成绩。\n记录车型排名，与其他车手比拼赛道纪录。",
+      "role": "caption",
+      "font_size": 12,
+      "horizontal_scale": 1.16,
+      "paragraph_align": "left",
+      "line_pitch": 14,
+      "paragraph_left": 112,
+      "paragraph_baseline": 35
+    },
+    "3": {
+      "text": "与藤原文太进行一对一较量。\n消耗点数发起挑战，获胜即可赢取点数。",
+      "role": "caption",
+      "font_size": 12,
+      "horizontal_scale": 1.16,
+      "paragraph_align": "left",
+      "line_pitch": 14,
+      "paragraph_left": 112,
+      "paragraph_baseline": 35
+    },
+    "5": {
+      "text": "模式内容",
+      "role": "body",
+      "badge": true
+    },
+    "6": {
+      "text": "挑战文太!!",
+      "role": "mode",
+      "italic": true,
+      "accent": "战",
+      "ink_aspect": 5.91,
+      "tracking": 0.028
+    },
+    "7": {
+      "text": "公路最速传说",
+      "role": "mode",
+      "italic": true,
+      "accent": "速",
+      "ink_aspect": 7.27,
+      "tracking": 0.028
+    },
+    "8": {
+      "text": "计时赛",
+      "role": "mode",
+      "italic": true,
+      "accent": "时",
+      "ink_aspect": 3.77,
+      "tracking": 0.028
+    },
+    "9": {
+      "text": "",
+      "role": "label",
+      "glow_of": 6,
+      "color": "#ff5c1b",
+      "spread": 1
+    },
+    "10": {
+      "text": "",
+      "role": "label",
+      "glow_of": 6,
+      "color": "#ff5c1b",
+      "spread": 1
+    },
+    "11": {
+      "text": "",
+      "role": "label",
+      "glow_of": 7,
+      "color": "#ff5c1b",
+      "spread": 1
+    },
+    "12": {
+      "text": "",
+      "role": "label",
+      "glow_of": 7,
+      "color": "#ff5c1b",
+      "spread": 1
+    },
+    "13": {
+      "text": "",
+      "role": "label",
+      "glow_of": 8,
+      "color": "#ff5c1b",
+      "spread": 1
+    },
+    "14": {
+      "text": "",
+      "role": "label",
+      "glow_of": 8,
+      "color": "#ff5c1b",
+      "spread": 1
+    }
+  },
+  "v3sK01course": {
+    "26": {
+      "text": "请选择赛道",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 5.88,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "20": {
+      "text": "妙义",
+      "role": "brush",
+      "course_card": "初级"
+    },
+    "24": {
+      "text": "碓冰",
+      "role": "brush",
+      "course_card": "中级"
+    },
+    "15": {
+      "text": "赤城",
+      "role": "brush",
+      "course_card": "高级"
+    },
+    "17": {
+      "text": "秋名",
+      "role": "brush",
+      "course_card": "高级"
+    },
+    "19": {
+      "text": "伊吕波坂",
+      "role": "brush",
+      "course_card": "超高级"
+    },
+    "18": {
+      "text": "八方原",
+      "role": "brush",
+      "course_card": "超高级"
+    },
+    "22": {
+      "text": "正丸",
+      "role": "brush",
+      "course_card": "超高级"
+    },
+    "23": {
+      "text": "土坂",
+      "role": "brush",
+      "course_card": "超高级"
+    },
+    "16": {
+      "text": "秋名",
+      "role": "brush",
+      "course_card": "超高级",
+      "snow": true
+    },
+    "21": {
+      "text": "无法选择",
+      "role": "body",
+      "unavailable": true
+    }
+  },
+  "v3sK02rival": {
+    "47": {
+      "text": "请选择对手",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        },
+        {
+          "control": "长按VIEW",
+          "action": "选曲"
+        }
+      ],
+      "ink_aspect": 5.88,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "1": {
+      "text": "去路",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "2": {
+      "text": "上坡",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "4": {
+      "text": "昼",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "6": {
+      "text": "下坡",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "7": {
+      "text": "晴",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.38,
+        0
+      ]
+    },
+    "8": {
+      "text": "逆时针",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.82,
+        0
+      ]
+    },
+    "9": {
+      "text": "夜",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "11": {
+      "text": "逆行",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "12": {
+      "text": "顺时针",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.82,
+        0
+      ]
+    },
+    "13": {
+      "text": "雪",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.38,
+        0
+      ]
+    },
+    "14": {
+      "text": "归路",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.6,
+        0
+      ]
+    },
+    "15": {
+      "text": "雨",
+      "role": "label",
+      "italic": true,
+      "pixel_height": 22,
+      "bounds": [
+        0,
+        -0.32,
+        0.38,
+        0
+      ]
+    },
+    "16": {
+      "text": "第 一 战",
+      "role": "label",
+      "italic": true
+    },
+    "17": {
+      "text": "第 二 战",
+      "role": "label",
+      "italic": true
+    },
+    "18": {
+      "text": "第 三 战",
+      "role": "label",
+      "italic": true
+    },
+    "19": {
+      "text": "第 四 战",
+      "role": "label",
+      "italic": true
+    },
+    "20": {
+      "text": "第 五 战",
+      "role": "label",
+      "italic": true
+    },
+    "21": {
+      "text": "最终战",
+      "role": "label",
+      "italic": true
+    },
+    "75": {
+      "text": "川井淳郎",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "76": {
+      "text": "藤原文太",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "77": {
+      "text": "二宫大辉",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "78": {
+      "text": "EVO.V 车手",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "79": {
+      "text": "EVO.VI 车手",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "80": {
+      "text": "池谷浩一郎",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "81": {
+      "text": "武内树",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "82": {
+      "text": "小柏海",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "83": {
+      "text": "高桥启介",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "84": {
+      "text": "健二",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "85": {
+      "text": "中村贤太",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "86": {
+      "text": "岩濑恭子",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "87": {
+      "text": "佐藤真子＆沙雪",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "88": {
+      "text": "御木",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "89": {
+      "text": "中里毅",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "90": {
+      "text": "秋山延彦",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "91": {
+      "text": "高桥凉介",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "92": {
+      "text": "坂本",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "93": {
+      "text": "岩城清次",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "94": {
+      "text": "庄司慎吾",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "95": {
+      "text": "酒井",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "96": {
+      "text": "须藤京一",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "97": {
+      "text": "藤原拓海",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "98": {
+      "text": "东京二人组",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "99": {
+      "text": "馆智幸",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "100": {
+      "text": "末次彻",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "101": {
+      "text": "秋山涉",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    }
+  },
+  "v3sT02route": {
+    "31": {
+      "text": "请选择路线",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 5.88,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "16": {
+      "text": "归路",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "23": {
+      "text": "",
+      "role": "label",
+      "glow_of": 16,
+      "color": "#ffad59"
+    },
+    "17": {
+      "text": "上坡",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "24": {
+      "text": "",
+      "role": "label",
+      "glow_of": 17,
+      "color": "#69bdff"
+    },
+    "18": {
+      "text": "下坡",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "25": {
+      "text": "",
+      "role": "label",
+      "glow_of": 18,
+      "color": "#ffad59"
+    },
+    "19": {
+      "text": "逆时针",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "26": {
+      "text": "",
+      "role": "label",
+      "glow_of": 19,
+      "color": "#69bdff"
+    },
+    "20": {
+      "text": "逆行",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "27": {
+      "text": "",
+      "role": "label",
+      "glow_of": 20,
+      "color": "#ffad59"
+    },
+    "21": {
+      "text": "顺时针",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "28": {
+      "text": "",
+      "role": "label",
+      "glow_of": 21,
+      "color": "#69bdff"
+    },
+    "22": {
+      "text": "去路",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "29": {
+      "text": "",
+      "role": "label",
+      "glow_of": 22,
+      "color": "#ffad59"
+    }
+  },
+  "v3sT03weather": {
+    "1": {
+      "text": "请选择天气",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 5.88,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "2": {
+      "text": "DRY 晴",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "4": {
+      "text": "",
+      "role": "label",
+      "glow_of": 2,
+      "color": "#ffad59"
+    },
+    "3": {
+      "text": "雨 WET",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "5": {
+      "text": "",
+      "role": "label",
+      "glow_of": 3,
+      "color": "#69bdff"
+    }
+  },
+  "v3sT04time": {
+    "5": {
+      "text": "请选择时间段",
+      "role": "title",
+      "heading": true,
+      "hint": [
+        {
+          "control": "摇杆",
+          "action": "选择"
+        },
+        {
+          "control": "START",
+          "action": "确认"
+        }
+      ],
+      "ink_aspect": 7.119999999999999,
+      "tracking": 0.39,
+      "shadow": true
+    },
+    "1": {
+      "text": "DAY 昼",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "3": {
+      "text": "",
+      "role": "label",
+      "glow_of": 1,
+      "color": "#69bdff"
+    },
+    "2": {
+      "text": "夜 NIGHT",
+      "role": "label",
+      "italic": true,
+      "metallic": true
+    },
+    "4": {
+      "text": "",
+      "role": "label",
+      "glow_of": 2,
+      "color": "#ffad59"
+    }
+  },
+  "v3sK00common": {
+    "26": {
+      "text": "无法选择",
+      "role": "body",
+      "unavailable": true
+    },
+    "31": {
+      "text": "赤城",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "39": {
+      "text": "碓冰",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "36": {
+      "text": "妙义",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "33": {
+      "text": "秋名",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "37": {
+      "text": "正丸",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "38": {
+      "text": "土坂",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "34": {
+      "text": "八方原",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "35": {
+      "text": "伊吕波坂",
+      "role": "brush",
+      "course_title": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    },
+    "32": {
+      "text": "秋名",
+      "role": "brush",
+      "course_title": true,
+      "snow": true,
+      "bounds": [
+        0,
+        -1.58,
+        3.98,
+        0
+      ],
+      "texture_size": [
+        398,
+        158
+      ]
+    }
+  },
+  "v3sK00rivalface": {
+    "35": {
+      "text": "川井淳郎",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "36": {
+      "text": "藤原文太",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "37": {
+      "text": "二宫大辉",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "38": {
+      "text": "EVO.V 车手",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "39": {
+      "text": "EVO.VI 车手",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "40": {
+      "text": "池谷浩一郎",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "41": {
+      "text": "武内树",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "42": {
+      "text": "小柏海",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "43": {
+      "text": "高桥启介",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "44": {
+      "text": "健二",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "45": {
+      "text": "中村贤太",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "46": {
+      "text": "岩濑恭子",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "47": {
+      "text": "佐藤真子＆沙雪",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "48": {
+      "text": "御木",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "49": {
+      "text": "中里毅",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "50": {
+      "text": "秋山延彦",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "51": {
+      "text": "高桥凉介",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "52": {
+      "text": "坂本",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "53": {
+      "text": "岩城清次",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "54": {
+      "text": "庄司慎吾",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "55": {
+      "text": "酒井",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "56": {
+      "text": "须藤京一",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "57": {
+      "text": "藤原拓海",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "58": {
+      "text": "东京二人组",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "59": {
+      "text": "馆智幸",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "60": {
+      "text": "末次彻",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    },
+    "61": {
+      "text": "秋山涉",
+      "role": "brush",
+      "italic": true,
+      "stroke": "#111111"
+    }
+  },
+  "game2d": {
+    "9": {
+      "text": "逆行",
+      "role": "body",
+      "italic": true,
+      "color": "#141414",
+      "stroke": "#fb4828"
+    }
+  },
+  "game2d_ta": {
+    "15": {
+      "text": "综合",
+      "role": "body",
+      "color": "#e9a52f"
+    },
+    "16": {
+      "text": "车型",
+      "role": "body",
+      "color": "#72cb24"
+    },
+    "17": {
+      "text": "个人",
+      "role": "body",
+      "color": "#22dd8a"
+    },
+    "18": {
+      "text": "综合",
+      "role": "body",
+      "color": "#e9a52f"
+    },
+    "19": {
+      "text": "个人",
+      "role": "body",
+      "color": "#22dd8a"
+    },
+    "21": {
+      "text": "刷新了赛道纪录",
+      "role": "body",
+      "color": "#ff3d24"
+    },
+    "22": {
+      "text": "刷新了个人最佳纪录",
+      "role": "body",
+      "color": "#ff3d24"
+    },
+    "23": {
+      "text": "刷新了此车型的赛道纪录",
+      "role": "body",
+      "color": "#ff3d24"
+    }
+  },
+  "start2d": {
+    "72": {
+      "text": "妙义",
+      "role": "brush",
+      "start_title": true
+    },
+    "73": {
+      "text": "碓冰",
+      "role": "brush",
+      "start_title": true
+    },
+    "74": {
+      "text": "赤城",
+      "role": "brush",
+      "start_title": true
+    },
+    "75": {
+      "text": "秋名",
+      "role": "brush",
+      "start_title": true
+    },
+    "76": {
+      "text": "伊吕波坂",
+      "role": "brush",
+      "start_title": true
+    },
+    "77": {
+      "text": "八方原",
+      "role": "brush",
+      "start_title": true
+    },
+    "78": {
+      "text": "正丸",
+      "role": "brush",
+      "start_title": true
+    },
+    "79": {
+      "text": "土坂",
+      "role": "brush",
+      "start_title": true
+    },
+    "80": {
+      "text": "秋名",
+      "role": "brush",
+      "start_title": true,
+      "snow_intro": true
+    },
+    "0": {
+      "text": "雪 ]",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "105": {
+      "text": "· 昼 ·",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "106": {
+      "text": "晴 ]",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "107": {
+      "text": "[ 归路",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "108": {
+      "text": "[ 逆行",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "109": {
+      "text": "[ 下坡",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "110": {
+      "text": "最终战",
+      "role": "label",
+      "italic": true,
+      "start_condition": false,
+      "fixed_baseline": false,
+      "natural_width": false
+    },
+    "111": {
+      "text": "[ 逆时针",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "112": {
+      "text": "· 夜 ·",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "113": {
+      "text": "[ 上坡",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "114": {
+      "text": "[ 去路",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "115": {
+      "text": "[ 顺时针",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    },
+    "118": {
+      "text": "雨 ]",
+      "role": "label",
+      "italic": true,
+      "start_condition": true,
+      "fixed_baseline": true,
+      "natural_width": true
+    }
+  },
+  "rival_scene": {
+    "19": {
+      "text": "按START跳过",
+      "role": "body",
+      "color": "#ef4444",
+      "pixel_height": 12
+    }
+  }
+}

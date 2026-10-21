@@ -64,7 +64,13 @@ std::vector<int> Frontend::carsForMake(int index) {
 void Frontend::enableHakoneCourse(const std::filesystem::path& root,int id) {
     if(!isImportedCourse(id))throw std::runtime_error("Unsupported imported course");
     if(importedArtwork(id).size())return;
-    auto artwork=NativeTextureBank::load(root/"menu.idastex");
+    auto path=root/"menu.idastex";
+    if(originalUiLanguage()==2){
+        const auto localized=projectRoot/"data/localization/zh-Hans/imported_courses"/
+            importedCourseDefinition(unsigned(id)).folder/"menu.idastex";
+        if(std::filesystem::exists(localized))path=localized;
+    }
+    auto artwork=NativeTextureBank::load(path);
     if(artwork.size()!=2)throw std::runtime_error("Hakone menu requires backdrop and thumbnail");
     importedArtwork(id)=std::move(artwork);previousKey.clear();previousMotionKey.clear();
 }
@@ -914,6 +920,16 @@ void Frontend::drawChoiceMenu(int width,int height,bool movingWidgets) {
 void Frontend::drawRivalMenu(int width,int height) {
     const float phase=carConfirmationFrame<0?0.f:1.f;
     auto commands=original::originalLegendMenuDraws(battleProfile,std::uint32_t(course),std::uint32_t(rivalChoice),phase,carFrame);
+    if(originalUiLanguage()==2){
+        float x=2.16f;
+        for(auto& command:commands){
+            if(command.y!=-3.75f)continue;
+            command.x=x;
+            const auto label=command.selector&0xffffu;
+            x+=label==10?.24f:label==5?.32f:label==4||label==9?.60f:
+                label==7||label==13||label==15?.38f:label==8||label==12?.82f:.60f;
+        }
+    }
     // The original selected portrait is in front of its glow even though the
     // glow is submitted afterward. Equal depths preserve submission order.
     std::stable_sort(commands.begin(),commands.end(),[](const auto& a,const auto& b){return a.z<b.z;});
@@ -1147,8 +1163,9 @@ const std::vector<std::uint32_t>& Frontend::paintOriginalCanvas() {
             }
         }else{
             frame(433,196,42,42,edge);fill(443,216,22,2,muted);fill(453,206,2,22,muted);
-            text(tr("NEW DRIVER"),380,258,22,white);
-            text(tr("EMPTY SLOT"),419,291,11,muted);
+            const auto driverLabel=tr("NEW DRIVER"),slotLabel=tr("EMPTY SLOT");
+            text(driverLabel,454-font.width(driverLabel,22)*.5f,258,22,white);
+            text(slotLabel,454-font.width(slotLabel,11)*.5f,291,11,muted);
         }
         fill(42,440,556,1,edge);
 #if !defined(IDAS3_IOS)

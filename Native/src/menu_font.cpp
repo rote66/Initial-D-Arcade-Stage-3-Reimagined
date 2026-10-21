@@ -1,5 +1,6 @@
 #include "menu_font.h"
 #include "unity_ui_capture.h"
+#include "utf8_text.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -12,18 +13,6 @@
 namespace idas3 {
 namespace {
 std::atomic<int> menuLanguage{0};
-// Invalid UTF-8 advances by one byte and paints a replacement glyph. Decode
-// bounded string_views so malformed names can never read beyond their extent.
-std::uint32_t nextCode(std::string_view text,std::size_t& at){
-    const auto first=static_cast<unsigned char>(text[at++]);
-    if(first<128)return first;
-    const int extra=first>=0xc2&&first<=0xdf?1:first>=0xe0&&first<=0xef?2:first>=0xf0&&first<=0xf4?3:0;
-    if(!extra||at+extra>text.size())return '?';
-    std::uint32_t code=first&((1u<<(6-extra))-1u);
-    for(int n=0;n<extra;++n){const auto c=static_cast<unsigned char>(text[at+n]);if((c&0xc0)!=0x80)return '?';code=(code<<6)|(c&63);}
-    if(code<(extra==1?128u:extra==2?2048u:65536u)||code>0x10ffff||(code>=0xd800&&code<=0xdfff))return '?';
-    at+=extra;return code;
-}
 std::uint32_t word(const std::vector<unsigned char>& bytes, std::size_t at) {
     if (at + 4 > bytes.size()) throw std::runtime_error("Truncated menu font");
     return unsigned(bytes[at]) | (unsigned(bytes[at + 1]) << 8) |
@@ -86,7 +75,7 @@ float MenuFont::width(std::string_view text, float pixelHeight) const {
     const float scale = pixelHeight / baked_;
     float total = 0;
     for (std::size_t at=0;at<text.size();) {
-        const auto& g = glyph(nextCode(text,at));
+        const auto& g = glyph(nextUtf8Code(text,at));
         total += g.advance * scale;
     }
     return total;
@@ -135,10 +124,14 @@ void MenuFont::blit(std::span<std::uint32_t> target, int targetWidth, int target
             const float x0 = glyph.x + float(column) * step, x1 = x0 + step;
             const auto firstColumn = std::size_t(std::max(0.f, std::floor(x0)));
             const auto lastColumn = std::size_t(std::max(x0 + 1.f, std::ceil(x1)));
-            unsigned total = 0, taken = 0;
+            unsigned total = 0, taken = 0, channels[3]{};
             for (auto sy = firstRow; sy < lastRow && sy < atlas_.height; ++sy)
-                for (auto sx = firstColumn; sx < lastColumn && sx < atlas_.width; ++sx, ++taken)
-                    total += (atlas_.argb[sy * atlas_.width + sx] >> 24) & 255;
+                for (auto sx = firstColumn; sx < lastColumn && sx < atlas_.width; ++sx, ++taken){
+                    const auto pixel=atlas_.argb[sy * atlas_.width + sx];
+                    const unsigned a=pixel>>24;
+                    total+=a;
+                    for(unsigned c=0;c<3;++c)channels[c]+=((pixel>>(16-c*8))&255)*a;
+                }
             if (!taken) continue;
             const unsigned alpha = total / taken * opacity / 255;
             if (!alpha) continue;
@@ -147,7 +140,8 @@ void MenuFont::blit(std::span<std::uint32_t> target, int targetWidth, int target
                 const unsigned under = (destination >> shift) & 255;
                 return ((value * alpha + under * (255 - alpha)) / 255) << shift;
             };
-            destination = 0xff000000u | mix(16, tint[0]) | mix(8, tint[1]) | mix(0, tint[2]);
+            destination = 0xff000000u | mix(16, channels[0]/total*tint[0]/255) |
+                mix(8, channels[1]/total*tint[1]/255) | mix(0, channels[2]/total*tint[2]/255);
         }
     }
 }
@@ -159,7 +153,7 @@ void MenuFont::paint(std::span<std::uint32_t> target, int targetWidth, int targe
     const float scale = pixelHeight / baked_;
     float pen = x;
     for (std::size_t at=0;at<text.size();) {
-        const auto& glyph = this->glyph(nextCode(text,at));
+        const auto& glyph = this->glyph(nextUtf8Code(text,at));
         if (!glyph.present) continue;
         if (outlineWidth > 0) {
             const int reach = std::max(1, int(std::lround(outlineWidth)));

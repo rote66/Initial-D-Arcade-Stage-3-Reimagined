@@ -1,0 +1,170 @@
+{
+  "notes": "Display names supplied by the user on 2026-10-19. GUNSAI uses the requested short name 群赛. These are display aliases only: stable course IDs, handling, route data and leaderboard identities are unchanged. Map labels retain source wording.",
+  "sources": [
+    "User-approved translations, 2026-10-19"
+  ],
+  "courses": [
+    {
+      "folder": "HAKONE",
+      "name": "箱根",
+      "level": "初级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "f32d2d3bd03e847e55a4c3e066d651fb7969cedce0241f4c1d4f7de882a8bcb2"
+    },
+    {
+      "folder": "SADAMINE",
+      "name": "定峰",
+      "level": "初级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "6448361e2ed111850190a00787e9cf10ed8075d78d097533de86fa0142dc3e3b"
+    },
+    {
+      "folder": "ENNA",
+      "name": "塩那",
+      "level": "高级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "7b9a3897cc4805158aedf6b5043996fde61807255968dbc275452cd9ac083a19"
+    },
+    {
+      "folder": "MYOGI_SPECIAL",
+      "name": "真・妙义",
+      "level": "高级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "867c3f5488e52944aee059b4f798af6c7d8361ba22536689756fcf5e1c123155"
+    },
+    {
+      "folder": "USUI_SPECIAL",
+      "name": "真・碓冰",
+      "level": "高级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "5bc06eef9b31664adf5072457416dfa77d913dfff2c827e319250e2c66878fc9"
+    },
+    {
+      "folder": "MOMIJI",
+      "name": "枫树线",
+      "level": "高级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "385aa4799c5d2e02a41c8d8c160cbd915595ef88fa8e99777ead2a3c5db5c45a"
+    },
+    {
+      "folder": "TSUBAKI",
+      "name": "筑波",
+      "level": "超高级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "e73577ae3c4e65f54a3a60edbe7196284b6acf993c957b04fd9f4643b6a924e7"
+    },
+    {
+      "folder": "GUNSAI",
+      "name": "群赛",
+      "level": "中级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "19484712e892aeac0136554bc1730ec6e05c61d93742800862369059b0e4f4ed"
+    },
+    {
+      "folder": "ODAWARA",
+      "name": "小田原",
+      "level": "中级",
+      "title_ink_height": 41,
+      "tile_ink_height": 22,
+      "title_style": "black-brush-white-halo",
+      "title_center_x": 199,
+      "title_ink_top": 48,
+      "tile_text_box": [
+        4.5,
+        35,
+        91.5,
+        57
+      ],
+      "tile_center_x": 48,
+      "source_sha256": "48b963492163c24180158be3c32db03b60dd0dd19ac322eb27d7618252cf4ab9"
+    }
+  ]
+}

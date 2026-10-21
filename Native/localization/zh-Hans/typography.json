@@ -1,0 +1,33 @@
+{
+  "source": "Text re-typeset for the arcade/iOS UI; no whole PSP UI images",
+  "fonts": {
+    "title": {
+      "file": "Native/localization/zh-Hans/fonts/SourceHanSerifSC-Heavy.otf",
+      "sha256": "d033af54f96530476faed924ab5d5e9e6ef0833495670fd57bab9a7758398048"
+    },
+    "mode": {
+      "file": "Native/localization/zh-Hans/fonts/SourceHanSerifSC-Heavy.otf",
+      "sha256": "d033af54f96530476faed924ab5d5e9e6ef0833495670fd57bab9a7758398048"
+    },
+    "caption": {
+      "file": "Native/localization/zh-Hans/fonts/SourceHanSerifSC-Heavy.otf",
+      "sha256": "d033af54f96530476faed924ab5d5e9e6ef0833495670fd57bab9a7758398048"
+    },
+    "brush": {
+      "file": "$IDAS3_BRUSH_FONT",
+      "sha256": "c98c343f2ce468b8db651c20ed287015b913e8e4189bfd54911eaa3270ff7e20"
+    },
+    "label": {
+      "file": "Native/localization/zh-Hans/fonts/SourceHanSerifSC-Heavy.otf",
+      "sha256": "d033af54f96530476faed924ab5d5e9e6ef0833495670fd57bab9a7758398048"
+    },
+    "body": {
+      "file": "Assets/Resources/Fonts/NotoSansSC-Regular.otf",
+      "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9"
+    },
+    "latin": {
+      "file": "Assets/Resources/Fonts/NotoSansSC-Regular.otf",
+      "sha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9"
+    }
+  }
+}

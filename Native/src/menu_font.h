@@ -20,6 +20,7 @@ class MenuFont {
 public:
     static MenuFont load(const std::filesystem::path& root, const std::filesystem::path& file="data/native_assets/menu_font/font.bin");
     bool ready() const { return !glyphs_.empty() && atlas_.width > 0; }
+    bool hasGlyph(std::uint32_t code) const { return glyphs_.contains(code); }
     float width(std::string_view text, float pixelHeight) const;
     // Draws at pixelHeight, with an optional dark outline behind it the way the
     // source's own captions are outlined.

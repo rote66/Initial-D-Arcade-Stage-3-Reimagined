@@ -143,7 +143,7 @@ typedef void (IDAS3_UNITY_EVENT *Idas3UnityRenderEvent)(int eventId);
 IDAS3_UNITY_EXPORT uint32_t IDAS3_UNITY_CALL Idas3UnityVersion(void);
 // Scene port: synchronous simulation/presentation data on Unity's main thread.
 // No graphics device, external texture, render callback, or waveOut output.
-// 0 = English, 1 = original Japanese UI artwork. Call before scene initialization.
+// 0 = English, 1 = Japanese artwork, 2 = Simplified Chinese. Set before initialization.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneConfigureLanguage(int language);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneSetCustomMenuLanguage(int language);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneInitialize(

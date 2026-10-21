@@ -330,7 +330,7 @@ Choose a save, then a make and car for upgrades.	セーブを選び、メーカ�
 Finish the current screen and leave online play to use Full Tune.	現在の画面を終了し、オンライン対戦から退出してから使用してください。	请先完成当前画面并退出在线模式，再使用完全改装。
 Race your best saved run. New bests are saved with the ghost off, too.	保存された自己ベストと対戦します。オフでも自己ベストは保存されます。	与已保存的个人最佳记录竞速。关闭幽灵车仍会保存新纪录。
 Legend of the Streets only. Bunta Challenge keeps its original difficulty.	公道最速伝説のみ。文太に挑戦は原作の難易度のままです。	仅影响公路最速传说。文太挑战保留原版难度。
-Original menu and race text artwork. Apply, then restart the game. Separate from Custom Menu Language.	原作メニューとレースの文字画像。適用後に再起動してください。追加メニューの言語とは別設定です。	原版菜单和比赛中的文字贴图。应用后请重启游戏。与自定义菜单语言互不影响。
+Original menu, race and story text. Apply, then restart the game. Separate from Custom Menu Language.	原作のメニュー・レース・ストーリーの表示言語。適用後に再起動してください。追加メニューの言語とは別設定です。	原版菜单、比赛及剧情文字的显示语言。应用后请重启游戏。与自定义菜单语言分别设置。
 Pause, online, music and other custom menus only. Apply to change now. Original arcade artwork stays unchanged.	ポーズ・オンライン・音楽などの追加メニューのみ。適用ですぐに切り替わります。原作の文字画像は変わりません。	仅影响暂停、在线、音乐等自定义菜单。应用后立即生效，不改变原版文字贴图。
 COMMUNITY TIMES	オンラインランキング	社区排行榜
 VIEW LEADERBOARDS	ランキングを見る	查看排行榜

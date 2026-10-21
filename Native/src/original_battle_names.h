@@ -1,7 +1,9 @@
 #pragma once
 #include "original_battle_hud.h"
 #include "original_battle_profile.h"
+#include "menu_font.h"
 #include <array>
+#include <memory>
 #include <string>
 
 namespace idas3 {
@@ -37,5 +39,6 @@ private:
     void paintLabels(std::span<std::uint32_t>,int,int,std::uint32_t,std::uint32_t,float,float,bool playerOnly=false)const;
     NativeTextureBank font_;
     OriginalBattleHudAssets labels_;
+    std::shared_ptr<const MenuFont> chinese_;
 };
 }

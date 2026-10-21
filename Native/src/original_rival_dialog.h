@@ -16,11 +16,13 @@ namespace idas3::original {
 
 // One placed glyph, exactly as 0C6A00/0C68E0 append it, in source screen
 // pixels on the original 640x480 canvas.
-struct OriginalDialogGlyph { std::uint16_t texture{}; float x{},y{},z{}; };
+struct OriginalDialogGlyph { std::uint32_t texture{}; float x{},y{},z{}; };
 
 // Source text-line object: 0C60C0 builds the page, 0C5EE0 the speaker label.
 struct OriginalDialogLine {
     float cell=32,linePitch=24,scale=1;
+    bool simplifiedChinese=false;
+    std::shared_ptr<const MenuFont> chineseFont;
     float cursorX=0,cursorY=0,startX=0,startY=0,lineStart=0;
     std::vector<OriginalDialogGlyph> glyphs;
     std::uint32_t color=0;   // +84, zero until the first C command
@@ -33,7 +35,7 @@ struct OriginalDialogLine {
     std::uint32_t waitHead=0,waitCount=0;
 };
 
-enum class OriginalRivalDialogBank : std::uint8_t { Portrait,Background,Scene,Alphabet,Namekana };
+enum class OriginalRivalDialogBank : std::uint8_t { Portrait,Background,Scene,Alphabet,Namekana,Chinese };
 struct OriginalRivalDialogDraw {
     OriginalRivalDialogBank bank{};
     std::uint32_t chunk{};
@@ -43,6 +45,7 @@ struct OriginalRivalDialogDraw {
     // part's diffuse words. Scene parts keep their own imported material.
     std::uint32_t color=0xffffffffu;
     bool tinted=false;
+    float glyphSize=32;
 };
 
 struct OriginalRivalDialogSetup {

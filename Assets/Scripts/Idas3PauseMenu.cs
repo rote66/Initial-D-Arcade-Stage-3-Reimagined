@@ -410,7 +410,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(row==1)v.cameraFovPercent=Mathf.Clamp(v.cameraFovPercent+Math.Sign(direction),Idas3GameOptions.MinimumCameraFovPercent,Idas3GameOptions.MaximumCameraFovPercent);
             if(row==2)v.aiDifficulty=Wrap(v.aiDifficulty+direction,3);
             if(row==3)v.timeAttackGhost=!v.timeAttackGhost;
-            if(row==5)v.arcadeTextLanguage=Wrap(v.arcadeTextLanguage+direction,2);
+            if(row==5)v.arcadeTextLanguage=Wrap(v.arcadeTextLanguage+direction,3);
             if(row==6)v.customMenuLanguage=Wrap(v.customMenuLanguage+direction,3);
         }else if(tab==5){
             if(row==0)v.communityTimes=!v.communityTimes;
@@ -719,13 +719,13 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             ChoiceRow(3,"TIME ATTACK GHOST",v.timeAttackGhost?"ON":"OFF");
             Text(new Rect(290,RowY(4)+5,294,31),"FULL TUNE",label);
             if(Button(new Rect(595,RowY(4)+2,387,35),"999999 POINTS + UPGRADES",selection==5,FullTuneAvailable)){selection=5;queued=Command.FullTune;}
-            ChoiceRow(5,"ARCADE TEXT LANGUAGE",v.arcadeTextLanguage==1?"JAPANESE":"ENGLISH");
+            ChoiceRow(5,"ARCADE TEXT LANGUAGE",Idas3MenuLocalization.LanguageNames[v.arcadeTextLanguage],false);
             ChoiceRow(6,"CUSTOM MENU LANGUAGE",Idas3MenuLocalization.LanguageNames[v.customMenuLanguage],false);
             string help=selection==5?(FullTuneAvailable?"Choose a save, then a make and car for upgrades.":"Finish the current screen and leave online play to use Full Tune."):
                 selection==4?"Race your best saved run. New bests are saved with the ghost off, too.":
                 selection==3?"Legend of the Streets only. Bunta Challenge keeps its original difficulty.":
                 selection==2?"100% keeps each camera's original view. Higher values show more road. Apply to save.":"";
-            if(selection==6)help="Original menu and race text artwork. Apply, then restart the game. Separate from Custom Menu Language.";
+            if(selection==6)help="Original menu, race and story text. Apply, then restart the game. Separate from Custom Menu Language.";
             if(selection==7)help="Pause, online, music and other custom menus only. Apply to change now. Original arcade artwork stays unchanged.";
             if(MobileControls){
                 ChoiceRow(7,"GRAVITY STEERING",options.Current.gravitySteering?"ON":"OFF");

@@ -1,5 +1,7 @@
 #pragma once
 #include "native_assets.h"
+#include "menu_font.h"
+#include <memory>
 #include "original_battle_profile.h"
 #include <array>
 #include <cstdint>
@@ -106,6 +108,8 @@ private:
     NativeTextureBank textures_;
     NativeTextureBank nameFont_;
     NativeTextureBank recordFont_,importedTitles_;
+    std::shared_ptr<const MenuFont> chinese_;
+    bool simplifiedChinese_=false;
     struct BattleRecordLayout {
         float origin=0,width=367,winRight=207,percentRight=315,tenthsRight=341;
         float secondLabelThreshold=2;

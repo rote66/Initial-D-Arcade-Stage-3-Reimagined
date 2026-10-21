@@ -1,4 +1,6 @@
 #include "original_battle_names.h"
+#include "chinese_arcade_font.h"
+#include "utf8_text.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -7,6 +9,7 @@
 
 namespace idas3 {
 namespace {
+#include "chinese_arcade_names.inc"
 float lit(std::uint32_t v){return std::bit_cast<float>(v);}
 template<class T>void readExact(const std::filesystem::path& path,T& out,std::size_t offset=0){
     std::ifstream f(path,std::ios::binary);f.seekg(std::streamoff(offset));f.read(reinterpret_cast<char*>(&out),sizeof(out));
@@ -26,6 +29,7 @@ constexpr const char* carCodes[]{"AE86 TRUENO","AE86 LEVIN","AE85","SW20","ZZW30
 }
 OriginalBattleNames OriginalBattleNames::load(const std::filesystem::path& root){
     OriginalBattleNames out;const auto folder=root/"data/original_assets/hud/names";
+    if(originalUiLanguage()==2)out.chinese_=loadChineseArcadeFont(root);
     const auto path=folder/"names.idasname";std::ifstream f(path,std::ios::binary);std::array<char,8> magic{};std::uint32_t version{},count{};
     f.read(magic.data(),8);f.read(reinterpret_cast<char*>(&version),4);f.read(reinterpret_cast<char*>(&count),4);
     if(magic!=std::array<char,8>{'I','D','A','S','3','N','1','\0'}||version!=1||count!=32)throw std::runtime_error("Unknown original name stream");
@@ -92,7 +96,16 @@ void OriginalBattleNames::paint(std::span<std::uint32_t> argb,int width,int heig
         const original::OriginalBattleProfile* profile)const{
     if(width<=0||height<=0||argb.size()!=std::size_t(width)*height||playerCar>=35||rivalCar>=35)throw std::invalid_argument("Invalid original battle name destination or car");
     if(profileMode==2)enemy=30;
-    for(bool player:{true,false})paintGlyphs(argb,width,height,glyphs(enemy,player,profile));
+    paintGlyphs(argb,width,height,glyphs(enemy,true,profile));
+    if(chinese_){
+        if(enemy>=std::size(chineseRivalNames))throw std::invalid_argument("Invalid Chinese HUD rival");
+        const std::string name=utf8Code(0xf100+enemy);
+        const float fit=std::min(float(width)/640.f,float(height)/480.f);
+        // HUD labels are already rasterized at the player's 12px cell height.
+        // The shared atlas em is 16px; do not downsample these labels a second time.
+        chinese_->paint(argb,width,height,name,float(width)-640.f*fit+510.f*fit,
+            146.f*fit,16.f*fit,0xffffffff);
+    }else paintGlyphs(argb,width,height,glyphs(enemy,false,profile));
     paintLabels(argb,width,height,playerCar,rivalCar,182.f,146.f);
 }
 void OriginalBattleNames::paintTimeAttack(std::span<std::uint32_t> argb,int width,int height,std::uint32_t car,const original::OriginalBattleProfile* profile)const{

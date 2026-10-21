@@ -1,4 +1,6 @@
 #include "original_rival_dialog_data.h"
+#include "native_assets.h"
+#include "chinese_arcade_font.h"
 #include <bit>
 #include <cmath>
 #include <fstream>
@@ -49,6 +51,45 @@ OriginalRivalDialogData OriginalRivalDialogData::load(const std::filesystem::pat
             require(r.tokens.back().bytes=="E");
         }
         b.end();
+    }
+    if(originalUiLanguage()==2){
+        Reader translations(root/"data/localization/zh-Hans/dialog.bin");
+        require(translations.bytes(8)==std::string("IDASZH2\0",8)&&translations.word()==2);
+        const auto count=translations.word();require(count>0&&count<=31*24+8*51);
+        const auto textToken=[](std::string_view value){
+            return !value.empty()&&value[0]=='*';
+        };
+        for(unsigned i=0;i<count;++i){
+            const auto pool=translations.word(),index=translations.word();
+            require(pool<2&&index<(pool?out.buntaRecords_.size():out.records_.size()));
+            auto& record=pool?out.buntaRecords_[index]:out.records_[index];
+            require(record.localizedPlayback.empty()&&translations.word()==record.tokens.size());
+            const auto size=translations.word();require(size>0&&size<=8192);
+            std::vector<std::pair<std::uint32_t,std::string>> expected,actual;
+            for(const auto& token:record.tokens)if(!textToken(token.bytes))
+                expected.emplace_back(token.sourceAddress,token.bytes);
+            for(unsigned j=0;j<size;++j){
+                const auto source=translations.word();
+                auto command=translations.text(32),text=translations.text(4096);
+                OriginalRivalDialogToken token;
+                if(source!=~0u){
+                    require(source<record.tokens.size()&&command.empty()&&text.empty());
+                    token=record.tokens[source];
+                    require(!textToken(token.bytes));
+                }else{
+                    require(command=="*"&&!text.empty()&&text.find('\0')==std::string::npos);
+                    token.localizedDisplay=true;
+                    token.bytes=std::move(command);token.localizedText=std::move(text);
+                }
+                if(!textToken(token.bytes))actual.emplace_back(token.sourceAddress,token.bytes);
+                record.localizedPlayback.push_back(std::move(token));
+            }
+            // Localized text must retain the arcade script's game logic.
+            require(actual==expected&&record.localizedPlayback.back().bytes=="E");
+        }
+        translations.end();
+        out.simplifiedChinese_=true;
+        out.chineseFont_=loadChineseArcadeFont(root);
     }
     return out;
 }

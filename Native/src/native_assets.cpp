@@ -14,12 +14,13 @@
 namespace idas3 {
 namespace { std::atomic<int> uiLanguage{0}; }
 void setOriginalUiLanguage(int language){
-    if(language!=0&&language!=1)throw std::invalid_argument("Unknown arcade text language");
+    if(language<0||language>2)throw std::invalid_argument("Unknown arcade text language");
     uiLanguage.store(language);
 }
 int originalUiLanguage(){return uiLanguage.load();}
 std::filesystem::path localizedUiAssetPath(const std::filesystem::path& path){
-    if(originalUiLanguage()!=1)return path;
+    const auto language=originalUiLanguage();
+    if(language==0)return path;
     // Only model UI banks have a mapped counterpart. Never redirect physics,
     // courses, cars or executable data, and leave unsupported text in English.
     if(path.extension()!=".idasmesh"&&path.extension()!=".idastex")return path;
@@ -31,7 +32,7 @@ std::filesystem::path localizedUiAssetPath(const std::filesystem::path& path){
         if(found)relative/=part;else prefix/=part;
     }
     if(!found||relative.empty())return path;
-    const auto candidate=prefix/"localization"/"ja"/"original_assets"/relative;
+    const auto candidate=prefix/"localization"/(language==2?"zh-Hans":"ja")/"original_assets"/relative;
     return std::filesystem::is_regular_file(candidate)?candidate:path;
 }
 namespace {

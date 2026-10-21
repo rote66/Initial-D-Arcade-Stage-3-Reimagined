@@ -1,4 +1,6 @@
 #include "original_rival_dialog.h"
+#include "utf8_text.h"
+#include "menu_font.h"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -9,6 +11,7 @@ namespace idas3::original {
 namespace {
 #include "original_rival_dialog_tables.inc"
 #include "original_bunta_dialog_tables.inc"
+#include "chinese_arcade_names.inc"
 
 // Screen origin of every dialogue layer: 0C66A8/0C66CC/0C66D0 map one model
 // unit to 100 pixels about (320,240), so (-3.2,2.4) is the top-left corner.
@@ -80,8 +83,18 @@ void newLine(OriginalDialogLine& line){
     line.cursorX=line.lineStart;
     line.cursorY=std::fma(line.linePitch,line.scale,line.cursorY);
 }
-void pushGlyph(OriginalDialogLine& line,std::uint16_t texture){
+void pushGlyph(OriginalDialogLine& line,std::uint32_t texture){
     line.glyphs.push_back({texture,line.cursorX,line.cursorY,line.zOffset+glyphDepth});
+}
+void appendChinese(OriginalDialogLine& line,std::string_view text){
+    for(std::size_t i=0;i<text.size();){
+        const auto code=nextUtf8Code(text,i);
+        if(code=='\n'){newLine(line);continue;}
+        const float advance=line.chineseFont->width(utf8Code(code),line.cell);
+        if(line.cursorX+advance>628.f){line.lineStart=10.f;newLine(line);}
+        if(code!=' ')pushGlyph(line,code);
+        line.cursorX+=advance;
+    }
 }
 // 0C6A00(line, jis, 4): proportional advance from the alphabet width table.
 // 0C68E0(line, jis): the same append with a fixed full-cell advance.
@@ -91,6 +104,13 @@ void appendJis(OriginalDialogLine& line,std::string_view jis,bool proportional){
         if(b0==10){newLine(line);++i;continue;}
         if(i+1>=jis.size())break;
         const auto b1=static_cast<unsigned char>(jis[i+1]);
+        if(line.simplifiedChinese){
+            const auto key=std::uint16_t((std::uint32_t(b0)<<8)|b1);
+            const auto it=std::find_if(std::begin(chineseJisUnicode),std::end(chineseJisUnicode),
+                [key](const auto& entry){return entry.first==key;});
+            appendChinese(line,utf8Code(it==std::end(chineseJisUnicode)?'?':it->second));
+            i+=2;continue;
+        }
         const std::uint32_t index=(std::uint32_t(b0)-0xA0u)*96u+(std::uint32_t(b1)-0xA0u);
         if(index<=9216u){
             std::uint16_t texture=0;
@@ -157,7 +177,8 @@ struct Interpreter {
     std::int32_t prescan=-1;
 
     std::string_view token(std::uint32_t index)const{
-        return index<record.tokens.size()?std::string_view(record.tokens[index].bytes):std::string_view();
+        const auto tokens=record.playback();
+        return index<tokens.size()?std::string_view(tokens[index].bytes):std::string_view();
     }
     std::uint32_t argument()const{
         const auto t=token(s.cursor);
@@ -171,7 +192,7 @@ struct Interpreter {
     }
     bool bare()const{return token(s.cursor).size()==1;}
     void skipTo(char close){
-        while(s.cursor+1<std::uint32_t(record.tokens.size())){
+        while(s.cursor+1<std::uint32_t(record.playback().size())){
             const auto t=token(s.cursor);
             if(!t.empty()&&t[0]==close)break;
             ++s.cursor;
@@ -195,6 +216,7 @@ struct Interpreter {
         resetCursor(s.text);
     }
     void appendAscii(std::string_view text){
+        if(s.text.simplifiedChinese){appendChinese(s.text,text.substr(1));return;}
         // 0F6CC0: skip the leading command byte, map ASCII through 31B684.
         std::string converted;
         for(std::size_t i=1;i<text.size();++i){
@@ -220,16 +242,24 @@ void Interpreter::dispatch(char command){
         const auto colour=speakerColours[n<speakerColours.size()?n:0];
         s.text.color=colour;s.name.color=colour;
         clearLine(s.name);
-        if(s.buntaChallenge)appendJis(s.name,buntaSpeakerName,true);
+        if(s.name.simplifiedChinese){
+            if(s.buntaChallenge)appendChinese(s.name,chineseRivalNames[30]);
+            else{
+                const auto list=speakerNameLists[s.character<31?s.character:0];
+                appendChinese(s.name,chineseSpeakerNames[list.first+(n<std::uint32_t(list.second)?n:0)]);
+            }
+            appendChinese(s.name,"\xef\xbc\x9a");
+        }else if(s.buntaChallenge)appendJis(s.name,buntaSpeakerName,true);
         else{
             const auto first=std::uint32_t(speakerNameLists[s.character<31?s.character:0].first);
             const auto count=std::uint32_t(speakerNameLists[s.character<31?s.character:0].second);
             if(count)appendJis(s.name,speakerNameStrings[first+(n<count?n:0)],true);
         }
-        appendJis(s.name,nameSeparator,true);
+        if(!s.name.simplifiedChinese)appendJis(s.name,nameSeparator,true);
         s.slotFlags.fill(0);
         clearText(s.text);resetCursor(s.text);
-        if(!s.name.glyphs.empty())s.textAnchorX=std::int32_t(s.name.glyphs.back().x);
+        if(!s.name.glyphs.empty())s.textAnchorX=std::int32_t(s.name.simplifiedChinese?
+            s.name.cursorX:s.name.glyphs.back().x);
         positioned=true;
         setLineOrigin(s.text,float(s.textAnchorX),textBaselineY);
         s.text.color=colour;
@@ -395,7 +425,13 @@ std::int32_t Interpreter::run(){
         const auto t=token(s.cursor);
         if(t.empty())return 0;
         yield=false;
-        dispatch(t[0]);
+        const auto& current=record.playback()[s.cursor];
+        if(s.text.simplifiedChinese&&current.localizedDisplay){
+            if(!current.localizedText.empty()){
+                positionText();
+                appendChinese(s.text,current.localizedText);
+            }
+        }else dispatch(t[0]);
         if(mode!=0){
             if(prescan>=0)return prescan;
             if(s.endFlag)return -1;
@@ -455,6 +491,12 @@ void buildScript(OriginalRivalDialogState& s,const OriginalRivalDialogData& data
     const auto& record=s.buntaChallenge?data.buntaRecord(s.course,s.kind):data.record(s.character,s.kind);
     s.text=OriginalDialogLine{};
     s.name=OriginalDialogLine{};
+    s.text.simplifiedChinese=s.name.simplifiedChinese=!record.localizedPlayback.empty();
+    s.text.chineseFont=s.name.chineseFont=data.chineseFont();
+    if(s.text.simplifiedChinese){
+        s.text.cell=s.name.cell=20.f;
+        s.text.linePitch=s.name.linePitch=20.f;
+    }
     s.text.interval=1;s.text.zOffset=glyphZOffset;
     s.name.interval=1;s.name.zOffset=glyphZOffset;
     setLineOrigin(s.name,nameOriginX,textBaselineY);
@@ -599,7 +641,8 @@ std::vector<OriginalRivalDialogDraw> originalRivalDialogDraws(const OriginalRiva
         const auto emit=[&](const OriginalDialogLine& line){
             for(const auto& glyph:line.glyphs){
                 OriginalRivalDialogDraw draw;
-                draw.bank=OriginalRivalDialogBank::Alphabet;
+                draw.bank=line.simplifiedChinese?OriginalRivalDialogBank::Chinese:OriginalRivalDialogBank::Alphabet;
+                draw.glyphSize=line.cell;
                 draw.chunk=glyph.texture;
                 const auto scale=projectionScale(glyph.z);
                 draw.scaleX=scale;draw.scaleY=scale;draw.scaleZ=1.f;

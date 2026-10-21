@@ -1,5 +1,7 @@
 #pragma once
 #include "native_assets.h"
+#include "menu_font.h"
+#include <memory>
 #include "original_legend_choice.h"
 #include "original_rival_dialog.h"
 #include <filesystem>
@@ -42,6 +44,7 @@ private:
     OriginalRivalDialogData data_;
     Bank scene_,portrait_,background_,choice_,prompt_;
     NativeTextureBank alphabet_,namekana_;
+    std::shared_ptr<const MenuFont> chinese_;
     std::string portraitName_,backgroundName_;
     OriginalRivalDialogState state_;
     bool loaded_=false;
