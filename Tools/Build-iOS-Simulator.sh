@@ -39,6 +39,12 @@ if [[ ${#task_apps[@]} != 1 ]]; then
   echo "Expected one built Simulator app, found ${#task_apps[@]}" >&2; exit 1
 fi
 task_app="${task_apps[0]}"
+rm -rf "$task_app/Data/Raw/IDAS3GameData"
+if [[ "${IDAS3_SIMULATOR_BUNDLED_TEST_DATA:-1}" == "1" ]]; then
+  # Keep existing Documents data untouched when validating a new data revision.
+  echo "Bundling isolated Simulator test data (Documents remains unchanged)."
+  ditto -x -k Builds/iOS/InitialD-GameData-mp3.zip "$task_app/Data/Raw"
+fi
 if [[ -n "${IDAS3_SIMULATOR_DEVICE:-}" ]]; then
   xcrun simctl install "$IDAS3_SIMULATOR_DEVICE" "$task_app"
   if [[ "${IDAS3_KEEP_BUILD:-0}" != "1" ]]; then python3 Tools/Clean-iOS.py simulator; fi

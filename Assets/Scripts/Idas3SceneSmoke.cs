@@ -173,7 +173,7 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         Directory.CreateDirectory(output);
         saves=Path.Combine(output,"userdata");
         if(Array.IndexOf(args,"-idas3-scene-language")>=0){
-            int language=DiagnosticInt(args,"-idas3-scene-language",0,0,1);
+            int language=DiagnosticInt(args,"-idas3-scene-language",0,0,2);
             Directory.CreateDirectory(saves);
             File.WriteAllText(Path.Combine(saves,"game-options.json"),"{\"version\":1,\"arcadeTextLanguage\":"+language+",\"discordPresence\":false,\"communityTimes\":false}");
         }
@@ -313,6 +313,8 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
             textures=Resources.FindObjectsOfTypeAll<Texture2D>().Length,stage=s.frontendStage,course=s.course,car=s.car,
             uiBuffers=camera.commandBufferCount,speed=s.speedMetresPerSecond,flags=s.flags,simulationTicks=s.simulationTicks,
             cameraPosition=camera.transform.position,submitMs=host.SubmissionMilliseconds};
+        if(languageCheck&&(s.flags&1)!=0&&s.frontendStage>=6&&s.frontendStage<=9)
+            record.course=Idas3SceneModeFlowValue(30);
         record.attractChild=s.attractChild;record.nativeRenderedFrames=s.renderedFrames;
         if(rivalCheck)record.rival=ReadRivalStatus();
         if(introCheck&&s.renderedFrames>=introFirstRenderedFrame)record.introSourceUpdates=s.renderedFrames-introFirstRenderedFrame;
@@ -730,9 +732,9 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
     private IEnumerator LanguageCheck(){
         hires=new RenderTexture(Screen.width,Screen.height,24,RenderTextureFormat.ARGB32){name="Language artwork verification",antiAliasing=1};
         Check(hires.Create(),"Language verification target creation");host.GetComponent<Camera>().targetTexture=hires;
-        int language=DiagnosticInt(Idas3LaunchArguments.GetArguments(),"-idas3-scene-language",0,0,1);
+        int language=DiagnosticInt(Idas3LaunchArguments.GetArguments(),"-idas3-scene-language",0,0,2);
         Check(host.GameOptions.Current.arcadeTextLanguage==language,"Language was not loaded before native startup");
-        Check(Idas3Native.Idas3SceneConfigureLanguage(1-language)==0,"Live scene allowed mixing language caches");
+        Check(Idas3Native.Idas3SceneConfigureLanguage((language+1)%3)==0,"Live scene allowed mixing language caches");
         Check(Idas3Native.Idas3SceneConfigureLanguage(language)==1,"Current language was not retained");
         yield return Frames(120);yield return Capture("attract",false);
         yield return Key(116);yield return Frames(20);
@@ -748,6 +750,20 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         Check(Idas3Native.Idas3SceneReturnToCourse()==1,"Language test could not return to course selection");
         menu.SetOpen(false);yield return Frames(60);
         Check(host.Status.frontendStage==6,"Expected course selection");yield return Capture("course-menu",false);
+        if(language==2){
+            int originalCourse=Idas3SceneModeFlowValue(30);
+            for(int course=0;course<Idas3CourseCatalog.Count;++course){
+                for(int step=0;Idas3SceneModeFlowValue(30)!=course&&step<Idas3CourseCatalog.Count;++step){
+                    yield return Key(39);yield return Frames(8);
+                }
+                Check(Idas3SceneModeFlowValue(30)==course,"Chinese course is missing from TA selection: "+course);
+                yield return Capture("course-menu-"+course,false);
+            }
+            for(int step=0;Idas3SceneModeFlowValue(30)!=originalCourse&&step<Idas3CourseCatalog.Count;++step){
+                yield return Key(39);yield return Frames(8);
+            }
+            Check(Idas3SceneModeFlowValue(30)==originalCourse,"Chinese course carousel did not wrap to the original selection");
+        }
         // The real TA choice owners use the same stable IDs in both languages.
         for(int stage=6;stage<=8;++stage){
             Check(host.Status.frontendStage==stage,"Language changed selection order");
@@ -757,6 +773,11 @@ public sealed class Idas3SceneSmoke : MonoBehaviour
         }
         for(int stage=9;stage>5;--stage){yield return Key(27);yield return Frames(100);Check(host.Status.frontendStage==stage-1,"Localized Back changed menu order");}
         yield return Capture("mode-menu",false);
+        if(language==2){
+            yield return Key(39);yield return Frames(20);yield return Capture("mode-menu-timeattack",false);
+            yield return Key(39);yield return Frames(20);yield return Capture("mode-menu-bunta",false);
+            yield return Key(39);yield return Frames(20);
+        }
         for(int stage=5;stage>2;--stage){yield return Key(27);yield return Frames(160);Check(host.Status.frontendStage==stage-1,"Localized car menu back navigation failed");
             yield return Capture(new[]{"make-menu","car-menu","transmission-menu"}[stage-3],false);}
         Finish(true,null);

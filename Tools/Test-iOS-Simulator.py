@@ -16,6 +16,7 @@ CASES = {
     # Mobile visual QA uses the captured window; this case checks playback/I/O.
     "soundroom": ("-idas3-race-music-smoke", ["-idas3-sound-room-check", "-idas3-music-no-capture"]),
     "mobile": ("-idas3-mobile-controls-smoke", []),
+    "mobile-zh": ("-idas3-mobile-controls-smoke", ["-idas3-chinese-arcade"]),
     "render": ("-idas3-scene-smoke", ["-idas3-scene-render-check"]),
     "mobile-render": ("-idas3-scene-smoke", ["-idas3-scene-render-check", "-idas3-mobile-render-check"]),
     "mobile-night": ("-idas3-scene-smoke", ["-idas3-scene-render-check", "-idas3-mobile-render-check", "-idas3-scene-night-check"]),
@@ -23,6 +24,10 @@ CASES = {
     "memory": ("-idas3-scene-smoke", ["-idas3-memory-retention-check"]),
     "audio": ("-idas3-scene-smoke", ["-idas3-scene-realtime-audio"]),
     "pause": ("-idas3-pause-smoke", ["-idas3-pause-no-capture"]),
+    "arcade-en": ("-idas3-scene-smoke", ["-idas3-scene-language", "0"]),
+    "arcade-ja": ("-idas3-scene-smoke", ["-idas3-scene-language", "1"]),
+    "arcade-zh": ("-idas3-scene-smoke", ["-idas3-scene-language", "2"]),
+    "story-zh": ("-idas3-pre-race-smoke", ["-idas3-chinese-arcade"]),
     "fov": ("-idas3-pause-smoke", ["-idas3-fov-check", "-idas3-pause-scene-only-capture"]),
     "headlights": ("-idas3-scene-smoke", ["-idas3-scene-perf-check", "-idas3-scene-perf-course", "17",
         "-idas3-scene-perf-night", "-idas3-scene-perf-warmup", "60", "-idas3-scene-perf-frames", "60",
@@ -77,7 +82,7 @@ def main():
                     *(["-AppleLanguages", "(" + args.preferred_language + ")"] if args.preferred_language else []),
                 ], stdout=log, stderr=subprocess.STDOUT)
                 try:
-                    deadline = time.monotonic() + (900 if name == "memory" else 180)
+                    deadline = time.monotonic() + (900 if name == "memory" else 300 if name == "arcade-zh" else 180)
                     while not report_path.exists() and not (text_report and pass_path.exists()) and time.monotonic() < deadline:
                         if failure_path.exists():
                             raise RuntimeError(failure_path.read_text())

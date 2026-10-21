@@ -44,7 +44,7 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
     }
     [Serializable] private class Report {
         public string schema="idas3-pre-race-showcase-smoke-v2",error;
-        public string scope="Fresh private CHRIS profile, actual Legend menu/dialogue route, held throttle during two showcase shots and VS, original countdown then driving. AA1 captures use the unchanged native camera and all enabled Unity cameras in depth order. Numerical checks establish owner/solver/geometry/name invariants; image composition requires visual review.";
+        public string scope="Fresh private CHRIS profile, actual Legend menu/dialogue route, held throttle during two showcase shots and VS, original countdown then driving. Chinese typography additionally uses the production challenger-interruption command to select Kai, Nobuhiko and Miki through normal menus, capturing multiple car-name dialogue pages, Nobuhiko's driving HUD, independently translated snow-story pages and the actual Akina Snow race header; this is not a retirement/result check. AA1 captures use the unchanged native camera and all enabled Unity cameras in depth order. Numerical checks establish owner/solver/geometry/name invariants; image composition requires visual review.";
         public bool passed,shutdownComplete;
         public int checks;
         public double seconds;
@@ -58,6 +58,7 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
     [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneGetRaceAudioStatus(ref RaceAudioStatus status);
     [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneSetPaused(int paused);
     [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneReturnToCourse();
+    [DllImport(Idas3Native.Library,CallingConvention=CallingConvention.Cdecl)] private static extern int Idas3SceneModeFlowValue(int field);
     private static string pendingRoot;
     private static Idas3PreRaceSmoke active;
     private Idas3SceneGame host;
@@ -83,7 +84,9 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
         File.WriteAllText(Path.Combine(saves,"settings.txt"),"0 0 0 0 0 1 1 0\n");
         File.WriteAllText(Path.Combine(saves,"native_selection.txt"),"0 0\n");
-        File.WriteAllText(Path.Combine(saves,"game-options.json"),JsonUtility.ToJson(new Idas3GameOptions.Values{defaultCamera=0}));
+        bool chinese=Array.IndexOf(args,"-idas3-chinese-arcade")>=0;
+        File.WriteAllText(Path.Combine(saves,"game-options.json"),JsonUtility.ToJson(new Idas3GameOptions.Values{
+            defaultCamera=0,arcadeTextLanguage=chinese?2:0,customMenuLanguage=chinese?2:0}));
         string assets=Application.isEditor?Path.GetFullPath(Path.Combine(Application.dataPath,"../Native")):Path.Combine(Idas3AssetPaths.Root,"IDAS3");
         SeedProfile(saves,File.ReadAllBytes(Path.Combine(assets,"data/original_frontend/name_entry.bin")));
         File.WriteAllText(Path.Combine(pendingRoot,"ISOLATED_PRE_RACE_TEST.txt"),"Private checksummed CHRIS profile. No ordinary saves loaded.\n");
@@ -182,11 +185,20 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
         yield return Key(27);yield return Frames(100);Check(host.Status.frontendStage==5,"Mode5 setup");
         yield return Key(13);yield return Frames(180);Check(host.Status.frontendStage==6,"Legend course selection");
         yield return Key(13);yield return Frames(45);Check(host.Status.frontendStage==10,"Rival10 selection");yield return Capture("rival-selection");
+        if(host.GameOptions.Current.arcadeTextLanguage==2){
+            yield return Key(39);yield return Frames(20);
+            yield return Key(39);yield return Frames(20);yield return Capture("rival-selection-night");
+            yield return Key(37);yield return Frames(20);
+            yield return Key(37);yield return Frames(20);
+        }
         yield return Key(13);yield return Until(Dialogue,600,"Source rival dialogue did not begin");
         // Let the source character scene fade in before the visual capture;
         // vehicle mute is required throughout that transition as well.
         for(int i=0;i<60;++i){Check((Audio().flags&16)!=0,"Hidden character artwork must mute vehicle audio");yield return null;}
         yield return Capture("character-art-hidden-car");
+        if(host.GameOptions.Current.arcadeTextLanguage==2){
+            yield return Frames(240);yield return Capture("chinese-story-dialogue");
+        }
         // One held Start must skip successive pages without needing repeated
         // presses, and must never open pause behind the conversation.
         int skipFrames=0;
@@ -211,7 +223,8 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
                 Check(s.cameraView==0,"Showcase changed the saved bumper view");Check(s.playerRanges>0&&s.rivalRanges>0,"Showcase omitted a car with bumper view saved");
                 Check(s.countdownRemaining==240,"Source countdown began before the VS screen ended");
                 Check(Name(0).Normalize(NormalizationForm.FormKC)=="CHRIS","VS player name did not come from the loaded profile");
-                Check(s.opponentId==0&&Name(1).Normalize(NormalizationForm.FormKC)=="IGGY","VS opponent name does not match source rival0 IGGY");
+                string expectedOpponent=host.GameOptions.Current.arcadeTextLanguage==2?"\u6b66\u5185\u6811":"IGGY";
+                Check(s.opponentId==0&&Name(1).Normalize(NormalizationForm.FormKC)==expectedOpponent,"VS opponent name does not match source rival0");
                 if(s.reserved>=152&&captured.Add("versus"))yield return Capture("versus");
                 string name=s.phase==1?"showcase-shot-0":s.phase==2?"showcase-shot-1":"versus";
                 if((s.phase<3||s.reserved>=152)&&captured.Add(name)){if(s.phase<3)cameraEyes.Add(new Vector3(s.eyeX,s.eyeY,s.eyeZ));yield return Capture(name);}
@@ -247,7 +260,71 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
         }
         Check(phases.Count==4&&phases[3]==5,"Presentation never released driving");yield return Frames(180);
         Check(host.Status.speedMetresPerSecond>1,"Player did not accelerate after GO");yield return Capture("driving-bumper");
-        yield return Key(67);yield return Frames(10);Check(Read().playerRanges>0,"Chase camera omitted the player car");yield return Capture("driving-chase");Finish(true,null);
+        yield return Key(67);yield return Frames(10);Check(Read().playerRanges>0,"Chase camera omitted the player car");yield return Capture("driving-chase");
+        if(host.GameOptions.Current.arcadeTextLanguage==2){
+            driving=false;
+            // Retirement enters result dialogue, not the course carousel.
+            // Start this independent typography case through the existing interruption reset.
+            Check(Idas3Native.Idas3SceneChallenger(2)==1,"Reset for Kai dialogue verification");
+            yield return Frames(30);
+            Check(host.Status.frontendStage==6&&(host.Status.flags&1)!=0,"Kai setup did not restore course selection");
+            for(int step=0;Idas3SceneModeFlowValue(30)!=5&&step<9;++step){
+                yield return Key(39);yield return Frames(8);
+            }
+            Check(Idas3SceneModeFlowValue(30)==5,"Kai verification did not select Irohazaka");
+            yield return Key(13);yield return Frames(45);
+            Check(host.Status.frontendStage==10,"Kai verification did not enter rival selection");
+            yield return Key(39);yield return Frames(20);
+            yield return Key(39);yield return Frames(20);
+            yield return Capture("kai-rival-selection");
+            yield return Key(13);yield return Until(Dialogue,600,"Kai dialogue did not begin");
+            var rival=new RivalStatus{size=(uint)Marshal.SizeOf<RivalStatus>()};
+            Check(Idas3SceneGetRivalStatus(ref rival)==1&&rival.dialogEnemy==16,"Kai verification selected the wrong rival");
+            for(int shot=0;shot<7;++shot){
+                yield return Frames(120);yield return Capture("kai-story-"+shot);
+            }
+            Check(Idas3Native.Idas3SceneChallenger(2)==1,"Reset for Nobuhiko HUD verification");
+            yield return Frames(30);
+            for(int step=0;Idas3SceneModeFlowValue(30)!=6&&step<9;++step){
+                yield return Key(39);yield return Frames(8);
+            }
+            Check(Idas3SceneModeFlowValue(30)==6,"Nobuhiko verification did not select Shomaru");
+            yield return Key(13);yield return Frames(45);
+            Check(host.Status.frontendStage==10,"Nobuhiko verification did not enter rival selection");
+            yield return Key(13);yield return Until(Dialogue,600,"Nobuhiko dialogue did not begin");
+            rival=new RivalStatus{size=(uint)Marshal.SizeOf<RivalStatus>()};
+            Check(Idas3SceneGetRivalStatus(ref rival)==1&&rival.dialogEnemy==21,"Nobuhiko verification selected the wrong rival");
+            yield return Frames(240);yield return Capture("nobuhiko-story");
+            for(int frame=0;frame<1200&&Dialogue();++frame){padPulse=0x10;yield return null;}
+            Check(!Dialogue(),"Nobuhiko dialogue did not close");
+            yield return Until(()=>Read().phase==5,1800,"Nobuhiko race did not reach driving");
+            yield return Frames(120);
+            Check(Read().opponentId==21,"Nobuhiko HUD has the wrong opponent");
+            yield return Capture("nobuhiko-driving-hud");
+            Check(Idas3Native.Idas3SceneChallenger(2)==1,"Reset for independent snow story");
+            yield return Frames(30);
+            for(int step=0;Idas3SceneModeFlowValue(30)!=8&&step<9;++step){
+                yield return Key(39);yield return Frames(8);
+            }
+            Check(Idas3SceneModeFlowValue(30)==8,"Snow verification did not select Akina Snow");
+            yield return Key(13);yield return Frames(45);
+            Check(host.Status.frontendStage==10,"Snow verification did not enter rival selection");
+            yield return Capture("miki-rival-selection");
+            yield return Key(13);yield return Until(Dialogue,600,"Snow story did not begin");
+            rival=new RivalStatus{size=(uint)Marshal.SizeOf<RivalStatus>()};
+            Check(Idas3SceneGetRivalStatus(ref rival)==1&&rival.dialogEnemy==17,"Snow story selected the wrong rival");
+            for(int shot=0;shot<5;++shot){
+                yield return Frames(180);yield return Capture("miki-story-"+shot);
+            }
+            for(int frame=0;frame<1200&&Dialogue();++frame){padPulse=0x10;yield return null;}
+            Check(!Dialogue(),"Snow story did not close");
+            yield return Until(()=>Read().phase==1,1200,"Snow race showcase did not begin");
+            Check(Read().opponentId==17&&host.Status.course==8,"Snow showcase has the wrong rival or course");
+            yield return Frames(95);yield return Capture("miki-snow-race-header");
+            yield return Until(()=>Read().phase==5,1200,"Snow race did not reach driving");
+            yield return Capture("miki-snow-driving");
+        }
+        Finish(true,null);
     }
     private static string Hash(IntPtr pointer,int bytes){if(bytes==0)return "";var data=new byte[bytes];Marshal.Copy(pointer,data,0,bytes);using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(data)).Replace("-","").ToLowerInvariant();}
     private Observation Observe(string name,PreRaceStatus s){var source=host.GetComponent<Idas3SceneRenderer>().CurrentFrame;int localRow=onlineObservation&&onlineRole=="join"?1:0;

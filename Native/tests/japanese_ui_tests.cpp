@@ -103,7 +103,7 @@ int main(int argc,char** argv)try{
     require(localizedUiAssetPath(car)==car,"Car path must not be localized");
     const auto missing=root/"data/original_assets/menus/not_present.idasmesh";
     require(localizedUiAssetPath(missing)==missing,"Missing localized art must retain English");
-    bool rejected=false;try{setOriginalUiLanguage(2);}catch(const std::invalid_argument&){rejected=true;}
+    bool rejected=false;try{setOriginalUiLanguage(3);}catch(const std::invalid_argument&){rejected=true;}
     require(rejected&&originalUiLanguage()==1,"Invalid language changed active selection");
     struct Sample{const char* path;unsigned chunk;};
     const Sample samples[]={

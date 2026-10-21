@@ -31,6 +31,11 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         pendingRoot=null;active=null;var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-mobile-controls-smoke");
         if(at<0)return false;if(at+1>=args.Length)throw new ArgumentException("A private diagnostic root is required.");
         pendingRoot=Path.GetFullPath(args[at+1]);Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");
+        if(Array.IndexOf(args,"-idas3-chinese-arcade")>=0){
+            Directory.CreateDirectory(saves);
+            File.WriteAllText(Path.Combine(saves,"game-options.json"),JsonUtility.ToJson(
+                new Idas3GameOptions.Values{arcadeTextLanguage=2,customMenuLanguage=2}));
+        }
         File.WriteAllText(Path.Combine(pendingRoot,"ISOLATED_MODE_FLOW_TEST.txt"),"Private mobile UI checks; source menu fixtures never access ordinary saves.\n");return true;
     }
     public static void Attach(Idas3SceneGame host){
@@ -518,6 +523,27 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
     private IEnumerator LocalizationChecks(){
         int previous=Idas3MenuLocalization.Language;var menu=host.PauseMenu;
         try{
+            int originalArcade=host.GameOptions.Current.arcadeTextLanguage;
+            yield return OpenTitleOptions();menu.SelectTab(2);
+            for(int i=0;i<5;++i)menu.Navigate(1);
+            menu.NavigateHorizontal(1);menu.NavigateHorizontal(1);
+            int chosen=(originalArcade+2)%3;
+            Check(host.GameOptions.Draft.arcadeTextLanguage==chosen&&host.GameOptions.Current.arcadeTextLanguage==originalArcade,
+                "Original arcade language uses a three-choice unapplied draft");
+            menu.SelectTab(8);Check(host.GameOptions.Draft.arcadeTextLanguage==chosen,"Arcade draft survives category changes");
+            menu.SetOpen(false);yield return OpenTitleOptions();menu.SelectTab(2);
+            Check(host.GameOptions.Draft.arcadeTextLanguage==originalArcade,"Returning discards unapplied arcade language");
+            for(int i=0;i<5;++i)menu.Navigate(1);
+            menu.NavigateHorizontal(1);menu.NavigateHorizontal(1);
+            int gameplayRows=host.GameOptions.Current.gravitySteering?10:8;
+            for(int i=6;i<gameplayRows+2;++i)menu.Navigate(1);
+            menu.Activate();
+            Check(host.GameOptions.Current.arcadeTextLanguage==chosen&&Idas3GameOptions.LoadArcadeTextLanguage(Path.Combine(root,"userdata"))==chosen,
+                "Apply persists the selected original arcade language for restart");
+            menu.SetOpen(false);yield return OpenTitleOptions();menu.SelectTab(2);
+            for(int i=0;i<5;++i)menu.Navigate(1);menu.NavigateHorizontal(1);
+            for(int i=6;i<gameplayRows+2;++i)menu.Navigate(1);menu.Activate();menu.SetOpen(false);
+            Check(host.GameOptions.Current.arcadeTextLanguage==originalArcade,"Restore isolated arcade language after draft checks");
             foreach(string code in new[]{"zh","zh-CN","zh-SG","zh-Hans-CN","zh-TW","zh-HK","zh-Hant-TW"})Check(Idas3MenuLocalization.ResolveDeviceLanguage(code)==2,"Chinese device tag uses upstream language: "+code);
             Check(Idas3MenuLocalization.ResolveDeviceLanguage("ja-JP")==1,"Japanese device tag");
             foreach(string code in new[]{"en-US","fr-FR",""})Check(Idas3MenuLocalization.ResolveDeviceLanguage(code)==0,"English fallback: "+code);
