@@ -24,7 +24,7 @@
 - 固定 Bundle ID `org.idas3.reimagined.ios`，应用显示名、内部名称、`.app` 目录和可执行文件保留 `Initial D Arcade Stage3 Reimagined` 中的空格。通过系统路径访问 Documents，开放 Files 和文件共享，不硬编码容器 UUID。
 - 继续用 `codesign --sign -` 生成无证书的 ad-hoc IPA，保留主应用及框架的签名标识和资源封印校验；不引入 JIT 权限。
 - Steam、EOS 公网联机、Discord 和自动检查更新在 iOS 禁用；保留双人 TCP LAN、输入历史和 ACK 保护，双方必须具有匹配的构建身份。不要恢复上游已删除的旧 Steam transport、Input 或 activity 实现，检查 EOS 原生库没有混入 iOS 包。
-- 社区计时使用独立 HTTP 服务，不与 EOS 禁用状态绑定。保留在线确认及 75 秒快照有效期、离线回退个人成绩、比赛开始时捕获成绩的现有行为。
+- 社区计时使用独立 HTTP 服务，不与 EOS 禁用状态绑定。沿用上游仅分享成绩的协议，个人回放录制独立，不恢复社区回放上传或强制录制。保留在线确认及 75 秒快照有效期、离线回退个人成绩、比赛开始时捕获成绩的现有行为。iOS 上传身份与 plist 的 `IDAS3UpstreamRelease` 共用上游版本标识，不使用数字 `CFBundleShortVersionString` 代替。
 - 保留上游 FOV、成绩迁移及导入赛道灯光。Metal 无灯路径需绑定空全局缓冲，赛道灯光网格仍按材质覆盖，不通过删灯光或改变原始资源规避渲染问题。
 
 ## 触控与菜单
@@ -33,6 +33,7 @@
 - A键已移除，普通菜单、结果和改装购买由 START 确认。iOS 剧情后的续关及下一对手选择接受新按下的 START；持续按住跳剧情不能自动确认下一项。保留实体 A 确认。
 - B键返回仅非驾驶时显示，比赛中由 START 进入暂停。存档页直接触摸存档及动作按钮，单指一次点按，需松手才能操作下一项；iOS 不显示油门和刹车的菜单提示。
 - 菜单摇杆上下保留换色及车型榜切换功能，VIEW 保留视角和排行榜功能。标题或开场长按 VIEW 约 0.65 秒进入上游设置，比赛中 START 暂停后进入选项；LIGHT 没有 VIEW 的菜单功能。
+- 音乐、选项、暂停及存档输入沿用上游 `Idas3MenuInputRouter`；虚拟 VIEW 和存档触点接入同一持按／松手保护，不另建并行路由。
 - 可见性同时约束绘制、命中和输入。驾驶、暂停、结果等状态切换时清除旧持按，避免触点获得新用途。布局编辑预览仍能选择和调整全部现存控件，隐藏不删除已有位置或大小。
 - 不恢复独立 MENU 或任意 frontend 打开设置的 `GlobalOptions` 路径。旧布局与导入 JSON 中的 MENU、A 项应被忽略，其他自定义布局和偏好保留。
 - 保留布局调整、保存、取消、恢复默认、JSON 导入预览和导出。导入取消、损坏或不支持的文件不覆盖已保存布局。
@@ -69,6 +70,7 @@ iOS 页与其他设置分类共用草稿，底部保留重置、应用、返回�
 - 常规交付只生成最新 core-small 成品，不额外生成大体积版本。先完成相关 Simulator 验证，再打包设备 IPA。
 - 成功后清理可再生成的 Xcode 导出、DerivedData、native、转码和 Unity 构建缓存；保留成品、日志、报告、源码、设备插件 archive 和全部用户数据。可先用 `./build-ios.sh --clean --dry-run` 核对范围。
 - 核对 Unity 自动生成的 `.meta` 噪声，仅去掉能证明与原文件一致的构建附加块，保留真正的配置修改。
+- 场景 alpha 深度材质与批次复用上游实现；Metal 合批网格仍上传所需的附加顶点流。不要恢复移动优化中已被替代的第二套深度材质缓存。
 
 ## 验证与交付
 
@@ -82,6 +84,8 @@ python3 Tools/Test-iOS-Simulator.py --device IPHONE_UDID --cases data mobile ren
 ```
 
 运行与改动相关的 native、打包和工具校验，在 Simulator 验证实际 UI、长按 VIEW、START、布局迁移、剧情与改装确认、重力和 LAN 入口。联机协议变更增加实际对端验证。合成触点需经过生产映射，踏板力度需等实际 Running 和物理 tick 后再用比赛 telemetry 断言。
+
+`python3 Tools/Test-iOS-Upstream.py --compile-runtime` 可在不构建 player 的情况下运行上游托管回归及 iOS C# 类型检查；使用隔离测试文件。类型检查借用编辑器模板中的包程序集，不替代当前锁定依赖的 Unity 导入、IL2CPP、shader 或 Simulator 验证。跨平台文件测试须分别验证 Windows 文件共享锁和 POSIX 原子替换语义。
 
 `--disable-engine-audio` 仅用于无可用 CoreAudio 的 Simulator UI 诊断，交付 IPA 保留声音。先导出报告及截图到 `Builds/iOS/Simulator/Tests`，再清理本次隔离测试目录；保留失败证据，不清理其他应用的数据或卸载已装 Simulator 应用。必要时核对已有用户文件 hash。
 

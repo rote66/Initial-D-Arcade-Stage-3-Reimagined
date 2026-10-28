@@ -28,6 +28,8 @@ CASES = {
     "arcade-ja": ("-idas3-scene-smoke", ["-idas3-scene-language", "1"]),
     "arcade-zh": ("-idas3-scene-smoke", ["-idas3-scene-language", "2"]),
     "story-zh": ("-idas3-pre-race-smoke", ["-idas3-chinese-arcade"]),
+    "saves": ("-idas3-mode-flow-smoke", ["-idas3-save-change-check"]),
+    "save-level": ("-idas3-mode-flow-smoke", ["-idas3-save-level-check"]),
     "fov": ("-idas3-pause-smoke", ["-idas3-fov-check", "-idas3-pause-scene-only-capture"]),
     "headlights": ("-idas3-scene-smoke", ["-idas3-scene-perf-check", "-idas3-scene-perf-course", "17",
         "-idas3-scene-perf-night", "-idas3-scene-perf-warmup", "60", "-idas3-scene-perf-frames", "60",
@@ -94,6 +96,13 @@ def main():
                     if not report_path.exists():
                         raise RuntimeError(f"{name} timed out; see {log.name}")
                     report = json.loads(report_path.read_text())
+                    if name == "data":
+                        log.flush()
+                        actual = (output / f"{name}.log").read_text(errors="replace")
+                        if "IDAS3 Unity scene ready:" in actual:
+                            raise RuntimeError("Data-only checks started the ordinary game scene; see " + log.name)
+                        report["ordinaryGameSceneStarted"] = False
+                        report_path.write_text(json.dumps(report, indent=2))
                     if args.preferred_language:
                         expected = "zh-Hans" if args.preferred_language.startswith("zh") else args.preferred_language
                         log.flush()

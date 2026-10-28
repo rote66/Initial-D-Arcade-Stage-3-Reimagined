@@ -34,5 +34,8 @@ namespace UnityEngine
     }
 }
 #if !IDAS3_RECORD_STORAGE_INTEGRATION
-internal static class Idas3Native { internal static string Error()=>throw new InvalidOperationException("Native progression is not part of storage checks."); }
+internal static class Idas3Native {
+    internal const string Library="Idas3Unity";
+    internal static string Error()=>throw new InvalidOperationException("Native progression is not part of storage checks.");
+}
 #endif

@@ -26,8 +26,9 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         public string schema="idas3-mode-flow-smoke-v1",applicationVersion,error,scope;
         public bool passed,shutdownComplete; public int checks; public string[] captures;
     }
+    [Serializable] private class CommunityQueue {public Idas3CommunityTimes.Run[] runs;}
     private static string pendingRoot; private static Idas3ModeFlowSmoke active;
-    private Idas3SceneGame host; private string root; private int checks; private uint padPulse;
+    private Idas3SceneGame host; private string root,lastCheck; private int checks; private uint padPulse;
     private bool finished,frozen; private double began; private long submittedFrames; private readonly List<string> captures=new List<string>();
     public static bool Configure(ref string saves){
         var args=Idas3LaunchArguments.GetArguments();int at=Array.IndexOf(args,"-idas3-mode-flow-smoke");if(at<0)return false;
@@ -59,7 +60,7 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         ++active.submittedFrames;
         if(active.padPulse!=0){frame.padConnected=1;frame.padButtons=active.padPulse;active.padPulse=0;}return true;
     }
-    private void Check(bool ok,string message){++checks;if(!ok)throw new InvalidOperationException(message+"; "+Idas3Native.Error());}
+    private void Check(bool ok,string message){lastCheck=message;++checks;if(!ok)throw new InvalidOperationException(message+"; "+Idas3Native.Error());}
     private IEnumerator Frames(int count){for(int i=0;i<count;++i)yield return null;}
     private IEnumerator Pad(uint value){padPulse=value;yield return null;yield return null;}
     private IEnumerator Until(Func<bool> predicate,int count,string message){for(int i=0;i<count&&!predicate();++i)yield return null;Check(predicate(),message);}
@@ -132,10 +133,27 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         Check(Idas3SceneModeFlowValue(5)==stage&&Idas3SceneModeFlowValue(27)==1,message);
     }
     private IEnumerator SaveTransmissionToMode(bool automatic,string message){
+        if(Idas3SceneModeFlowValue(5)==13)yield return SavedDataToTransmission();
         yield return SaveStage(4,"Saved driver chooses Automatic or Manual before mode selection");
         if((Idas3SceneModeFlowValue(51)==1)!=automatic)yield return Pad(8);
         Check((Idas3SceneModeFlowValue(51)==1)==automatic,"Select the requested saved-car transmission");
-        yield return Pad(0x1000);yield return SaveStage(5,message);
+        yield return Pad(0x1000);
+        yield return Until(()=> (Idas3SceneModeFlowValue(5)==5||Idas3SceneModeFlowValue(5)==12)&&Idas3SceneModeFlowValue(27)==1,
+            350,"Confirmed transmission reaches mode selection or an untuned car's route choice");
+        if(Idas3SceneModeFlowValue(5)==12){
+            yield return Capture("saved-stock-car-route");yield return Pad(0x1000);
+            yield return Until(()=>Idas3SceneModeFlowValue(5)!=12,350,"Confirm the stock car's own tuning route");
+        }
+        yield return SaveStage(5,message);
+    }
+    private IEnumerator SavedDataToTransmission(bool inspect=false){
+        yield return SaveStage(13,"Continue opens the original Saved Data screen");yield return Frames(20);
+        if(inspect)foreach(int page in new[]{0,1,2,3,5,6,7}){
+            Check(Idas3SceneModeFlowValue(58)==page,"Saved Data page order: "+page);
+            yield return Capture("saved-data-page-"+page);
+            yield return Pad(0x8000);
+        }
+        yield return Pad(0x1000);yield return SaveStage(4,"Saved Data End resumes transmission selection");
     }
     private IEnumerator SaveBackToFiles(){
         yield return Pad(0x2000);yield return SaveStage(4,"Back from mode reopens transmission selection");
@@ -195,20 +213,20 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         yield return Capture("save-change-car");yield return Pad(0x2000);
         Check(Idas3SceneModeFlowValue(42)==0&&Idas3SceneModeFlowValue(5)==1,"Back closes the action panel first");
         yield return SaveClick(150,130);yield return SaveClick(380,380);
-        yield return SaveStage(4,"Continue opens transmission selection");
+        yield return SavedDataToTransmission(true);
         Check(Idas3SceneModeFlowValue(43)==0&&Idas3SceneModeFlowValue(48)==1,"Continue keeps the current saved car and driver");
         Check(Idas3SceneModeFlowValue(51)==0,"Continue restores the saved manual transmission");
         yield return Capture("continue-choose-manual");
         yield return Pad(8);yield return Capture("continue-choose-automatic");yield return Fixture(371);
         yield return Pad(0x2000);yield return SaveStage(1,"Cancelling Continue transmission returns to save actions");
-        yield return Fixture(371);yield return SaveClick(380,380);yield return SaveStage(4,"Continue transmission can be reopened");
+        yield return Fixture(371);yield return SaveClick(380,380);yield return SavedDataToTransmission();
         Check(Idas3SceneModeFlowValue(51)==0,"Cancelled Automatic preview does not replace the saved Manual default");
         yield return SaveTransmissionToMode(true,"Continue confirms Automatic and reaches mode selection");yield return Fixture(372);
         yield return Pad(0x2000);yield return SaveStage(4,"Mode Back reopens Continue transmission");
         Check(Idas3SceneModeFlowValue(51)==1,"Reopened transmission defaults to the confirmed Automatic setting");
         yield return Fixture(370);yield return Pad(8);yield return Fixture(371);
         yield return Pad(0x2000);yield return SaveStage(1,"Cancel a Manual preview without replacing Automatic");yield return Fixture(371);
-        yield return SaveClick(380,380);yield return SaveStage(4,"Continue reloads the persisted Automatic setting");
+        yield return SaveClick(380,380);yield return SavedDataToTransmission();
         Check(Idas3SceneModeFlowValue(51)==1,"Cancelled Manual preview does not replace saved Automatic");
         yield return Capture("continue-saved-automatic");yield return SaveTransmissionToMode(false,"Continue can change back to Manual");yield return Fixture(373);
         yield return SaveBackToFiles();yield return Fixture(374);
@@ -474,12 +492,14 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             yield return Frames(120);
             Check(Idas3SceneModeFlowValue(1)==2,"Leaderboard is visible after a finish outside the top ten");
             yield return Capture("time-attack-outside-top-ten");
-            yield return Pad(0x1000);yield return Until(()=>Idas3SceneModeFlowValue(1)==3,60,"Leaderboard confirm reaches Continue");
+            yield return Pad(0x1000);yield return Until(()=>Idas3SceneModeFlowValue(1)==5,60,"Leaderboard confirm reaches Password");
+            yield return Frames(20);yield return Capture("time-attack-password");yield return Pad(0x1000);
+            yield return Until(()=>Idas3SceneModeFlowValue(1)==3,60,"Password confirm reaches Continue");
             yield return Capture("time-attack-continue");yield return Pad(0x1000);
             yield return Until(()=>Idas3SceneModeFlowValue(0)==0&&Idas3SceneModeFlowValue(4)==1,100,"Continue returns to course selection");
             int leaderboardCourseStage=Idas3SceneModeFlowValue(5);
             yield return Fixture(6);yield return Pad(0x8);yield return Pad(0x1000);
-            yield return Until(()=>Idas3SceneModeFlowValue(0)==0&&Idas3SceneModeFlowValue(4)==1,100,"Continue No exits");
+            yield return Until(()=>Idas3SceneModeFlowValue(0)==0&&Idas3SceneModeFlowValue(4)==1,900,"Continue No shows card retrieval and Game Over, then exits");
             Check(Idas3SceneModeFlowValue(5)!=leaderboardCourseStage,"Continue No returns to title");
             Finish(true,null);yield break;
         }
@@ -691,6 +711,7 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         yield return Until(()=>host.Ready,600,"Game initialization");
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-replay-performance-check")>=0){
             yield return Frames(3);frozen=true;
+            Check(Idas3CommunityTimes.SubmissionBuild(Application.version),"Player version must match the Time Attack submission policy");
             Check(Idas3SceneModeFlowFixture(-8)==1,"Online/Legend capture keeps exact opponent telemetry");
             var library=host.GetComponent<Idas3ReplayLibrary>();
             yield return Until(()=>Idas3ReplayLibrary.Files(library.Folder).Length==1,600,"Background local save");
@@ -714,26 +735,26 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             var run=new Idas3CommunityTimes.Run{ticks6000=count*100};
             var upload=System.Threading.Tasks.Task.Run(()=>Idas3CommunityTimes.ReplayEnvelope(run,Idas3ReplayCodec.Encode(raw)));
             while(!upload.IsCompleted)yield return null;
-            Check(upload.GetAwaiter().GetResult().Length>0,"Community replay processing runs off thread");
+            Check(upload.GetAwaiter().GetResult().Length>0,"Legacy replay codec compatibility helper runs off thread");
             File.WriteAllText(Path.Combine(root,"performance.json"),"{\"syncSaveMs\":"+syncMs.ToString(System.Globalization.CultureInfo.InvariantCulture)+",\"asyncDispatchMs\":"+dispatchMs.ToString(System.Globalization.CultureInfo.InvariantCulture)+",\"asyncTotalMs\":"+asyncMs.ToString(System.Globalization.CultureInfo.InvariantCulture)+",\"framesDuringSave\":"+updateFrames+",\"samples\":"+count+",\"exactBytes\":true}");
-            Check(Idas3SceneModeFlowFixture(-5)==1,"Actual Time Attack finish generates a required replay");
+            Check(Idas3SceneModeFlowFixture(-5)==1,"Actual Time Attack finish publishes a time without a leaderboard replay");
             host.GameOptions.Current.communityTimes=true;
             var community=host.gameObject.AddComponent<Idas3CommunityTimes>();
             string storage=Path.Combine(root,"community");community.Initialize(host,host.GameOptions,host.PauseMenu,storage,true);
-            yield return Until(()=>community.PendingCount==1,1200,"Background community queue commit");
-            Check(Directory.GetFiles(storage,"*.idr").Length==1,"Completed shared replay persisted before acknowledgment");
+            yield return Until(()=>community.PendingCount==1,1200,"Community time queue commit");
+            Check(Directory.GetFiles(storage,"*.idr").Length==0,"Time queued without a replay upload cache");
             var pending=File.ReadAllText(Path.Combine(storage,"pending.json"));Check(pending.Contains(Application.version),"Queue keeps current build policy");
             community.StopAllCoroutines();
             Finish(true,null);yield break;
         }
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-record-separation-check")>=0){
             yield return Frames(3);frozen=true;
-            var entry=new Idas3CommunityTimes.Run{id=Guid.NewGuid().ToString(),ruleset=Idas3CommunityTimes.Ruleset,build=Application.version,epoch=2,replayVersion=2,replayAvailable=true,condition=0,weather=0,car=0,ticks6000=60000,nameGlyphs=new[]{164,169,179,170,180},splits=new[]{20000,40000,60000,0}};
+            var entry=new Idas3CommunityTimes.Run{id=Guid.NewGuid().ToString(),ruleset=Idas3CommunityTimes.Ruleset,build=Idas3CommunityTimes.CurrentBuild,epoch=2,replayVersion=2,replayAvailable=true,condition=0,weather=0,car=0,ticks6000=60000,nameGlyphs=new[]{164,169,179,170,180},splits=new[]{20000,40000,60000,0}};
             var cache=new Idas3CommunityTimes.Snapshot{ruleset=Idas3CommunityTimes.Ruleset,epoch=2,entries=new[]{entry}};
             Check(Idas3CommunityTimes.UsableCommunitySnapshot(cache),"New replay-backed records remain visible");
             cache.epoch=1;entry.epoch=1;Check(!Idas3CommunityTimes.UsableCommunitySnapshot(cache),"Old season cache rejected");
             cache.epoch=2;entry.epoch=2;entry.build="0.3.94-player-replays.4";Check(!Idas3CommunityTimes.UsableCommunitySnapshot(cache),"Old build cache rejected");
-            entry.build=Application.version;entry.replayAvailable=false;Check(!Idas3CommunityTimes.UsableCommunitySnapshot(cache),"Pre-replay cache rejected");
+            entry.build=Idas3CommunityTimes.CurrentBuild;entry.replayAvailable=false;Check(Idas3CommunityTimes.UsableCommunitySnapshot(cache),"Time-only snapshot accepted");
             entry.replayAvailable=true;
             Check(!Idas3CommunityTimes.UseCommunityRecords(true,cache,10,0),"Offline startup does not trust a disk cache");
             Check(Idas3CommunityTimes.UseCommunityRecords(true,cache,10,85),"Successful current fetch enables remote records");
@@ -790,7 +811,8 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             var menu=host.PauseMenu;menu.OpenAttractOptions();menu.SelectTab(6);Check(menu.SelectedTab==6,"Replays category selectable");menu.Activate();
             Check(menu.TryConsumeCommand(out var command)&&command==Idas3PauseMenu.Command.Replays,"Controller can open library");
             host.GameOptions.Draft.communityTimes=true;host.GameOptions.Draft.replayTimeAttack=false;menu.Navigate(1);menu.Activate();
-            Check(!host.GameOptions.Draft.replayTimeAttack&&host.GameOptions.Draft.TimeAttackReplayRequired,"Required capture cannot be disabled");
+            Check(host.GameOptions.Draft.replayTimeAttack&&host.GameOptions.Draft.TimeAttackReplayRequired,"Local capture can be enabled while sharing times");
+            menu.Activate();Check(!host.GameOptions.Draft.replayTimeAttack&&!host.GameOptions.Draft.TimeAttackReplayRequired,"Local capture can be disabled while sharing times");
             menu.Navigate(1);menu.Activate();Check(host.GameOptions.Draft.replayOnline,"Controller toggles online capture");menu.Navigate(1);menu.Activate();Check(host.GameOptions.Draft.replayLegend,"Controller toggles Legend capture");
             menu.Back();Check(menu.DiagnosticSelection==0,"Back returns to categories");menu.Navigate(-1);Check(menu.SelectedTab==5,"Other categories remain reachable");menu.SelectTab(6);
             yield return Capture("replays-options");
@@ -798,20 +820,20 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         }
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-replay-policy-check")>=0){
             yield return Frames(3);frozen=true;
-            var fresh=new Idas3CommunityTimes.Run{id=Guid.NewGuid().ToString(),ruleset=Idas3CommunityTimes.Ruleset,build=Application.version,epoch=2,replayVersion=2,condition=0,weather=0,car=0,ticks6000=120000,nameGlyphs=new[]{181,166,180,181,220},splits=new[]{40000,80000,120000,0}};
-            var old=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));old.id=Guid.NewGuid().ToString();old.replayVersion=1;
+            var fresh=new Idas3CommunityTimes.Run{id=Guid.NewGuid().ToString(),ruleset=Idas3CommunityTimes.Ruleset,build=Idas3CommunityTimes.CurrentBuild,epoch=2,replayVersion=2,condition=0,weather=0,car=0,ticks6000=120000,nameGlyphs=new[]{181,166,180,181,220},splits=new[]{40000,80000,120000,0}};
+            var old=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));old.id=Guid.NewGuid().ToString();old.replayVersion=1;old.build="0.3.95-community-replays.49";
             var imported=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));imported.id=Guid.NewGuid().ToString();imported.imported=1;
-            Check(Idas3CommunityTimes.Uploadable(fresh)&&!Idas3CommunityTimes.Uploadable(old)&&!Idas3CommunityTimes.Uploadable(imported),"Only fresh replay-backed runs are uploadable");
+            Check(Idas3CommunityTimes.Uploadable(fresh)&&!Idas3CommunityTimes.Uploadable(old)&&!Idas3CommunityTimes.Uploadable(imported),"Only current-build non-imported times are uploadable");
             foreach(string build in new[]{"0.3.93-replay-detail.1","0.3.94-player-replays.4","0.3.95-community-replays.0","0.3.95-other.99","invalid",null})Check(!Idas3CommunityTimes.SupportedBuild(build),"Older/unknown build rejected: "+build);
-            foreach(string build in new[]{Application.version,"0.3.95-community-replays.2","0.3.95-community-replays.10","0.3.95","0.3.96","0.4.0"})Check(Idas3CommunityTimes.SupportedBuild(build),"Current/newer build accepted: "+build);
-            Check(Application.version==Idas3CommunityTimes.RequiredSubmissionBuild&&Idas3CommunityTimes.SubmissionBuild(Application.version),"Current player exactly matches the upload release");
-            foreach(string build in new[]{"0.3.95-community-replays.1","0.3.95-community-replays.36","0.3.95-community-replays.37","0.3.95-community-replays.38","0.3.95-community-replays.39","0.3.95-community-replays.40","0.3.95-community-replays.41","0.3.95-community-replays.42","0.3.95-community-replays.43","0.3.95-community-replays.44","0.3.95-community-replays.45","0.3.95-community-replays.46","0.3.95-community-replays.47","0.3.95-community-replays.48","0.3.95-community-replays.49","0.3.95-community-replays.51","0.3.96","0.4.0","0.3.95-community-replays.050","0.3.95-community-replays.50 ",null}){
+            foreach(string build in new[]{Idas3CommunityTimes.CurrentBuild,"0.3.95-community-replays.2","0.3.95-community-replays.10","0.3.95","0.3.96","0.4.0"})Check(Idas3CommunityTimes.SupportedBuild(build),"Current/newer build accepted: "+build);
+            Check(Idas3CommunityTimes.CurrentBuild==Idas3CommunityTimes.RequiredSubmissionBuild&&Idas3CommunityTimes.SubmissionBuild(Idas3CommunityTimes.CurrentBuild),"Current player exactly matches the upload release");
+            foreach(string build in new[]{"0.3.95-community-replays.1","0.3.95-community-replays.36","0.3.95-community-replays.37","0.3.95-community-replays.38","0.3.95-community-replays.39","0.3.95-community-replays.40","0.3.95-community-replays.41","0.3.95-community-replays.42","0.3.95-community-replays.43","0.3.95-community-replays.44","0.3.95-community-replays.45","0.3.95-community-replays.46","0.3.95-community-replays.47","0.3.95-community-replays.48","0.3.95-community-replays.49","0.3.95-community-replays.50","0.3.95-community-replays.51","0.3.95-community-replays.52","0.3.95-community-replays.54","0.3.96","0.4.0","0.3.95-community-replays.050","0.3.95-community-replays.50 ",null}){
                 var wrongBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));wrongBuild.build=build;
                 Check(!Idas3CommunityTimes.SubmissionBuild(build)&&!Idas3CommunityTimes.Uploadable(wrongBuild),"Only exact build can submit: "+build);
             }
             var previousBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));previousBuild.id=Guid.NewGuid().ToString();previousBuild.build="0.3.95-community-replays.36";
             previousBuild.ticks6000=60000;previousBuild.splits=new[]{20000,40000,60000,0};
-            var futureBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));futureBuild.id=Guid.NewGuid().ToString();futureBuild.build="0.3.95-community-replays.51";
+            var futureBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));futureBuild.id=Guid.NewGuid().ToString();futureBuild.build="0.3.95-community-replays.54";
             var previousSeason=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));previousSeason.id=Guid.NewGuid().ToString();previousSeason.epoch=1;
             Check(!Idas3CommunityTimes.Uploadable(previousBuild)&&!Idas3CommunityTimes.Uploadable(previousSeason),"Old build and season queues cannot re-enter rankings");
             Check(Idas3CommunityTimes.Flatten(new Idas3CommunityTimes.Snapshot{ruleset=Idas3CommunityTimes.Ruleset,entries=new[]{old,imported}}).Length==28,"Existing leaderboard history remains readable");
@@ -828,7 +850,7 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             var client=host.gameObject.AddComponent<Idas3CommunityTimes>();client.Initialize(host,host.GameOptions,host.PauseMenu,community,true);client.StopAllCoroutines();
             Check(client.PendingCount==1,"Faster old-release time is discarded without blocking the current-release queue");
             string saved=File.ReadAllText(Path.Combine(community,"pending.json"));Check(saved.Contains(fresh.id)&&!saved.Contains(old.id)&&!saved.Contains(imported.id)&&!saved.Contains(previousBuild.id)&&!saved.Contains(futureBuild.id),"Queue migration keeps only the exact-release run");
-            Check(File.Exists(Path.Combine(community,fresh.id+".idr")),"Eligible queued replay is preserved");
+            Check(!File.Exists(Path.Combine(community,fresh.id+".idr")),"Obsolete replay cache removed while its eligible queued time is preserved");
             var menu=host.PauseMenu;menu.OpenAttractOptions();menu.SelectTab(5);menu.Navigate(1);Check(menu.DiagnosticSelection==2,"Controller reaches rankings");
             menu.Navigate(1);Check(menu.DiagnosticSelection==3,"Controller reaches Discord presence");menu.Navigate(1);Check(menu.DiagnosticSelection==4,"Controller reaches lights-off advantage");menu.Navigate(1);Check(menu.DiagnosticSelection==5,"Controller reaches Reset after Online options");menu.Navigate(1);menu.Navigate(1);Check(menu.DiagnosticSelection==7,"Controller reaches Back without an import row");
             menu.SetOpen(false);Finish(true,null);yield break;
@@ -861,19 +883,19 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             var uploading=host.gameObject.AddComponent<Idas3CommunityTimes>();uploading.Initialize(host,host.GameOptions,menu,community);
             yield return Frames(3);
             string queued=File.ReadAllText(Path.Combine(community,"pending.json"));
-            Check(queued.Contains("\"replayVersion\":2"),"Replay version persisted with queued time");
-            var replayFiles=Directory.GetFiles(community,"*.idr");Check(replayFiles.Length==1,"Matching replay persisted before network upload");
-            string submittedId=Path.GetFileNameWithoutExtension(replayFiles[0]);
+            Check(queued.Contains("\"replayVersion\":0"),"Time-only result persisted before network upload");
+            Check(Directory.GetFiles(community,"*.idr").Length==0,"No recording queued for network upload");
+            string submittedId=JsonUtility.FromJson<CommunityQueue>(queued).runs[0].id;
             // Recreate the uploader before its initial network delay expires:
-            // the finish was acknowledged, so only disk can recover the pair.
+            // the finish was acknowledged, so only disk can recover the time.
             uploading.StopAllCoroutines();Destroy(uploading);yield return Frames(1);
             uploading=host.gameObject.AddComponent<Idas3CommunityTimes>();uploading.Initialize(host,host.GameOptions,menu,community);
-            Check(uploading.PendingCount==1,"Restart reloads the acknowledged time/replay pair from disk");
+            Check(uploading.PendingCount==1,"Restart reloads the acknowledged time from disk");
             double deadline=Time.realtimeSinceStartupAsDouble+60;
             while(Time.realtimeSinceStartupAsDouble<deadline&&!File.Exists(Path.Combine(community,"snapshot.json")))yield return null;
             Check(File.Exists(Path.Combine(community,"snapshot.json")),"Unity HTTPS registration/upload/download completed");
             var downloaded=JsonUtility.FromJson<Idas3CommunityTimes.Snapshot>(File.ReadAllText(Path.Combine(community,"snapshot.json")));
-            Check(Array.Exists(downloaded.entries,r=>r.id==submittedId&&r.replayAvailable),"Uploaded native finish has server-attached replay");
+            Check(Array.Exists(downloaded.entries,r=>r.id==submittedId&&!r.replayAvailable),"Uploaded native finish is ranked without a replay");
             Check(File.ReadAllText(Path.Combine(community,"pending.json")).Contains("\"runs\":[]"),"Acknowledged upload removed from durable queue");
             Check(Directory.GetFiles(community,"*.idr").Length==0,"Acknowledged replay file removed from queue");
             Finish(true,null);yield break;
@@ -966,12 +988,14 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         yield return Until(()=>Idas3SceneModeFlowValue(0)==0,100,"TA analysis accepts controller confirm");
         yield return Fixture(5);yield return Frames(120);
         Check(Idas3SceneModeFlowValue(1)==2,"TA named local ranking");yield return Capture("time-attack-ranking");
-        yield return Pad(0x1000);yield return Until(()=>Idas3SceneModeFlowValue(1)==3,60,"Ranking fades to Continue");
+        yield return Pad(0x1000);yield return Until(()=>Idas3SceneModeFlowValue(1)==5,60,"Ranking fades to Password");
+        yield return Frames(20);yield return Capture("time-attack-password");yield return Pad(0x1000);
+        yield return Until(()=>Idas3SceneModeFlowValue(1)==3,60,"Password fades to Continue");
         yield return Capture("time-attack-continue");yield return Pad(0x1000);
         yield return Until(()=>Idas3SceneModeFlowValue(0)==0&&Idas3SceneModeFlowValue(4)==1,100,"Continue YES returns to course menu");
         int courseStage=Idas3SceneModeFlowValue(5);
         yield return Fixture(6);yield return Pad(0x8);Check(Idas3SceneModeFlowValue(6)==1,"Controller chooses NO");
-        yield return Pad(0x1000);yield return Until(()=>Idas3SceneModeFlowValue(0)==0&&Idas3SceneModeFlowValue(4)==1,100,"Continue NO exits");
+        yield return Pad(0x1000);yield return Until(()=>Idas3SceneModeFlowValue(0)==0&&Idas3SceneModeFlowValue(4)==1,900,"Continue NO shows card retrieval and Game Over, then exits");
         Check(Idas3SceneModeFlowValue(5)!=courseStage,"Continue NO returns to title");
         for(int kind=0;kind<3;++kind){
             yield return Fixture(7+kind);yield return Frames(60);
@@ -1239,7 +1263,8 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             if(failure!=null){Finish(false,failure.ToString());yield break;}if(value is IEnumerator child)stack.Push(child);else yield return value;
         }
     }
-    private void Update(){if(finished)return;if(host.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>240)Finish(false,"Mode-flow timeout");}
+    private void Update(){if(finished)return;if(host.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>240)Finish(false,
+        "Mode-flow timeout after "+lastCheck+"; stage="+host.Status.frontendStage+", frozen="+frozen+", submitted="+submittedFrames);}
     private void Finish(bool passed,string error){
         if(finished)return;finished=true;bool stopped=false;
         try{host.StopNative();stopped=!host.Ready;}catch(Exception e){error=(error??"")+e;passed=false;}

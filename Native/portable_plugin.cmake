@@ -64,6 +64,8 @@ add_library(Idas3Unity ${IDAS3_PLUGIN_KIND}
   src/original_car_light_gain.cpp
   src/original_driver_entry_route.cpp
   src/original_tuning_course_menu.cpp
+  src/original_saved_data.cpp
+  src/original_net_password.cpp
   src/original_tuning_candidate.cpp
   src/original_card_check.cpp
   src/original_rival.cpp
@@ -133,6 +135,7 @@ add_library(Idas3Unity ${IDAS3_PLUGIN_KIND}
   src/time_attack_ghost.cpp
   src/time_attack_records.cpp
   src/local_driver_profiles.cpp
+  src/online_result_reward.cpp
   src/local_driver_setup.cpp
   src/local_save_slots.cpp
   src/renderer.cpp
@@ -187,17 +190,34 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   target_include_directories(race_music_catalog_portable PRIVATE src vendor/lz4)
   target_compile_definitions(race_music_catalog_portable PRIVATE IDAS3_PORTABLE_SCENE)
   target_link_libraries(race_music_catalog_portable PRIVATE Idas3Unity)
-  foreach(check IN ITEMS native_load_keepalive odawara_handling time_attack_records time_attack_ghost full_tune)
+  foreach(check IN ITEMS native_load_keepalive odawara_handling time_attack_records time_attack_ghost full_tune
+      local_driver_profile_recovery online_result_reward original_saved_data original_session_exit unity_ui_memory unity_ui_reload)
     add_executable(${check}_portable tests/${check}_tests.cpp)
     target_include_directories(${check}_portable PRIVATE src vendor/lz4)
     target_compile_definitions(${check}_portable PRIVATE IDAS3_PORTABLE_SCENE)
     target_link_libraries(${check}_portable PRIVATE Idas3Unity)
   endforeach()
+  add_executable(original_saved_data_ios_portable tests/original_saved_data_tests.cpp src/original_saved_data.cpp)
+  target_include_directories(original_saved_data_ios_portable PRIVATE src vendor/lz4)
+  target_compile_definitions(original_saved_data_ios_portable PRIVATE IDAS3_PORTABLE_SCENE IDAS3_IOS)
+  target_link_libraries(original_saved_data_ios_portable PRIVATE Idas3Unity)
   add_test(NAME native_load_keepalive COMMAND native_load_keepalive_portable)
   add_test(NAME odawara_handling COMMAND odawara_handling_portable "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/../RuntimeAssets/ODAWARA")
   add_test(NAME time_attack_records COMMAND time_attack_records_portable)
   add_test(NAME time_attack_ghost COMMAND time_attack_ghost_portable)
   add_test(NAME full_tune COMMAND full_tune_portable "${CMAKE_SOURCE_DIR}")
+  add_test(NAME local_driver_profile_recovery COMMAND local_driver_profile_recovery_portable "${CMAKE_BINARY_DIR}")
+  add_test(NAME online_result_reward COMMAND online_result_reward_portable "${CMAKE_BINARY_DIR}")
+  add_test(NAME unity_ui_memory COMMAND unity_ui_memory_portable --expect-bounded)
+  add_test(NAME unity_ui_reload COMMAND unity_ui_reload_portable "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/unity-ui-reloads.csv" --expect-bounded)
+  foreach(language IN ITEMS 0 1)
+    add_test(NAME original_saved_data_${language} COMMAND original_saved_data_portable "${CMAKE_SOURCE_DIR}"
+      "${CMAKE_BINARY_DIR}/saved-data-${language}" ${language})
+    add_test(NAME original_saved_data_ios_${language} COMMAND original_saved_data_ios_portable "${CMAKE_SOURCE_DIR}"
+      "${CMAKE_BINARY_DIR}/saved-data-ios-${language}" ${language})
+  endforeach()
+  add_test(NAME original_session_exit COMMAND original_session_exit_portable "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}/session-exit")
   add_executable(chinese_arcade_tests tests/chinese_arcade_tests.cpp)
   target_include_directories(chinese_arcade_tests PRIVATE src vendor/lz4)
   target_compile_definitions(chinese_arcade_tests PRIVATE IDAS3_PORTABLE_SCENE)

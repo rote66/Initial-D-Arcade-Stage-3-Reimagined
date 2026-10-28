@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.95-community-replays.53 - October 26, 2026
+
+- Online races now retry stalled input synchronization through the reliable channel. If confirmed race progress cannot recover within 15 seconds, the race ends without recording a result or awarding points, even when pings still arrive.
+
+- Fix menu transition guards retaining ownership of driving controls after entering an online race or rematch. Saved Data mouse input, closed online chat and music controls no longer suppress race input indefinitely; open overlays and their closing frames still consume input.
+- Allow focused physical release to clear a covered menu's guard, preventing chat and music transitions from blocking each other. Unfocused neutral samples still cannot rearm menu actions.
+
+Both online drivers should update. Controlled local tests reproduce the old control lock and indefinite synchronization stall, and verify guard release, reliable recovery, neutral disconnects and rematches. The exact reported live incident has not been independently reproduced; EOS testing on two Windows PCs using separate Internet connections remains pending. This update is published at the owner's request before the complete stable acceptance matrix is finished.
+
+Version .53 is required for new community Time Attack submissions. Existing scores are retained; leaderboard replay uploads remain disabled.
+
+## 0.3.95-community-replays.52 - October 26, 2026
+
+This full release combines the stabilization work and subsequent desktop fixes since .51. The owner requested publication before the complete stable acceptance matrix was finished, including real matchmaking and room-code races on two Windows PCs using different Internet connections. Performance improvements vary by track and hardware; this is not a verified universal 30% FPS increase.
+
+- Reduce repeated mesh, HUD, material and input allocations, reuse prepared imported-course geometry, and release obsolete course resources during transitions. Preserve the current graphics and course detail.
+- Reduce finish-line replay saving work by sharing serialization between the last run and personal-best ghost. Online leaderboards continue to store times without replays.
+- Restore the original Saved Data pages and wire Configuration options to their gameplay settings. Correct selection boxes, widescreen background alignment, and per-car configuration/tuning behavior.
+- Restore finish-line-only post-race and session-ending screens, including Internet Ranking/password artwork, effects and car-camera framing. Correct the racer-level-up placement before points and remove the temporary Time Attack finish overlay.
+- Restore flashing Continue/rematch selections and allow revving, steering and headlight controls during race introductions. Correct blind-attack HUD visibility.
+- Correct car lighting and the floating headlight glow, restore attract-mode lamp illumination and projected headlights, and retain the original light on/off cues. Remove the added random falling-leaf effect.
+- Keep engine audio running through network stalls and refresh public rooms after online initialization and while browsing.
+- Centralize pause, music and online menu input ownership; suppress held controls across focus changes and menu transitions.
+- Recover interrupted online result saves without granting rewards twice. Improve updater recovery, long Windows path handling, localized errors and package verification.
+
+- Derive setup download filenames from the pinned version, fixing a stale core filename, and include standalone recovery tools for interrupted updates.
+
+Existing players can use the in-game updater, with changed-file patches for .20 through .51. New installations use `Initial-D-Setup-0.3.95.52.zip`. Version .52 is required for new community Time Attack submissions; existing leaderboard scores are preserved and leaderboard replay uploads remain disabled. The release notes list the completed checks and remaining verification limits.
+
+## 0.3.95-community-replays.51 - October 18, 2026
+
+- Verify installer downloads using .NET SHA-256 without requiring the PowerShell `Get-FileHash` module.
+- Disable community leaderboard replay storage, uploads and downloads, and remove existing online recordings while preserving posted times. New clients submit results without replay files; existing clients can continue posting times. Personal replays and local ghosts are unaffected.
+- Add private online-player search by current or previous username, with persistent Player IDs and last-seen history. Admins can ban or unban a registered account while it is offline; renaming preserves the ban. Players enter the directory when they next connect using this update.
+- Enforce online-directory bans alongside Epic sanctions before matchmaking and during connected play. Updated clients use a separate compatible-room protocol; existing Epic sanctions continue to apply.
+- Fix clipped updater errors: show a short failure summary and Windows launch error number, with scrollable full details, Copy Details, and a manual-download link.
+- Add Japanese and Chinese text for the updater error screen. Keep the existing non-elevated installer launch and leave the game open when the helper cannot start.
+
 ## 0.3.95-community-replays.50 - October 11, 2026
 
 Restore Quick Match discovery of waiting public hosts and improve EOS connection startup. Both drivers must update for online races. Version .50 is required for new community Time Attack submissions.

@@ -155,6 +155,10 @@ namespace Idas3.Multiplayer
             if(pendingReturnCheck&&(pendingPeerRoot.Length==0||pendingOnlineCheck||pendingDisconnectCheck))throw new ArgumentException("Return-to-lobby check requires two isolated peers and must run separately from disconnect/online-service checks.");
             pendingPort=IntegerArgument(args,"-idas3-multiplayer-port",27830,1024,65535);
             pendingCourse=IntegerArgument(args,"-idas3-multiplayer-course",0,0,Idas3CourseCatalog.Count-1);
+            if(ScoredRecoveryCheck&&!ScoredCheck)throw new ArgumentException("Result recovery checks require the isolated scored-race diagnostic.");
+            if(ScoredCheck&&(P2pRaceCheck||pendingOnlineCheck||pendingDisconnectCheck||pendingReturnCheck||pendingCourse!=0||pendingPeerRoot.Length==0||
+                (pendingRole=="join"&&!pendingAddress.StartsWith("127.0.0.1:",StringComparison.Ordinal))))
+                throw new ArgumentException("Scored checks require two isolated loopback LAN peers on Myogi, without other diagnostic modes.");
             Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
             if(Array.IndexOf(args,"-idas3-multiplayer-saved-cars-check")>=0){
                 var fixtures=Path.GetFullPath(Argument(args,"-idas3-multiplayer-saved-cars-fixture",""));
@@ -166,6 +170,7 @@ namespace Idas3.Multiplayer
             File.WriteAllText(Path.Combine(saves,"settings.txt"),"0 0 0 0 0 1 1 0\n");
             File.WriteAllText(Path.Combine(saves,"native_selection.txt"),"0 0\n");
             File.WriteAllText(Path.Combine(pendingRoot,"ISOLATED_MULTIPLAYER_TEST.txt"),"Local diagnostic profile; no ordinary save loaded.\n");
+            if(ScoredCheck)File.WriteAllText(Path.Combine(pendingRoot,"ISOLATED_SCORED_RACE_TEST.txt"),"Read-only guidance supplies ordinary virtual wheel input; no forced finishes or clock changes.\n");
             Screen.SetResolution(1200,720,FullScreenMode.Windowed);AudioListener.volume=0;
             return true;
         }
@@ -193,11 +198,13 @@ namespace Idas3.Multiplayer
             // A focused neutral poll clears the ordinary device-change release
             // latch before the private run starts driving. Later samples travel
             // through the same bindings as physical input, without using hardware.
-            key=active.KeyHeld;pad=active.ManualCheck?new Idas3ControlBindings.PadState{connected=true,buttons=active.manualPad}:default;return true;
+            key=active.KeyHeld;pad=ScoredCheck?active.ScoredPad():active.ManualCheck?new Idas3ControlBindings.PadState{connected=true,buttons=active.manualPad}:default;return true;
         }
         private bool KeyHeld(KeyCode key)
         {
+            if(scoredRecoveryInput)return !finished&&key==manualKey&&manualKey!=KeyCode.None;
             if(finished||frozen||!driving||!session.RaceReleased||!session.IsRacing)return false;
+            if(ScoredCheck)return false;
             if(key==manualKey&&manualKey!=KeyCode.None)return true;
             if(ContactMotionCheck)return ContactMotionKey(key);
             // Private mirror fixture: let the host pull ahead on the opening
@@ -219,12 +226,27 @@ namespace Idas3.Multiplayer
             if(active==null)return true;
             if(active.finished||active.frozen)return false;
             var mapped=frame;
+            if(active.scoredRecoveryInput){
+                // Reserved menu keys normally come directly from Input.GetKey
+                // in the host. Supply the same held bits for the private device;
+                // focus, release guards, navigation and OnGUI remain unchanged.
+                frame.key0=frame.key1=frame.key2=frame.key3=0;
+                switch(active.manualKey){
+                    case KeyCode.Return:frame.SetKey(13);break;
+                    case KeyCode.LeftArrow:frame.SetKey(37);break;
+                    case KeyCode.RightArrow:frame.SetKey(39);break;
+                    case KeyCode.Backspace:frame.SetKey(8);break;
+                }
+                return true;
+            }
             frame=new Idas3Native.FrameInput{size=(uint)Marshal.SizeOf<Idas3Native.FrameInput>(),flags=1,deltaSeconds=active.acceleratedReturnWait&&!active.session.ExperimentalAuthority?.25:Math.Min(Time.unscaledDeltaTime,.25)};
             if(active.driving&&active.session.RaceReleased&&active.session.IsRacing){
                 // Keep only the action keys produced by ApplyDriving; unrelated
                 // real keyboard shortcuts must not enter the private fixture.
                 foreach(int key in DrivingDiagnosticKeys)if(HasKey(mapped,key))frame.SetKey(key);
                 if(active.ManualCheck){frame.padConnected=mapped.padConnected;frame.padButtons=mapped.padButtons;}
+                if(ScoredCheck){frame.padConnected=mapped.padConnected;frame.padButtons=mapped.padButtons;
+                    frame.thumbLX=mapped.thumbLX;frame.thumbLY=mapped.thumbLY;frame.rightTrigger=mapped.rightTrigger;frame.leftTrigger=mapped.leftTrigger;}
             }
             if(active.pulse!=0){frame.SetKey(active.pulse);active.pulse=0;}
             return true;
@@ -239,7 +261,7 @@ namespace Idas3.Multiplayer
             string value=Argument(args,key,fallback.ToString());
             if(!int.TryParse(value,out int result)||result<min||result>max)throw new ArgumentException("Invalid "+key);return result;
         }
-        private void Start(){StartCoroutine(Guard(Run()));if(MotionCheck)StartCoroutine(RecordRenderedMotion());}
+        private void Start(){StartCoroutine(Guard(ScoredCheck?RunScored():Run()));if(MotionCheck)StartCoroutine(RecordRenderedMotion());}
         private void Update()
         {
             if(finished)return;
@@ -250,9 +272,9 @@ namespace Idas3.Multiplayer
             lastDiagnosticFrame=diagnosticNow;previousFrameConnected=session.HandshakeComplete||session.IsRacing;
             if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-multiplayer-profile")>=0){QualitySettings.vSyncCount=0;Application.targetFrameRate=240;}
             if(host.Failure!=null){Finish(false,host.Failure);return;}
-            double timeout=returnCheck?360:240;
+            double timeout=ScoredCheck?900:returnCheck?360:240;
             if(Time.realtimeSinceStartupAsDouble-began>timeout){Finish(false,"Multiplayer diagnostic exceeded "+timeout+" seconds.");return;}
-            if(session.IsRacing&&session.RaceReleased&&!returnCheckInProgress)ObserveRace();
+            if(session.IsRacing&&session.RaceReleased&&!returnCheckInProgress&&!ScoredCheck)ObserveRace();
         }
         private void Check(bool condition,string reason)
         {
@@ -549,9 +571,11 @@ namespace Idas3.Multiplayer
             if(courseDrawCheck)CheckLockedCourseDraw();
             if(musicCheck)yield return Idas3RaceMusicSmoke.VerifyOnlineRace(host,root,role);
             Phase("racing");driving=true;
+            if(InputReleaseCheck)yield return VerifyInputReleaseDuringRace("first-race");
             yield return Until(()=>raceObserved&&session.RemoteSnapshotsReceived>=10&&lastLocal.raceTicks-firstLocalTick>=90,25,"Race snapshots did not begin moving.");
             Check(!host.ControlBindings.SuppressInput,"Private neutral input did not clear the controller-change release latch.");
             Check((host.DiagnosticSubmittedInput.flags&2u)==0&&HasKey(host.DiagnosticSubmittedInput,87),"Mapped private throttle did not reach the native driving packet.");
+            if(RaceProgressCheck){yield return VerifyRaceProgress();Finish(true,null);yield break;}
             if(ManualCheck)yield return VerifyManualShifts();
             if(HeadlightsCheck)yield return VerifyOpponentHeadlights();
             if(showcaseCheck||ObserveStartOnly)Check(showcaseObserver.OnlineCheckPassed,showcaseObserver.OnlineCheckError??"Online presentation check failed.");
@@ -581,6 +605,7 @@ namespace Idas3.Multiplayer
             menu.Toggle();yield return Frames(3);liveMenuReopened=menu.IsOpen;
             Check(liveMenuReopened,"The same live race could not reopen its F1 menu after automatic closure.");
             menu.Toggle();yield return Frames(3);Check(!menu.IsOpen,"Live race menu could not close again.");
+            if(InputReleaseCheck)yield return VerifyInputReleaseDuringRace("closed-live-overlay");
             yield return CaptureWorld("race-bumper-late");
             pulse=67;yield return Frames(8);yield return CaptureWorld("race-chase-late");
             if(courseDrawCheck){menu.SetOpen(true);yield return Frames(3);yield return CaptureMenu("selected-course");menu.SetOpen(false);yield return Frames(3);}
@@ -838,6 +863,7 @@ namespace Idas3.Multiplayer
                 report.secondCountdown=previousPhase==5&&digits.Count==3&&digits[0]==3&&digits[1]==2&&digits[2]==1;
                 Check(report.secondCountdown&&session.RaceReleased,"Second race did not complete source 3,2,1 and synchronized GO.");
                 Phase("driving-second-race");driving=true;
+                if(InputReleaseCheck)yield return VerifyInputReleaseDuringRace("rematch");
                 yield return Until(()=>session.LocalSnapshot.raceTicks>=300&&session.RemoteSnapshot.raceTicks>=300&&session.RemoteSnapshotsReceived>=50&&session.LocalSnapshot.speed>3&&session.RemoteSnapshot.speed>3,35,"Second race did not resume local/remote driving and snapshots.");
                 PeerGeometry(out int peerRanges,out int mainRanges);report.secondLocalTicks=session.LocalSnapshot.raceTicks;report.secondRemoteTicks=session.RemoteSnapshot.raceTicks;report.secondReceived=session.RemoteSnapshotsReceived;report.secondSent=session.SnapshotsSent;
                 report.secondDrive=peerRanges>0&&mainRanges>0&&(host.Status.flags&16u)!=0;
@@ -1271,6 +1297,7 @@ namespace Idas3.Multiplayer
             if(IosLanCheck)report.scope="One iOS Simulator plus a temporary macOS Unity/native peer, real loopback TCP, matching iOS source identity, isolated saves, Ready/start/countdown, 600 ticks per car, at least 100 remote snapshots, remote car geometry, live menu and real socket-loss neutral finish/acknowledgement. Physical-device Wi-Fi permission and two-iPhone performance require device testing.";
             if(P2pRaceCheck)report.scope="Two real Unity game processes using production Epic Online Services P2P, private scoped room admission and separate test cache profiles and verified distinct EOS identities. Existing native car agreement, course loading, ready/start/countdown, shared simulation, at least ten seconds of observed driving, received snapshots, peer geometry and coordinated leaving checks run with isolated game saves. The longest main-thread frame gap while connected and host start-call duration are measured. This tests the observed course-loading pause, not every slow-PC duration or arbitrary-network latency.";
             if(onlineCheck)report.scope="Epic Online Services initialized inside the real player with an isolated build key, created one private host room, rendered the actual F1 menu and left that room. No public matchmaking ticket or other player room was used. This validates service initialization and private-room lifecycle; it does not validate a second peer, a completed match or internet Relay performance.";
+            if(ScoredCheck)report.scope=ScoredScope;
             return report;
         }
         private void Finish(bool passed,string error)

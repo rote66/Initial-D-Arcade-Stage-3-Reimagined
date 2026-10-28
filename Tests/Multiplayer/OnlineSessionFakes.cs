@@ -36,9 +36,10 @@ namespace Idas3.Multiplayer
         public event Action<string> Error;
         internal int Initializations,Polls,Starts,Cancellations,Leaves,Disposals,NameRefreshes;
         internal void RefreshPlayerName(){++NameRefreshes;}
-        internal bool FinishInitialization,ReentrantCancellation;
+        internal bool FinishInitialization,ReentrantCancellation=false;
         internal Action PollAction;
         internal readonly List<byte[]> Sent=new List<byte[]>();
+        internal readonly List<bool> Reliable=new List<bool>();
         public bool Initialize(){
             if(Available||IsBusy)return Available;
             ++Initializations;IsBusy=true;Status="Signing in";return false;
@@ -62,11 +63,13 @@ namespace Idas3.Multiplayer
         internal void Deliver(byte[] packet)=>Message?.Invoke(packet);
         public void Leave(){++Leaves;IsMatching=IsBusy=Connected=IsHost=false;RoomCode="";PeerChanged?.Invoke();}
         public void Dispose(){++Disposals;Available=false;}
-        public void Send(byte[] data,bool reliable)=>Sent.Add((byte[])data.Clone());
+        public void Send(byte[] data,bool reliable){Sent.Add((byte[])data.Clone());Reliable.Add(reliable);}
         public void Host(string name){IsBusy=true;Status="Creating room";}
         public void HostQuickMatch(string name)=>throw new InvalidOperationException("Queue must not create a fallback room");
         public void Join(string code)=>throw new InvalidOperationException("Queue must not join a discovered room");
-        public void Browse()=>throw new InvalidOperationException("Queue must not use legacy discovery");
+        internal bool AllowBrowse = false;
+        internal int Browses;
+        public void Browse(){if(!AllowBrowse)throw new InvalidOperationException("Queue must not use legacy discovery");++Browses;}
     }
 
     // No native library is loaded. Only reading one synthetic stock car is
@@ -79,18 +82,45 @@ namespace Idas3.Multiplayer
         }
         internal static int Idas3MultiplayerCurrentCar()=>13;
         internal static int Idas3MultiplayerEnableAuthorityRules(ulong race,int automatic,int boost,int collisions)=>throw Unexpected();
+#if IDAS3_RACE_PROGRESS_TEST
+        internal static Idas3AuthorityStatus Sample=new Idas3AuthorityStatus{size=96,version=1,winner=-3};
+        internal static int Disconnects,InputReceives;
+        internal static int Idas3MultiplayerAuthorityPacket(byte[] bytes,uint count){Array.Clear(bytes,0,bytes.Length);return 1064;}
+        internal static int Idas3MultiplayerAuthorityReceive(byte[] bytes,uint count){++InputReceives;return 1;}
+        internal static int Idas3MultiplayerSetRemoteHeadlights(ulong sequence,uint enabled)=>1;
+        internal static int Idas3MultiplayerAuthorityStatus(ref Idas3AuthorityStatus status){status=Sample;return 1;}
+        internal static int Idas3MultiplayerGetRemoteSnapshot(ref Idas3CarSnapshot snapshot)=>1;
+#else
         internal static int Idas3MultiplayerAuthorityPacket(byte[] bytes,uint count)=>throw Unexpected();
         internal static int Idas3MultiplayerAuthorityReceive(byte[] bytes,uint count)=>throw Unexpected();
         internal static int Idas3MultiplayerSetRemoteHeadlights(ulong sequence,uint enabled)=>throw Unexpected();
         internal static int Idas3MultiplayerAuthorityStatus(ref Idas3AuthorityStatus status)=>throw Unexpected();
         internal static int Idas3MultiplayerGetRemoteSnapshot(ref Idas3CarSnapshot snapshot)=>throw Unexpected();
+#endif
         internal static int Idas3MultiplayerStartSaved(ref Idas3MultiplayerConfig config,int selection,uint[] local,uint[] remote,uint count)=>throw Unexpected();
         internal static int Idas3MultiplayerSetBattleRecords(ref Idas3BattleRecord local,ref Idas3BattleRecord remote)=>throw Unexpected();
         internal static int Idas3MultiplayerSetGo(int released)=>throw Unexpected();
+#if IDAS3_RESULT_SETTLEMENT_TEST
+        internal static int ResultCalls,PointsCalls,RecordCalls,NativeAwards,PointsToAward,PresentedPoints;
+        internal static uint PresentedLevel;
+        internal static bool FailNativeResult,FailPresentation;
+        internal static int Idas3MultiplayerPrepareResult(int winner,out int selection,out uint points,uint[] before,uint[] after,uint count){
+            selection=13;points=(uint)PointsToAward;before[4]=after[4]=8;before[18]=321;after[18]=321+points;return 1;
+        }
+        internal static int Idas3MultiplayerSetResult(int winner){++ResultCalls;if(FailNativeResult)return 0;++NativeAwards;return 1;}
+        internal static int Idas3MultiplayerPointsEarned(){++PointsCalls;return PointsToAward;}
+        internal static int Idas3MultiplayerResultRecord(int points,uint level){++RecordCalls;if(FailPresentation)return 0;PresentedPoints=points;PresentedLevel=level;return 1;}
+#else
+        internal static int Idas3MultiplayerPrepareResult(int winner,out int selection,out uint points,uint[] before,uint[] after,uint count)=>throw Unexpected();
         internal static int Idas3MultiplayerSetResult(int winner)=>throw Unexpected();
         internal static int Idas3MultiplayerPointsEarned()=>throw Unexpected();
         internal static int Idas3MultiplayerResultRecord(int points,uint level)=>throw Unexpected();
-#if IDAS3_RECORD_STORAGE_INTEGRATION
+#endif
+        internal static int Idas3MultiplayerRecoverReward(byte[] root,int selection,uint points,uint[] before,uint[] after,uint count)=>throw Unexpected();
+#if IDAS3_RACE_PROGRESS_TEST
+        internal static int Idas3MultiplayerDisconnect(){++Disconnects;return 1;}
+        internal static int Idas3MultiplayerGetLocalSnapshot(ref Idas3CarSnapshot snapshot){snapshot.sequence=1;return 1;}
+#elif IDAS3_RECORD_STORAGE_INTEGRATION
         internal static int Disconnects,NativeLeaves;
         internal static Action OnDisconnect,OnNativeLeave;
         internal static int Idas3MultiplayerDisconnect(){++Disconnects;OnDisconnect?.Invoke();return 1;}

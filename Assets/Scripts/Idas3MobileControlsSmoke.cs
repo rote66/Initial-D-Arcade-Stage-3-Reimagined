@@ -389,9 +389,9 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
     private IEnumerator SelectManualTransmission(){
         controls.ResetInput();Check(Idas3SceneModeFlowFixture(430)==1,"Private car-selection fixture");yield return Frames(5);
         Check(host.Status.frontendStage==3,"Actual car selection is active");VisibilityChecks(false,false);
-        int color=Idas3SceneModeFlowValue(58);Vector2 center=controls.StickRect.center;
+        int color=Idas3SceneModeFlowValue(59);Vector2 center=controls.StickRect.center;
         Touch(110,TouchPhase.Began,center);Touch(110,TouchPhase.Moved,center-Vector2.up*controls.StickTravel);yield return Frames(4);
-        Touch(110,TouchPhase.Ended,center);Check(Idas3SceneModeFlowValue(58)!=color,"Stick up changes factory paint with hidden shift buttons");
+        Touch(110,TouchPhase.Ended,center);Check(Idas3SceneModeFlowValue(59)!=color,"Stick up changes factory paint with hidden shift buttons");
         Check(!controls.ControlVisible("A"),"Car selection uses START without a redundant checkmark");
         Touch(111,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(3);Touch(111,TouchPhase.Ended,Vector2.zero);
         for(int i=0;i<300&&host.Status.frontendStage==3;++i)yield return null;
@@ -505,15 +505,27 @@ public sealed class Idas3MobileControlsSmoke : MonoBehaviour
         Touch(153,TouchPhase.Began,cancel);yield return Frames(3);Touch(153,TouchPhase.Ended,cancel);yield return Frames(3);
         Check(Idas3SceneModeFlowValue(52)==0&&Idas3SceneModeFlowValue(42)==1,"Touching No cancels deletion without a checkmark");
         Touch(154,TouchPhase.Began,proceed);yield return Frames(12);
-        Check(host.Status.frontendStage==4,"Touch Continue reaches the saved car's transmission screen");
+        Check(host.Status.frontendStage==13,"Touch Continue opens the original Saved Data screen");
+        yield return Capture("mobile-saved-data");
         Check(controls.SavePointerHeld&&host.DiagnosticSubmittedInput.padButtons==0,"Held save touch cannot confirm the following screen");
         Touch(154,TouchPhase.Ended,proceed);yield return Frames(3);controls.ResetInput();
         double deadline=Time.realtimeSinceStartupAsDouble+3;
         while(Idas3SceneModeFlowValue(27)==0&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
-        Check(Idas3SceneModeFlowValue(27)==1,"Saved transmission is ready before a fresh confirmation");
+        Check(Idas3SceneModeFlowValue(27)==1,"Saved Data is ready before a fresh confirmation");
         Touch(155,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
         Check((host.DiagnosticSubmittedInput.padButtons&16)!=0,"Fresh START reaches native after the save touch releases");
+        deadline=Time.realtimeSinceStartupAsDouble+5;
+        while(host.Status.frontendStage==13&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(host.Status.frontendStage==4,"Fresh START ends Saved Data and opens transmission selection");
+        yield return Frames(12);
+        Check(host.Status.frontendStage==4,"Holding Saved Data START cannot also confirm the transmission");
         Touch(155,TouchPhase.Ended,Vector2.zero);
+        yield return Frames(3);
+        deadline=Time.realtimeSinceStartupAsDouble+3;
+        while(Idas3SceneModeFlowValue(27)==0&&Time.realtimeSinceStartupAsDouble<deadline)yield return null;
+        Check(Idas3SceneModeFlowValue(27)==1,"Saved transmission is ready before another fresh confirmation");
+        Touch(156,TouchPhase.Began,controls.ButtonRect("START").center);yield return Frames(4);
+        Touch(156,TouchPhase.Ended,Vector2.zero);
         // The source confirmation holds for over 120 native ticks plus fade.
         // Render frames vary with the display refresh rate.
         deadline=Time.realtimeSinceStartupAsDouble+5;

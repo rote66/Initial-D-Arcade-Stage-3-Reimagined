@@ -125,7 +125,7 @@ public static class Idas3IosBuild
         plist.root.SetString("CFBundleName",ProductName);
         plist.root.SetString("CFBundleExecutable","$(EXECUTABLE_NAME)");
         plist.root.SetString("MinimumOSVersion","15.0");
-        plist.root.SetString("IDAS3UpstreamRelease","0.3.95-community-replays.50");
+        plist.root.SetString("IDAS3UpstreamRelease",Idas3AssetPaths.UpstreamRelease);
         plist.root.SetString("CFBundleDevelopmentRegion","en");
         var localizations=plist.root.CreateArray("CFBundleLocalizations");
         foreach(string language in new[]{"en","ja","zh-Hans"})localizations.AddString(language);
