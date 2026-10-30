@@ -46,6 +46,7 @@ static_assert(sizeof(Idas3OrnamentTelemetry)==40);
 static_assert(sizeof(Idas3PresentationTiming)==24);
 static_assert(sizeof(Idas3GhostState)==48);
 static_assert(sizeof(Idas3RaceMusicState)==32);
+static_assert(sizeof(Idas3StoryVoiceState)==64);
 
 namespace {
 #if !defined(IDAS3_PORTABLE_SCENE)
@@ -85,11 +86,46 @@ struct UnityRuntime {
 #endif
     void* texture=nullptr;
     std::uint64_t frames=0,ticks=0,textureGeneration=0,rendererGeneration=0;
+    std::array<Idas3StoryVoiceState,32> storyVoiceFrames{};
+    unsigned storyVoiceFrameCount=0;
 };
 UnityRuntime& unityRuntime(){
     // Unity's managed host MUST drain Shutdown before unloading the plugin.
     // Avoid CRT/DllMain invoking App/D3D/waveOut destruction under loader lock.
     static auto* state=new UnityRuntime;return *state;
+}
+Idas3StoryVoiceState storyVoiceState(const App& app){
+    Idas3StoryVoiceState out{sizeof(Idas3StoryVoiceState),2};
+    out.raceId=app.storyVoiceRaceId;out.enemy=app.battleProfile.u(24);out.course=unsigned(app.courseIndex);
+    if(!app.battle||app.bunta||app.menu||app.multiplayer.active||app.replayPlaybackActive||
+        app.importedCourse||app.courseIndex==8||app.preRaceDialogueActive||app.loadingActive||
+        app.legendVisitActive||app.extraModeVisitActive())return out;
+    out.flags=1u|(app.paused||!app.active?2u:0u);
+    out.phase=app.vsActive?1u:app.race.phase==RacePhase::Countdown?2u:
+        app.race.phase==RacePhase::Running?3u:app.race.phase==RacePhase::Finished?4u:0u;
+    out.ticks=app.originalRaceOwnerFrame;
+    // PSP 07D68C's countdown does not call 087C1C. Its speech clock starts
+    // in 07D950 after GO, advancing the 6000Hz race timer by 200 at 30Hz.
+    if(app.originalHandling&&!app.vsActive){
+        const auto& race=app.originalRace.state();
+        out.clockFrame=race.elapsed.value/200;
+        out.advantage=app.battleProgressApplied?app.settledBattleAdvantage:
+            app.battleMetrics.advantage(race.progress,race.rivalProgress);
+        out.playerAhead=race.battleResult.outcomeCode==0?1u:0u;
+        // PSP race+68C is the extension counter, not the HUD sector counter.
+        out.sector=std::min(race.extensionCounter,3u);
+        const auto period=app.originalRace.pathPeriod();
+        if(period>0){
+            auto index=race.progress.index%period;if(index<0)index+=period;
+            float position=float(index)/float(period);
+            if(app.courseIndex==0)position=(float(race.extensionCounter)+position)/3.f;
+            else if(app.courseIndex==1)position=(float(race.extensionCounter/2)+position)/2.f;
+            out.progress=position;
+        }
+        out.speedKmh=app.presentedHudAnalog().speed*3.6f;
+    }
+    if(app.battleProgressApplied)out.outcome=app.battleResult==idas3::original::OriginalLegendResult::Win?1u:2u;
+    return out;
 }
 void unityError(const std::string& text,bool fatal=false)noexcept{
     try{auto& r=unityRuntime();std::lock_guard lock(r.statusMutex);r.error=text;if(fatal)r.status.state=2;}catch(...){}
@@ -203,6 +239,7 @@ void assignInput(HostInput& dst,const Idas3UnityInput& src,bool focused){
 }
 void frame(UnityRuntime& r,const Idas3UnityInput& input){
     if(!r.app)throw std::logic_error("Unity game is not initialized");auto& app=*r.app;
+    r.storyVoiceFrameCount=0;
     const bool focused=(input.flags&1)!=0||app.challengerNotice;
     const double dt=app.challengerNotice?0:input.deltaSeconds;
     if(app.multiplayer.active)app.paused=false;
@@ -246,7 +283,15 @@ void frame(UnityRuntime& r,const Idas3UnityInput& input){
             driver={};driver.automatic=true;driver.steer=-r.diagnosticSteer;
             driver.throttle=std::clamp((target-speed)*.6f,0.f,1.f);driver.brake=std::clamp((speed-target)*.3f,0.f,.8f);
         }
+        const auto previousOwner=app.originalRaceOwnerFrame;
         app.simulate(driver);++r.ticks;
+        if(app.originalRaceOwnerFrame!=previousOwner&&app.originalRaceOwnerFrame%2==0){
+            const auto voice=storyVoiceState(app);
+            if((voice.flags&1u)&&(voice.phase==2||voice.phase==3)){
+                if(r.storyVoiceFrameCount>=r.storyVoiceFrames.size())throw std::logic_error("Speech frame buffer exceeded");
+                r.storyVoiceFrames[r.storyVoiceFrameCount++]=voice;
+            }
+        }
     });else app.clock.reset();
     if(app.messageSeconds>0){app.messageSeconds-=float(dt);if(app.messageSeconds<=0)app.message.clear();}
     if(dt>0)app.renderFps+=(float(1/dt)-app.renderFps)*.025f;
@@ -1238,6 +1283,19 @@ int IDAS3_UNITY_CALL Idas3SceneGetWheelState(Idas3WheelState* out){
     out->flags=1u|(app.vehicle.wallContact?2u:0u)|4u|
         (uint32_t(std::min<int>(app.frontend.battleProfile.byte(1187),8))<<8);
     return 1;
+}
+int IDAS3_UNITY_CALL Idas3SceneGetStoryVoiceState(Idas3StoryVoiceState* out){
+    auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);
+    if(!r.sceneMode||!r.app||!out||out->size!=sizeof(*out))return 0;
+    *out=storyVoiceState(*r.app);
+    return 1;
+}
+int IDAS3_UNITY_CALL Idas3SceneCopyStoryVoiceFrames(Idas3StoryVoiceState* states,int capacity){
+    auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);
+    if(!r.sceneMode||!r.app||capacity<0||(!states&&capacity))return -1;
+    if(unsigned(capacity)<r.storyVoiceFrameCount)return -1;
+    std::copy_n(r.storyVoiceFrames.begin(),r.storyVoiceFrameCount,states);
+    const auto count=r.storyVoiceFrameCount;r.storyVoiceFrameCount=0;return int(count);
 }
 int IDAS3_UNITY_CALL Idas3SceneGetHudTelemetry(Idas3HudTelemetry* out){
     auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);

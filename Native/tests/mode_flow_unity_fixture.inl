@@ -2,6 +2,15 @@
 // separate regression in mode_flow_app_tests.inl; these select authored scenes
 // quickly for Unity rendering and controller-route verification.
 void prepareModeFlowFixture(App& app,unsigned scene){
+    if(scene==440||scene==441){
+        app.validationMode=true;app.returnToCourseSelection(true);
+        auto& f=app.frontend;f.car=0;f.battleProfile=original::makeOriginalFreshBattleProfile();
+        f.gameMode=original::OriginalGameMode::LegendOfTheStreets;
+        original::selectOriginalRival(f.battleProfile,scene==441?17u:0u);
+        f.course=int(f.battleProfile.u(4));app.start();
+        app.loadingActive=app.vsActive=app.preRaceDialogueActive=false;
+        app.menu=app.paused=false;app.input={};return;
+    }
     if(scene==431||scene==432){
         prepareModeFlowFixture(app,425);app.preRaceDialogueActive=false;
         app.battleProfile=app.frontend.battleProfile;

@@ -1,5 +1,7 @@
 # Initial D Arcade Stage 3 Reimagined
 
+**[iOS Version and Installation Guide](readme-ios.md)**
+
 A fan-made Initial D Arcade Stage 3 project for Windows, with Unity rendering and a native C++ gameplay core.
 JOIN DISCORD: https://discord.gg/mJCZ5AvBb
 

@@ -31,6 +31,8 @@ public sealed class Idas3GameOptions
         public float wheelFeedbackStrength=.35f;
         public string wheelFeedbackDevice="";
         public bool showFps,showOsd,muteWhenUnfocused,diagnosticLogging;
+        public bool storyVoices,storyVoiceSubtitles=true;
+        public int storyVoiceSubtitleLanguage;
         public bool iosThermalFrameRateAdjustment=true;
         public bool iosMobilePerformanceOptimization;
         public bool iosPedalTravel;
@@ -416,6 +418,7 @@ public sealed class Idas3GameOptions
         value.trackLighting=Math.Max(0,Math.Min(1,value.trackLighting));
         if(value.customMenuLanguage<0||value.customMenuLanguage>2)value.customMenuLanguage=0;
         if(value.arcadeTextLanguage<0||value.arcadeTextLanguage>2)value.arcadeTextLanguage=0;
+        if(value.storyVoiceSubtitleLanguage<0||value.storyVoiceSubtitleLanguage>1)value.storyVoiceSubtitleLanguage=0;
         if(value.controllerResponse<0||value.controllerResponse>2)value.controllerResponse=0;
         if(value.steeringSettingsVersion<1){value.steeringDeadzoneGamepad=.1f;value.steeringDeadzonePrevious=.13f;value.steeringDeadzoneWheel=0;}
         value.steeringSettingsVersion=1;
@@ -434,6 +437,7 @@ public sealed class Idas3GameOptions
     private static bool SameHudSizes(Values a,Values b){for(int i=1;i<Values.HudLayoutGroupCount;++i)if(a.HudSizePercent(i)!=b.HudSizePercent(i))return false;return true;}
     public static bool Equivalent(Values a,Values b)=>a!=null&&b!=null&&
         a.masterVolume==b.masterVolume&&a.musicVolume==b.musicVolume&&a.engineVolume==b.engineVolume&&a.effectsVolume==b.effectsVolume&&a.tireVolume==b.tireVolume&&a.audioSettingsVersion==b.audioSettingsVersion&&
+        a.storyVoices==b.storyVoices&&a.storyVoiceSubtitles==b.storyVoiceSubtitles&&a.storyVoiceSubtitleLanguage==b.storyVoiceSubtitleLanguage&&
         !DisplayChanged(a,b)&&a.vSync==b.vSync&&a.frameRateLimit==b.frameRateLimit&&a.antiAliasing==b.antiAliasing&&
         a.aiDifficulty==b.aiDifficulty&&a.arcadeTextLanguage==b.arcadeTextLanguage&&a.customMenuLanguage==b.customMenuLanguage&&a.defaultCamera==b.defaultCamera&&a.cameraFovPercent==b.cameraFovPercent&&a.controllerResponse==b.controllerResponse&&a.timeAttackGhost==b.timeAttackGhost&&
         a.steeringSettingsVersion==b.steeringSettingsVersion&&a.steeringDeadzoneGamepad==b.steeringDeadzoneGamepad&&

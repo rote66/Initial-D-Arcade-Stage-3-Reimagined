@@ -222,6 +222,7 @@ struct App {
     original::OriginalRaceRules originalRace;
     original::OriginalRaceStart originalRaceStart;
     std::uint32_t originalRaceOwnerFrame=0;
+    std::uint32_t storyVoiceRaceId=0;
     OriginalRaceFeedback raceFeedback;
     OriginalRearViewFrame rearCameraFrame{},previousRearCameraFrame{};
     original::OriginalRacePath originalPath;
@@ -1369,6 +1370,7 @@ struct App {
         return 1u|((replayPlaybackActive||paused||!active||race.phase!=RacePhase::Running||multiplayer.waiting||authorityStalled)?2u:0u);
     }
     void start(bool networkStart=false){
+        ++storyVoiceRaceId;
         sessionExit.stage=original::OriginalSessionExit::Stage::Inactive;
         replayCameraBody.reset();
         if(endingActive){endingActive=false;audio.applyLegendStreamCommand({original::OriginalLegendReturnCommand::StreamStop});}

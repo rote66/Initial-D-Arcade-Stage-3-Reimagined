@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "date": "2026-10-30",
+  "scope": "User-requested comparison of the four explicitly documented ambiguous recordings against exact PSP patch voice IDs. Reference meanings inform editorial corrections, not a verified Japanese transcript or bulk patch translation import.",
+  "referenceModuleSha256": "b1cf7f9e4665475d2038e25e35cb6b742eaccf6475c8f961cc0aacaee1e3f555",
+  "sourceImageSha256": "0ce41a7f30a17856ca598113413ba4e5151c3886cfb01feb67c5a5dd02bf2853",
+  "pspCodeExecuted": false,
+  "humanAudioVerified": false,
+  "evidence": "Builds/iOS/Audits/VoiceAmbiguity-20261030/comparison.png",
+  "clips": [
+    {
+      "id": "B_ituki_front_005",
+      "sourceSha256": "b0baef14390899357c23ea7466347fb337c0d8a1f2154d210d4df8ff51dfdb6c",
+      "referenceMeaning": "Panic about dying, followed by relief at surviving; not a request for help.",
+      "editorialInference": "Both ASR candidates end in a phonetic approximation of tasukaru. The PSP reference supports the survival/relief sense. This does not certify the exact Japanese wording.",
+      "changed": true,
+      "zh": "哇啊啊！要死了！得救啦！",
+      "en": "Aaah! I'm gonna die! I'm safe!"
+    },
+    {
+      "id": "B_debu_rpass_006",
+      "sourceSha256": "72434648a8e1399b27ea3fe2cb0e9c08599ea87b394bbc12721b9bf6c8b9d806",
+      "referenceMeaning": "A chuckle followed by calling the opponent too slow.",
+      "editorialInference": "The PSP reference agrees with the first ASR's osoi sense, not the second ASR's hayai. The existing independent translation already conveys that meaning.",
+      "changed": false,
+      "zh": "嘻嘻，太慢啦！",
+      "en": "Hee-hee! Too slow!"
+    },
+    {
+      "id": "B_EVO5_rpass_017",
+      "sourceSha256": "528e6a8cac0ce5169363709660adcc8bbe3745fc7300614202306921fceb3a8a",
+      "referenceMeaning": "An insult mocking the opponent's poor driving, not just an interjection.",
+      "editorialInference": "The first ASR's toragaa-like ending and the reference insult support a toro/slowpoke reading. Use a concise independently phrased taunt, without claiming an exact Japanese reconstruction.",
+      "changed": true,
+      "zh": "哼，慢死了！",
+      "en": "Heh, slowpoke!"
+    },
+    {
+      "id": "B_takumi_ppass_016",
+      "sourceSha256": "9d1afeb1da791350e42b3cae4cfa8dc32e6c258626dede32bfe2be6e3755fbed",
+      "referenceMeaning": "A nonlexical strained vocalization.",
+      "editorialInference": "Neither ASR candidate establishes a curse. The PSP reference also uses a vocalization, so remove the added Chinese curse while retaining the English grunt.",
+      "changed": true,
+      "zh": "呃！",
+      "en": "Ugh!"
+    }
+  ]
+}

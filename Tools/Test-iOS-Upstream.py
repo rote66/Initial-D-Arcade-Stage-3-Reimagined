@@ -95,6 +95,8 @@ def main():
         "Idas3MenuInputRouter.Music.cs", "Idas3MenuInputRouter.Online.cs",
         "Idas3PointerNavigation.cs")]
     check("MenuInputRouter", router + [ROOT / "Tests/Input/MenuInputRouterDriver.cs"])
+    check("StoryVoices", [ROOT / "Assets/Scripts/Idas3StoryVoiceLogic.cs",
+                          ROOT / "Tests/Input/StoryVoiceDriver.cs"], "IDAS3_STORY_VOICE_TEST")
     check("SavedSteering", [ROOT / "Assets/Scripts/Idas3WheelFeedback.cs",
                            ROOT / "Tests/Input/SavedSteeringDriver.cs"])
     check("OnlineSession", session + fakes + [fixtures / "OnlineSessionDriver.cs"],

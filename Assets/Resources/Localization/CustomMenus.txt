@@ -865,3 +865,5 @@ BRAKE TRAVEL ONLY	ブレーキのみスライド入力	仅刹车滑动行程
 DIAGNOSTIC LOGGING ON	診断ログを有効にしました	已开启诊断日志
 DIAGNOSTIC LOGS DELETED	診断ログを削除しました	诊断日志已关闭并删除
 Could not save diagnostic logging. {0}	診断ログ設定を保存できませんでした。{0}	无法保存日志设置：{0}
+STORY VOICES (PSP)	ストーリーボイス (PSP)	剧情语音（PSP）
+VOICE SUBTITLES	音声字幕	语音字幕

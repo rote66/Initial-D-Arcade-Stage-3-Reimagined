@@ -45,6 +45,10 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private Vector2 bindingScroll;
     private bool wheelNavigation,wheelEditing;
     private bool bindingChoice;
+    private bool subtitleLanguageOpen;
+    private int subtitleLanguageSelection;
+    private static readonly string[] SubtitleLanguages={"中文","English"};
+    internal bool SubtitleLanguageVisible=>subtitleLanguageOpen;
     private int bindingChoiceSelection;
     internal bool BindingChoiceVisible=>bindingChoice;
     internal bool WheelEditing=>wheelEditing;
@@ -148,7 +152,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     public void SetOpen(bool open)=>SetOpen(open,false);
     private void SetOpen(bool open,bool attractContext){
         blockThroughFrame=Time.frameCount+1;if(open==IsOpen)return;
-        IsOpen=open;bindingChoice=false;hudSizesOpen=false;
+        IsOpen=open;bindingChoice=false;hudSizesOpen=false;subtitleLanguageOpen=false;
         if(open){
             AttractOptions=attractContext;
             previousCursorVisible=Cursor.visible;previousCursorLock=Cursor.lockState;
@@ -174,7 +178,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     public void SelectTab(int index){
         if(!IsOpen)SetOpen(true);
         if(bindings!=null&&bindings.IsCapturing)return;
-        if(!showOptions){options.BeginEdit();bindings?.BeginEdit();}showOptions=true;tab=Wrap(index,Tabs.Length);selection=1;wheelEditing=false;hudSizesOpen=false;notice="";
+        if(!showOptions){options.BeginEdit();bindings?.BeginEdit();}showOptions=true;tab=Wrap(index,Tabs.Length);selection=1;wheelEditing=false;hudSizesOpen=false;subtitleLanguageOpen=false;notice="";
         if(tab==3&&controllerDevices!=null)bindingColumn=controllerDevices.Controls.Count>0?3:0;
         if(tab==4)wheelFeedback?.RefreshDevices();
     }
@@ -184,6 +188,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(CustomizingHud){HudCustomization.Navigate(delta);return;}
         if(EditingHud)return;
         if(!IsOpen||delta==0||BindingInputBlocked)return;
+        if(subtitleLanguageOpen){subtitleLanguageSelection=Wrap(subtitleLanguageSelection+Math.Sign(delta),2);return;}
         if(bindingChoice){bindingChoiceSelection=Wrap(bindingChoiceSelection+Math.Sign(delta),3);return;}
         if(Modal){modalSelection=1-modalSelection;return;}
         wheelEditing=false;
@@ -196,6 +201,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(CustomizingHud){if(wheelNavigation)HudCustomization.Navigate(delta);else HudCustomization.NavigateHorizontal(delta);return;}
         if(EditingHud)return;
         if(!IsOpen||delta==0||BindingInputBlocked)return;
+        if(subtitleLanguageOpen){subtitleLanguageSelection=Wrap(subtitleLanguageSelection+Math.Sign(delta),2);return;}
         if(bindingChoice){bindingChoiceSelection=Wrap(bindingChoiceSelection+Math.Sign(delta),3);return;}
         if(Modal){modalSelection=1-modalSelection;return;}
         if(wheelNavigation&&!wheelEditing){Navigate(delta);return;}
@@ -209,11 +215,13 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(CustomizingHud){HudCustomization.Activate();return;}
         if(EditingHud)return;
         if(!IsOpen||BindingInputBlocked)return;
+        if(subtitleLanguageOpen){options.Draft.storyVoiceSubtitleLanguage=subtitleLanguageSelection;subtitleLanguageOpen=false;return;}
         if(bindingChoice){ActivateBindingChoice();return;}
         if(options.DisplayConfirmationPending){if(modalSelection==1)KeepDisplay();else options.RevertDisplay();return;}
         if(pending!=Command.None){if(modalSelection==1){queued=pending;pending=Command.None;}else pending=Command.None;return;}
         if(!showOptions){MainAction(selection);return;}
         if(selection==0){selection=1;return;}
+        if(tab==0&&selection==9&&options.Draft.storyVoices&&options.Draft.storyVoiceSubtitles){OpenSubtitleLanguages();return;}
         if(tab==2&&selection==5){if(FullTuneAvailable)queued=Command.FullTune;return;}
         if(MobileControls&&tab==9){if(selection==1)queued=Command.LocalNetwork;else Back();return;}
         if(MobileControls&&tab==8){
@@ -242,6 +250,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(CustomizingHud){HudCustomization.Back();return;}
         if(EditingHud){HudEditor.Close(false);return;}
         if(!IsOpen)return;
+        if(subtitleLanguageOpen){subtitleLanguageOpen=false;return;}
         if(bindingChoice){bindingChoice=false;return;}
         if(bindings!=null&&bindings.IsCapturing){bindings.CancelCapture();notice="Binding unchanged.";return;}
         if(options.DisplayConfirmationPending){options.RevertDisplay();notice="Display change reverted.";return;}
@@ -260,10 +269,10 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     }
     public void CancelDiagnosticCapture(){diagnosticTarget=null;}
     private bool BindingInputBlocked=>bindings!=null&&(bindings.IsCapturing||bindings.SuppressInput);
-    private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
+    private bool Modal=>subtitleLanguageOpen||bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
     private int BindingFirstSelection=>controllerDevices!=null?2:1;
     private bool DeviceRowSelected=>controllerDevices!=null&&selection==1;
-    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?9+IosExtraRows:1):tab==7?6:tab==6?4:tab==5?4:tab==0?6:tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
+    private int Rows=>hudSizesOpen?HudSizeGroups.Length:MobileControls&&tab==9?1:tab==8?(MobileControls?9+IosExtraRows:1):tab==7?6:tab==6?4:tab==5?4:tab==0?(options.Draft.storyVoices?(options.Draft.storyVoiceSubtitles?9:8):7):tab==4?7:tab==2?(MobileControls?(GravityResponseVisible?10:8):7):tab==1?11:bindings!=null?Idas3ControlBindings.ActionCount+BindingFirstSelection-1:0;
     private static int Wrap(int value,int count)=>(value%count+count)%count;
     private void Update(){
         double now=Time.realtimeSinceStartupAsDouble;options?.Tick(now);
@@ -375,6 +384,9 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(row==3)v.tireVolume=Mathf.Clamp(v.tireVolume+direction*.05f,0,Idas3GameOptions.MaximumVolume);
             if(row==4)v.effectsVolume=Mathf.Clamp(v.effectsVolume+direction*.05f,0,Idas3GameOptions.MaximumVolume);
             if(row==5)v.muteWhenUnfocused=!v.muteWhenUnfocused;
+            if(row==6)v.storyVoices=!v.storyVoices;
+            if(row==7&&v.storyVoices)v.storyVoiceSubtitles=!v.storyVoiceSubtitles;
+            if(row==8&&v.storyVoices&&v.storyVoiceSubtitles)v.storyVoiceSubtitleLanguage=Wrap(v.storyVoiceSubtitleLanguage+direction,2);
         }else if(tab==7){
             if(hudSizesOpen){
                 if(row>=0&&row<HudSizeGroups.Length){int group=HudSizeGroups[row];v.SetHudSizePercent(group,v.HudSizePercent(group)+Math.Sign(direction));}
@@ -447,11 +459,11 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     }
     private static void Frame(Rect rect,Color color){Fill(new Rect(rect.x,rect.y,rect.width,1),color);Fill(new Rect(rect.x,rect.yMax-1,rect.width,1),color);Fill(new Rect(rect.x,rect.y,1,rect.height),color);Fill(new Rect(rect.xMax-1,rect.y,1,rect.height),color);}
     private void Text(Rect rect,string value,GUIStyle style,Color? color=null,bool translate=true){var before=GUI.contentColor;GUI.contentColor=color??(style==small||style==wrapped?Muted:Color.white);Idas3MenuLocalization.Label(rect,value,style,translate);GUI.contentColor=before;}
-    private bool Button(Rect rect,string value,bool active=false,bool enabled=true,bool primary=false,GUIStyle textStyle=null,bool preparing=false){
+    private bool Button(Rect rect,string value,bool active=false,bool enabled=true,bool primary=false,GUIStyle textStyle=null,bool preparing=false,bool translate=true){
         bool hover=enabled&&rect.Contains(Event.current.mousePosition);
         Fill(rect,!enabled?Panel:primary?Red:hover||active?Raised:Panel);Frame(rect,active?Red:Edge);
         if(active)Fill(new Rect(rect.x,rect.y,4,rect.height),Red);
-        Text(rect,value,textStyle??button,enabled?Color.white:Muted*.7f);
+        Text(rect,value,textStyle??button,enabled?Color.white:Muted*.7f,translate:translate);
         if(preparing)return false;
         bool before=GUI.enabled;GUI.enabled=before&&enabled;bool pressed=GUI.Button(rect,GUIContent.none,GUIStyle.none);GUI.enabled=before;return pressed;
     }
@@ -494,7 +506,8 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             if(showOptions)OptionsView();else MainView();
             GUI.enabled=enabled;
             Footer();
-            if(bindingChoice)BindingChoiceView();
+            if(subtitleLanguageOpen)SubtitleLanguagesView();
+            else if(bindingChoice)BindingChoiceView();
             else if(bindings!=null&&bindings.IsCapturing)BindingCaptureView();
             else if(options.DisplayConfirmationPending)DisplayConfirmation();else if(pending!=Command.None)ExitConfirmation();
         }finally{
@@ -691,6 +704,11 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             VolumeRow(3,"TIRE SQUEAL",v.tireVolume,value=>v.tireVolume=value);
             VolumeRow(4,"EFFECTS / VOICES",v.effectsVolume,value=>v.effectsVolume=value);
             ChoiceRow(5,"MUTE WHEN UNFOCUSED",v.muteWhenUnfocused?"ON":"OFF");
+            AudioToggleRow(6,"STORY VOICES (PSP)",v.storyVoices,false,value=>v.storyVoices=value);
+            if(v.storyVoices){
+                AudioToggleRow(7,"VOICE SUBTITLES",v.storyVoiceSubtitles,true,value=>v.storyVoiceSubtitles=value);
+                if(v.storyVoiceSubtitles&&Button(new Rect(650,RowY(7)+3,180,31),SubtitleLanguages[v.storyVoiceSubtitleLanguage]+"  ▼",selection==9,translate:false))OpenSubtitleLanguages();
+            }
         }else if(hudSizesOpen){
             for(int row=0;row<HudSizeGroups.Length;++row)ChoiceRow(row,HudSizeNames[row],v.HudSizePercent(HudSizeGroups[row])+"%");
         }else if(tab==7){
@@ -783,7 +801,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(Button(new Rect(731,583,279,35),"BACK",selection==Rows+3))Back();
     }
     private void VolumeRow(int row,string name,float value,Action<float> set){
-        float y=200+row*56;var rect=new Rect(278,y-5,714,55);if(selection==row+1)Frame(rect,Red);
+        float y=RowY(row);var rect=new Rect(278,y-5,714,40);if(selection==row+1)Frame(rect,Red);
         Text(new Rect(290,y+5,231,32),name,label);
         float before=value;value=GUI.HorizontalSlider(new Rect(557,y+13,317,20),value,0,Idas3GameOptions.MaximumVolume);
         if(!Mathf.Approximately(before,value)){selection=row+1;set(value);notice="";}
@@ -793,7 +811,28 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(wheelFeedback!=null)foreach(var choice in wheelFeedback.Choices)if(choice.id==id)return choice.name;
         return string.IsNullOrEmpty(id)?"AUTOMATIC":"DISCONNECTED DEVICE";
     }
-    private bool CompactRows=>tab==1||tab==2||tab==4||hudSizesOpen;
+    private void AudioToggleRow(int row,string name,bool value,bool child,Action<bool> set){
+        float y=RowY(row);if(selection==row+1)Frame(new Rect(278,y,714,35),Red);
+        var rect=new Rect(child?326:290,y+3,child?300:650,31);
+        var checkbox=new Rect(rect.x,rect.y+5,20,20);
+        Fill(checkbox,value?Red:Raised);Frame(checkbox,Color.white);
+        if(value)Text(checkbox,"✓",button,translate:false);
+        Text(new Rect(rect.x+32,rect.y,rect.width-32,rect.height),name,label);
+        bool next=GUI.Toggle(rect,value,GUIContent.none,GUIStyle.none);
+        if(next!=value){selection=row+1;set(next);notice="";}
+    }
+    private void OpenSubtitleLanguages(){selection=9;wheelEditing=false;subtitleLanguageSelection=options.Draft.storyVoiceSubtitleLanguage;subtitleLanguageOpen=true;}
+    private void SubtitleLanguagesView(){
+        var box=new Rect(650,RowY(7)+37,180,72);
+        Fill(box,Ink);Frame(box,Edge);
+        for(int i=0;i<SubtitleLanguages.Length;++i){
+            int language=i;
+            if(Button(new Rect(box.x+3,box.y+3+i*33,box.width-6,32),SubtitleLanguages[i],subtitleLanguageSelection==i,translate:false)){
+                options.Draft.storyVoiceSubtitleLanguage=language;subtitleLanguageOpen=false;notice="";
+            }
+        }
+    }
+    private bool CompactRows=>tab==0||tab==1||tab==2||tab==4||hudSizesOpen;
     private float RowY(int row)=>tab==2?194+row*(MobileControls?32:41):tab==4?(row<3?208+row*38:354+(row-3)*38):tab==1?194+row*29:CompactRows?194+row*36:194+row*59;
     private void FovRow(int row,Idas3GameOptions.Values value){
         float y=RowY(row);

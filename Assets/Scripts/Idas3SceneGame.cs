@@ -29,6 +29,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private Idas3MultiplayerMenu multiplayerMenu;
     private Idas3ChallengerOverlay challenger;
     private Idas3GameOptions gameOptions;
+    private Idas3StoryVoices storyVoices;
     private Idas3PauseMenu pauseMenu;
     private Idas3ReplayLibrary replayLibrary;
     private Idas3TimeAttackGhost timeAttackGhost;
@@ -172,6 +173,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             diagnostic = Idas3MultiplayerPresentationSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3PauseSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3PreRaceSmoke.Configure(ref saves) || diagnostic;
+            diagnostic = Idas3StoryVoiceSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3ModeFlowSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3ControlsSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3MobileControlsSmoke.Configure(ref saves) || diagnostic;
@@ -240,6 +242,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
             gameOptions = new Idas3GameOptions();
             gameOptions.Changed += ApplyNativeOptions;
             gameOptions.Initialize(saves);
+            storyVoices=gameObject.AddComponent<Idas3StoryVoices>();
+            storyVoices.Initialize(this,gameOptions,assets);
             virtualControls?.InitializeLayout(saves,diagnosticMode?Path.Combine(Path.GetDirectoryName(saves),"touch-layout-exports"):null);
             controlBindings = new Idas3ControlBindings();
             controlBindings.Initialize(saves);
@@ -286,6 +290,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             Idas3MultiplayerSmoke.Attach(this, multiplayer);
             Idas3PauseSmoke.Attach(this, gameOptions, pauseMenu);
             Idas3PreRaceSmoke.Attach(this);
+            Idas3StoryVoiceSmoke.Attach(this);
             Idas3ModeFlowSmoke.Attach(this);
             Idas3ControlsSmoke.Attach(this);
             Idas3MobileControlsSmoke.Attach(this);
@@ -474,6 +479,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             if (!Idas3MultiplayerSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3PauseSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3PreRaceSmoke.PrepareFrame(ref frame)) return;
+            if (!Idas3StoryVoiceSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3ModeFlowSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3ControlsSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3ControllerDevicesSmoke.PrepareFrame(ref frame)) return;
@@ -1082,6 +1088,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
         if(loadKeepAliveRegistered){Idas3Native.Idas3SceneSetLoadKeepAlive(null);loadKeepAliveRegistered=false;}
         if(timeAttackGhost!=null)timeAttackGhost.ShowGhost=false;
         raceMusicMenu?.StopPreview();
+        storyVoices?.StopPlayback();
         if(CustomMusic!=null)CustomMusic.StopAllCoroutines();
         wheelFeedback?.Dispose();
         if (sound != null) sound.StopOutput();

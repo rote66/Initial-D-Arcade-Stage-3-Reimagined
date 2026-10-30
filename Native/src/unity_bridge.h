@@ -123,6 +123,18 @@ typedef struct Idas3PreRaceStatus {
     float eyeX,eyeY,eyeZ,targetX,targetY,targetZ,verticalFov;
     uint32_t condition;
 } Idas3PreRaceStatus;
+// Production, read-only Legend speech presentation. No diagnostic getters or RNG.
+typedef struct Idas3StoryVoiceState {
+    uint32_t size,version,flags,enemy,course,phase,raceId,outcome;
+    uint64_t ticks;
+    float advantage,progress;
+    uint32_t sector,clockFrame;
+    float speedKmh;
+    uint32_t playerAhead;
+} Idas3StoryVoiceState;
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneGetStoryVoiceState(Idas3StoryVoiceState* state);
+// All PSP-rate inputs captured in the last scene step, including catch-up ticks.
+IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneCopyStoryVoiceFrames(Idas3StoryVoiceState* states,int capacity);
 // A local next-race choice. -1 uses Speedy Speed Boy (index1).
 // eligible is only the native opponent-selection context, not managed lobbies.
 typedef struct Idas3RaceMusicState {
