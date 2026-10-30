@@ -166,7 +166,12 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
             (!favoritesOnly||(!string.IsNullOrEmpty(e.key)&&favorites.Contains(e.key)))&&
             (collectionFilter.Length==0||e.collection==collectionFilter)&&
             (query.Length==0||(e.title+" "+e.artist+" "+e.collection).IndexOf(query,StringComparison.OrdinalIgnoreCase)>=0))visible.Add(i);}
-        if(sortByTitle)visible.Sort((a,b)=>string.Compare(entries[a].title,entries[b].title,StringComparison.CurrentCultureIgnoreCase));
+        if(sortByTitle)visible.Sort((a,b)=>{
+            bool aPolicy=entries[a].id==-1||entries[a].id==Idas3RaceMusicCatalog.OriginalDefaultId;
+            bool bPolicy=entries[b].id==-1||entries[b].id==Idas3RaceMusicCatalog.OriginalDefaultId;
+            return aPolicy?(bPolicy?a.CompareTo(b):-1):bPolicy?1:
+                string.Compare(entries[a].title,entries[b].title,StringComparison.CurrentCultureIgnoreCase);
+        });
         selection=0;firstRow=0;
         if(preferCurrent)for(int i=0;i<visible.Count;++i)if(entries[visible[i]].id==selectedId){selection=i;break;}
         EnsureVisible();
@@ -206,7 +211,7 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
         button=new GUIStyle(label){fontSize=15,fontStyle=FontStyle.Bold,alignment=TextAnchor.MiddleCenter};
         stageButton=new GUIStyle(button){fontSize=14,wordWrap=false};
         numberStyle=new GUIStyle(label){fontSize=12,fontStyle=FontStyle.Bold,alignment=TextAnchor.MiddleCenter};
-        confirmationStyle=new GUIStyle(label){fontSize=26,fontStyle=FontStyle.Bold};
+        confirmationStyle=new GUIStyle(label){fontSize=26,fontStyle=FontStyle.Bold,wordWrap=true};
         songStyle=new GUIStyle(label){fontSize=17,wordWrap=true};
         searchStyle=new GUIStyle(GUI.skin.textField){font=uiFont,fontSize=16,padding=new RectOffset(10,10,7,7)};
     }
@@ -334,7 +339,7 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
         if(cover!=null)GUI.DrawTexture(artwork,cover,ScaleMode.ScaleToFit,true);
         else{
             Fill(new Rect(850,111,216,4),Red);
-            Text(new Rect(870,157,176,76),e.id==-1?"AUTOMATIC":e.id==Idas3CustomRaceMusic.AddId?"ADD MUSIC":e.stage==9?"CUSTOM\nMUSIC":e.stage==10?"SPECIAL\nSTAGE":Idas3MenuLocalization.Format("ARCADE\nSTAGE {0}",e.stage),confirmationStyle);
+            Text(new Rect(870,157,176,76),e.id==-1?"AUTOMATIC":e.id==Idas3RaceMusicCatalog.OriginalDefaultId?"RESTORE DEFAULT":e.id==Idas3CustomRaceMusic.AddId?"ADD MUSIC":e.stage==9?"CUSTOM\nMUSIC":e.stage==10?"SPECIAL\nSTAGE":Idas3MenuLocalization.Format("ARCADE\nSTAGE {0}",e.stage),confirmationStyle);
             Text(new Rect(870,288,176,24),"INITIAL D",small,Muted);
         }
         Text(new Rect(822,339,270,46),e.id<0||e.id==Idas3CustomRaceMusic.AddId?Idas3MenuLocalization.T(e.title):e.title,songStyle,translate:false);

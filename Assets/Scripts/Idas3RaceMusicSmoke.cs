@@ -34,6 +34,14 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         pendingRoot=Path.GetFullPath(args[at+1]);if(Directory.Exists(pendingRoot)||File.Exists(pendingRoot))throw new IOException("Use a fresh music diagnostic directory.");
         Directory.CreateDirectory(pendingRoot);saves=Path.Combine(pendingRoot,"userdata");Directory.CreateDirectory(saves);
         File.WriteAllText(Path.Combine(saves,"settings.txt"),"0 0 0 0 0 1 1 0\n");File.WriteAllText(Path.Combine(saves,"native_selection.txt"),"0 0\n");
+        if(Array.IndexOf(args,"-idas3-default-music-check")>=0){
+            File.WriteAllText(Path.Combine(saves,"game-options.json"),JsonUtility.ToJson(new Idas3GameOptions.Values{customMenuLanguage=2}));
+            if(Array.IndexOf(args,"-idas3-default-music-restore")>=0){
+                File.WriteAllText(Path.Combine(saves,"race_music.txt"),"IDAS3_RACE_MUSIC_V1\noriginal\n");
+                string library=Path.Combine(saves,"custom-music");Directory.CreateDirectory(library);
+                File.WriteAllText(Path.Combine(library,"library.json"),"{\"selectedPackaged\":\"arcade5.A_ONE_01\",\"songs\":[]}");
+            }
+        }
         int fixture=Array.IndexOf(args,"-idas3-music-return-fixture");
         if(fixture>=0){
             if(fixture+1>=args.Length)throw new ArgumentException("Missing music return fixture");
@@ -70,10 +78,19 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         while(stack.Count>0&&!finished){object value=null;Exception failure=null;try{if(!stack.Peek().MoveNext()){stack.Pop();continue;}value=stack.Peek().Current;}catch(Exception e){failure=e;}
             if(failure!=null){Finish(false,failure.ToString());yield break;}if(value is IEnumerator child)stack.Push(child);else yield return value;}
     }
-    private void Update(){if(ownsPlayer&&!finished&&(host.Failure!=null||Time.realtimeSinceStartupAsDouble-started>(ReturnCheck?360:210)))Finish(false,host.Failure??"Music diagnostic timeout.");}
+    private void Update(){if(ownsPlayer&&!finished&&(host.Failure!=null||Time.realtimeSinceStartupAsDouble-started>(ReturnCheck||DefaultCheck?360:210)))Finish(false,host.Failure??"Music diagnostic timeout.");}
     private IEnumerator Run()
     {
         yield return Frames(5);Check(host.Ready,"Player initialized");host.DiagnosticFocusOverride=true;
+        if(DefaultCheck&&Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-default-music-restore")>=0){
+            yield return Until(()=>!host.CustomMusic.Busy,30,"Cold music restore did not finish");host.RaceMusic.Refresh();
+            Check(host.RaceMusic.State.selectedIndex==Idas3RaceMusicCatalog.OriginalDefaultId&&host.CustomMusic.SelectedId==Idas3RaceMusicCatalog.OriginalDefaultId,
+                "Stale packaged preference overrode restored original music at startup");
+            yield return Pulse(116);
+            yield return Until(()=>host.Status.racePhase==2&&(host.Status.flags&1025u)==0,45,"Restored default quick start did not reach running");
+            Check(host.Status.course==3&&host.RaceMusic.State.activeIndex==4&&ReadAudio().track==4&&ReadAudio().streamFrame>0,"Cold-start Akina day did not play its original default");
+            Finish(true,null);yield break;
+        }
         CheckRaceCatalog();Check(!host.RaceMusicMenu.HintVisible,"Music hint appeared outside opponent selection");yield return Pulse(116);
         yield return Until(()=>host.Status.racePhase==2&&(host.Status.flags&1025u)==0,45,"Quick start did not reach running");
         Check(!host.RaceMusicMenu.HintVisible,"Music hint appeared during racing");
@@ -91,6 +108,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         yield return Hold(KeyCode.C,.8);Check(!host.RaceMusicMenu.IsOpen,"Removed Camera key still opened picker");
         yield return Hold(KeyCode.L,.85);Check(host.RaceMusicMenu.IsOpen,"Held mapped Camera did not open picker");
         Check(host.Status.frontendStage==10&&host.RaceMusic.State.opponentEligible!=0,"Picker input confirmed opponent underneath");
+        if(DefaultCheck){yield return CheckDefaultMusic();Finish(true,null);yield break;}
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-menu-focus-check")>=0){yield return CheckFocusGap();Finish(true,null);yield break;}
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-custom-music-check")>=0){yield return CheckCustomMusic();Finish(true,null);yield break;}
         if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-sound-room-check")>=0){yield return CheckSoundRoom();Finish(true,null);yield break;}
@@ -113,6 +131,65 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         yield return CheckCountdownAudio(116,"singleplayer");Finish(true,null);
     }
     private bool ReturnCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-music-return-check")>=0;
+    private bool DefaultCheck=>Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-default-music-check")>=0;
+    private IEnumerator CaptureDefaultPicker(string name){
+        yield return Frames(5);yield return new WaitForEndOfFrame();
+        var picture=ScreenCapture.CaptureScreenshotAsTexture();
+        try{Check(Nonblank(picture),"Default picker screenshot was blank");Check(host.RaceMusicMenu.DiagnosticStageLabelsFit,"Default picker sidebar clips");SavePicture(name,picture);}
+        finally{if(picture!=null)Destroy(picture);}
+    }
+    private IEnumerator RestoreDefault(){
+        var menu=host.RaceMusicMenu;StageFilter(0);HighlightTrack(-1);menu.Navigate(1);
+        Check(menu.HighlightedTrackId==Idas3RaceMusicCatalog.OriginalDefaultId,"Restore default is not directly below Automatic");
+        yield return Hold(KeyCode.Return,.08);host.RaceMusic.Refresh();
+        Check(!menu.IsOpen&&host.RaceMusic.State.selectedIndex==Idas3RaceMusicCatalog.OriginalDefaultId,"Restore default did not commit through menu input");
+        Check(File.ReadAllText(Path.Combine(root,"userdata","race_music.txt"))=="IDAS3_RACE_MUSIC_V1\noriginal\n","Original music policy was not persisted");
+    }
+    private IEnumerator CheckDefaultMusic(){
+        var menu=host.RaceMusicMenu;yield return MusicIdle();int activeTrack=host.RaceMusic.State.activeIndex;
+        StageFilter(0);HighlightTrack(-1);menu.Navigate(1);
+        Check(menu.HighlightedTrackId==Idas3RaceMusicCatalog.OriginalDefaultId,"Default row is not below Automatic");
+        foreach(int language in new[]{2,0,1}){
+            var options=host.GameOptions;options.BeginEdit();options.Draft.customMenuLanguage=language;
+            Check(options.ApplyDraft(),"Default picker language could not apply");
+            yield return CaptureDefaultPicker("restore-default-language-"+language);
+        }
+        {var options=host.GameOptions;options.BeginEdit();options.Draft.customMenuLanguage=2;Check(options.ApplyDraft(),"Restore Chinese menu language");}
+        StageFilter(2);SelectTrack(26);yield return Frames(5);
+        Check(host.RaceMusic.State.selectedIndex==26,"Built-in song did not commit");
+        yield return Hold(KeyCode.L,.85);yield return MusicIdle();yield return RestoreDefault();
+        Check(host.RaceMusic.State.activeIndex==activeTrack,"Restoring defaults replaced current menu music");
+        yield return Hold(KeyCode.L,.85);yield return MusicIdle();StageFilter(0);HighlightTrack(-1);
+        yield return Hold(KeyCode.Return,.08);Check(host.RaceMusic.State.selectedIndex==-1,"Automatic became an alias for original defaults");
+        yield return Hold(KeyCode.L,.85);yield return MusicIdle();StageFilter(11);SelectTrack(2000);yield return MusicIdle();
+        Check(host.RaceMusic.State.selectedIndex==-2,"Packaged song did not commit before default reset");
+        yield return Hold(KeyCode.L,.85);yield return MusicIdle();yield return RestoreDefault();
+        Check(!File.ReadAllText(Path.Combine(root,"userdata","custom-music","library.json")).Contains("arcade5.A_ONE_01"),"Packaged selection was not cleared");
+        yield return RestoreCustomLibrary(Idas3RaceMusicCatalog.OriginalDefaultId);
+        string wave=Path.Combine(root,"Default reset.wav");WriteBusyMusicWave(wave);
+        yield return host.CustomMusic.ImportFile(wave);yield return MusicIdle();
+        yield return Hold(KeyCode.L,.85);yield return MusicIdle();menu.ShowCustom();SelectTrack(CustomId("Default reset"));yield return Frames(5);
+        Check(host.RaceMusic.State.selectedIndex==-2,"Custom song did not commit before default reset");
+        var song=CustomSong("Default reset");
+        yield return Hold(KeyCode.L,.85);yield return MusicIdle();yield return RestoreDefault();
+        Check(File.Exists(Path.Combine(root,"userdata","custom-music",song.file))&&File.Exists(wave),"Restore default deleted custom music");
+        yield return RestoreCustomLibrary(Idas3RaceMusicCatalog.OriginalDefaultId);
+        int[] courses={0,1,3,3,7},choices={0,0,2,3,2},enemies={0,3,11,12,26},songs={1,2,4,5,10};
+        for(int test=0;test<courses.Length;++test){
+            if(test>0){
+                Check(Idas3Native.Idas3SceneChallenger(2)==1,"Default music race could not return to course selection without a retirement");
+                yield return Delay(.7);
+                for(int step=0;host.Status.course!=courses[test]&&step<20;++step){yield return Pulse(39);yield return Delay(.2);}
+                Check(host.Status.course==courses[test],"Could not choose default music course");
+                yield return Pulse(13);yield return Until(()=>host.Status.frontendStage==10&&host.RaceMusic.State.opponentEligible!=0,10,"Default music rival selection did not open");
+            }
+            for(int step=0;step<choices[test];++step){yield return Pulse(39);yield return Delay(.25);}
+            yield return Pulse(13);double deadline=Time.realtimeSinceStartupAsDouble+45;
+            for(int frame=0;ReadPresentation().phase==0&&Time.realtimeSinceStartupAsDouble<deadline;++frame){if(frame%12==0)padPulse=0x10;yield return null;}
+            Check(ReadPresentation().phase==1&&ReadPresentation().opponentId==enemies[test],"Default music selected the wrong rival");
+            yield return CheckCountdownAudio(songs[test],"default-rival-"+enemies[test],Idas3RaceMusicCatalog.OriginalDefaultId);
+        }
+    }
     private IEnumerator CheckFocusGap(){
         foreach(var key in new[]{KeyCode.Return,KeyCode.Escape}){
             host.DiagnosticFocusOverride=false;physicalKey=key;yield return Frames(4);
@@ -134,7 +211,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
         Check(audioOptions.ApplyDraft(),"200% audio settings could not apply");yield return Frames(3);
         var boosted=Idas3Native.ReadOptions();
         Check(boosted.masterGain==2&&boosted.musicGain==2&&boosted.engineGain==2&&boosted.effectsGain==2&&Idas3Native.Idas3SceneGetTireVolume()==2,"Native audio settings capped the 200% boost");
-        Check(menu.VisibleTrackCount==192,"Sound Room must retain the native catalog and add only 74 Season 5 race songs");
+        Check(menu.VisibleTrackCount==193,"Sound Room must retain the native catalog, both music policies and 74 Season 5 race songs");
         StageFilter(11);Check(menu.VisibleTrackCount==74,"Season 5 race-song count");
         HighlightTrack(2000);menu.RequestDelete();Check(!menu.DeleteConfirmationOpen,"Packaged songs must not be deletable");
         menu.Search("ロキ");Check(menu.VisibleTrackCount==1,"Japanese song search");menu.Search("");HighlightTrack(2000);
@@ -335,7 +412,7 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
     private void StageFilter(int stage){var menu=host.RaceMusicMenu;for(int i=0;i<12&&menu.StageFilter!=stage;++i)menu.NavigateHorizontal(1);Check(menu.StageFilter==stage,"Could not select Stage"+stage+" filter");}
     private int LongestTrack(int stage){int id=-1,length=-1;foreach(var e in host.RaceMusic.Entries)if(e.stage==stage&&e.title.Length>length){id=e.id;length=e.title.Length;}return id;}
     private IEnumerator CheckStageFilters(){
-        var menu=host.RaceMusicMenu;Check(menu.StageFilter==0&&menu.VisibleTrackCount==192,"All Songs does not show the native choices, 74 Season 5 songs and custom importer");
+        var menu=host.RaceMusicMenu;Check(menu.StageFilter==0&&menu.VisibleTrackCount==193,"All Songs does not show the native choices, both music policies, 74 Season 5 songs and custom importer");
         yield return Frames(6);yield return PadHorizontal(-1);Check(menu.StageFilter==9,"Controller left did not wrap All Tracks to Custom");
         yield return PadHorizontal(1);Check(menu.StageFilter==0,"Controller right did not wrap Custom to All Tracks");
         int[] starts={0,13,19,1,30,44,58,72,86,0,102},counts={117,6,11,12,14,14,14,14,16,1,15};
@@ -351,9 +428,10 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
     }
     private void CheckRaceCatalog()
     {
-        Check(host.RaceMusic.State.count==117&&host.RaceMusic.Entries.Length==117,"Expected117 native songs and116 race choices plus default");
+        Check(host.RaceMusic.State.count==117&&host.RaceMusic.Entries.Length==118,"Expected117 native songs and116 race choices plus two music policies");
         for(int id=1;id<=116;++id){int stage=id<13?3:id<19?1:id<30?2:id<44?4:id<58?5:id<72?6:id<86?7:id<102?8:10;Check(Array.Exists(host.RaceMusic.Entries,e=>e.id==id&&e.stage==stage),"Stable native song ID absent or stage metadata incorrect: "+id);}
-        Check(Array.Exists(host.RaceMusic.Entries,e=>e.id==-1&&e.stage==0),"Game default choice missing");
+        Check(Array.Exists(host.RaceMusic.Entries,e=>e.id==-1&&e.stage==0),"Automatic choice missing");
+        Check(Array.Exists(host.RaceMusic.Entries,e=>e.id==Idas3RaceMusicCatalog.OriginalDefaultId&&e.stage==0),"Original default choice missing");
         Check(!Array.Exists(host.RaceMusic.Entries,e=>e.id==0||e.title.Contains("Gamble")||e.artist.Contains("Gamble")),"Gamble Rumble remains a race option");
         Check(!host.RaceMusic.Select(0,1),"Excluded race track can still be selected");
     }
@@ -385,12 +463,12 @@ public sealed class Idas3RaceMusicSmoke : MonoBehaviour
     }
     private Idas3PreRaceSmoke.PreRaceStatus ReadPresentation(){var s=new Idas3PreRaceSmoke.PreRaceStatus{size=(uint)Marshal.SizeOf<Idas3PreRaceSmoke.PreRaceStatus>()};Check(Idas3SceneGetPreRaceStatus(ref s)==1&&s.version==1,"Pre-race status unavailable for music timing");return s;}
     private Idas3PreRaceSmoke.RaceAudioStatus ReadAudio(){var s=new Idas3PreRaceSmoke.RaceAudioStatus{size=(uint)Marshal.SizeOf<Idas3PreRaceSmoke.RaceAudioStatus>()};Check(Idas3SceneGetRaceAudioStatus(ref s)==1&&s.version==1,"Race audio status unavailable");return s;}
-    private IEnumerator CheckCountdownAudio(int expected,string context){
+    private IEnumerator CheckCountdownAudio(int expected,string context,int? selected=null){
         var observations=new List<AudioObservation>();bool held=false,countdown=false,advanced=false,running=false;uint prior=0;
         double deadline=Time.realtimeSinceStartupAsDouble+35;double lastStream=0;
         while(Time.realtimeSinceStartupAsDouble<deadline){
             var presentation=ReadPresentation();var audio=ReadAudio();host.RaceMusic.Refresh();
-            Check(host.RaceMusic.State.selectedIndex==expected&&host.RaceMusic.State.activeIndex==expected&&audio.track==expected,"Selected race song changed during race presentation");
+            Check(host.RaceMusic.State.selectedIndex==(selected??expected)&&host.RaceMusic.State.activeIndex==expected&&audio.track==expected,"Selected race song changed during race presentation");
             if(presentation.phase!=prior){prior=presentation.phase;observations.Add(new AudioObservation{phase=prior,selected=host.RaceMusic.State.selectedIndex,active=host.RaceMusic.State.activeIndex,audio=audio});}
             if(presentation.phase>=1&&presentation.phase<=3){held=true;Check((audio.flags&1)!=0&&audio.streamFrame==0,"Race music played before countdown");}
             else if(presentation.phase==4){

@@ -135,7 +135,7 @@ typedef struct Idas3StoryVoiceState {
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneGetStoryVoiceState(Idas3StoryVoiceState* state);
 // All PSP-rate inputs captured in the last scene step, including catch-up ticks.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneCopyStoryVoiceFrames(Idas3StoryVoiceState* states,int capacity);
-// A local next-race choice. -1 uses Speedy Speed Boy (index1).
+// A local next-race choice: -1 random Stage3, -2 custom PCM, -3 original defaults.
 // eligible is only the native opponent-selection context, not managed lobbies.
 typedef struct Idas3RaceMusicState {
     uint32_t size,version,eligible,count;
@@ -202,10 +202,11 @@ IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3MultiplayerNextBattleRecord(const I
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneCopyPreRaceBattleRecord(int side,char* destination,int capacity);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneGetRaceMusicState(Idas3RaceMusicState* state);
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneGetRaceAudioStatus(Idas3RaceAudioStatus* status);
-// index -1=default,0..29=catalog. field0 stableID,1 title,2 artist.
+// index -1=Automatic,-3=original defaults,0..116=catalog.
+// field0 stableID,1 title,2 artist.
 // UTF8 byte count excluding NUL; invalid request returns -1.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneCopyRaceMusicText(int index,int field,char* destination,int capacity);
-// Returns source stage1/2/3; -1 for an invalid catalog index.
+// Returns the source stage; -1 for an invalid catalog index.
 IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneGetRaceMusicStage(int index);
 // Queues and persists only; never changes playing music. context0 requires
 // native opponent selection; context1 is a managed idle multiplayer lobby.

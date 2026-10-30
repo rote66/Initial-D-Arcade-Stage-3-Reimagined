@@ -1072,8 +1072,8 @@ int IDAS3_UNITY_CALL Idas3SceneCopyRaceMusicText(int index,int field,char* desti
         if(!validRaceMusicMetadata(index)||field<0||field>2||capacity<0||(!destination&&capacity))
             throw std::invalid_argument("Invalid race music text request");
         const auto& track=raceMusicCatalog[index<0?effectiveRaceMusicSelection(index):index];
-        const std::string_view text=field==0?(index<0?"default":track.id):
-            field==1?(index<0?"Automatic":track.title):(index<0?"ARCADE STAGE 3":track.artist);
+        const std::string_view text=field==0?(index==originalRaceMusicSelection?"original":index<0?"default":track.id):
+            field==1?(index==originalRaceMusicSelection?"Restore default":index<0?"Automatic":track.title):(index<0?"ARCADE STAGE 3":track.artist);
         if(capacity){
             auto count=std::min(text.size(),std::size_t(capacity-1));
             // A short UTF8 destination still receives a valid string.

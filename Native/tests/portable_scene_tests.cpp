@@ -42,6 +42,17 @@ int main(int argc,char** argv){
         check(rs==speed&&ry==yaw&&x==12345.678f&&y==-.0000001234f&&z==99.00001f&&gear==3,"iOS-compatible replay floats must round trip");
         std::ofstream(temp/"ISOLATED_MODE_FLOW_TEST.txt")<<"portable iOS core check\n";
         check(Idas3SceneInitialize(argv[1],(temp/"userdata").c_str(),1280,720)==1,"Scene initialize");
+        Idas3RaceMusicState music{};music.size=sizeof(music);
+        check(Idas3SceneGetRaceMusicState(&music)==1,"Music policy state");
+        const int previousMusic=music.activeIndex;
+        check(Idas3SceneSetRaceMusicTrack(26,1)==1&&Idas3SceneSetRaceMusicTrack(-3,1)==1,"Restore default after explicit song");
+        check(Idas3SceneGetRaceMusicState(&music)==1&&music.selectedIndex==-3&&music.activeIndex==previousMusic,"Default policy changed current audio");
+        char musicText[64]{};
+        check(Idas3SceneCopyRaceMusicText(-3,0,musicText,sizeof(musicText))==8&&std::string(musicText)=="original","Original policy metadata");
+        check(Idas3SceneCopyRaceMusicText(-2,0,musicText,sizeof(musicText))==-1,"Custom PCM became a catalog choice");
+        check(Idas3SceneShutdown()==1,"Shutdown before default restore");
+        check(Idas3SceneInitialize(argv[1],(temp/"userdata").c_str(),1280,720)==1,"Reinitialize after default restore");
+        check(Idas3SceneGetRaceMusicState(&music)==1&&music.selectedIndex==-3,"Original policy did not survive native restart");
         Idas3UnityInput input{};input.size=sizeof(input);input.flags=1;input.deltaSeconds=1./60.;input.width=1280;input.height=720;
         for(int i=0;i<3;++i)check(Idas3SceneStep(&input)==1,"Title step");
         check(Idas3SceneModeFlowFixture(240)==1,"Time Attack driving fixture");
@@ -50,6 +61,11 @@ int main(int argc,char** argv){
         Idas3UnityStatus status{};status.size=sizeof(status);check(Idas3UnityGetStatus(&status)==1,"Status");
         std::cout<<"Driving status: speed="<<status.speedMetresPerSecond<<" phase="<<status.racePhase<<" flags="<<status.flags<<" ticks="<<status.simulationTicks<<"\n";
         check(status.speedMetresPerSecond>0&&std::isfinite(status.speedMetresPerSecond),"Gas must drive the car");
+        check(Idas3SceneGetRaceMusicState(&music)==1&&music.selectedIndex==-3&&music.activeIndex>0&&music.activeIndex<13,"Default race did not resolve to D3 music");
+        check(Idas3SceneSetRaceMusicTrack(-3,0)==0,"Default policy bypassed opponent race guard");
+        const int activeMusic=music.activeIndex;
+        check(Idas3SceneSetRaceMusicTrack(26,1)==1&&Idas3SceneGetRaceMusicState(&music)==1&&music.selectedIndex==26&&music.activeIndex==activeMusic,"Covered idle lobby changed active race music");
+        check(Idas3SceneSetRaceMusicTrack(-3,1)==1&&Idas3SceneGetRaceMusicState(&music)==1&&music.selectedIndex==-3&&music.activeIndex==activeMusic,"Queued default changed active race music");
         Idas3SceneFrame frame{};frame.size=sizeof(frame);check(Idas3SceneGetFrame(&frame)==1,"Captured scene");
         check(frame.rangeCount>0&&frame.vertexCount>0&&frame.textureCount>0,"Scene must publish meshes and textures");
         for(unsigned i=0;i<16;++i)check(std::isfinite(frame.frameConstants[i]),"Portable projection must be finite");
@@ -60,7 +76,7 @@ int main(int argc,char** argv){
         check(Idas3SceneStep(&input)==1,"Paused step");
         check(Idas3SceneSetPaused(0)==1,"Resume");
         check(Idas3SceneShutdown()==1,"Shutdown/save");
-        std::cout<<"PASS: projection, replay float round trip, resource startup, driving input, scene triangles, pause and save\n";
+        std::cout<<"PASS: projection, replay float round trip, resource startup, original music ABI/restart/race guard, driving input, scene triangles, pause and save\n";
         fs::remove_all(temp);return 0;
     }catch(const std::exception& error){
         Idas3SceneShutdown();std::cerr<<error.what()<<"\nFixtures retained: "<<temp<<"\n";return 1;

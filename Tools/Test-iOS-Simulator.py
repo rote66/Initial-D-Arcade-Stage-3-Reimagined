@@ -15,6 +15,8 @@ CASES = {
     # Desktop red-header sampling assumes no virtual controls over the title.
     # Mobile visual QA uses the captured window; this case checks playback/I/O.
     "soundroom": ("-idas3-race-music-smoke", ["-idas3-sound-room-check", "-idas3-music-no-capture"]),
+    "music-default": ("-idas3-race-music-smoke", ["-idas3-default-music-check"]),
+    "music-default-restore": ("-idas3-race-music-smoke", ["-idas3-default-music-check", "-idas3-default-music-restore"]),
     "mobile": ("-idas3-mobile-controls-smoke", []),
     "mobile-zh": ("-idas3-mobile-controls-smoke", ["-idas3-chinese-arcade"]),
     "render": ("-idas3-scene-smoke", ["-idas3-scene-render-check"]),
@@ -52,7 +54,7 @@ def main():
     parser.add_argument("--preferred-language", choices=["en", "zh-Hans", "zh-Hant", "ja"],
                         help="Override AppleLanguages for this process only; supports upstream English, Japanese and Simplified Chinese.")
     args = parser.parse_args()
-    if args.disable_engine_audio and any(name in {"audio", "soundroom"} for name in args.cases):
+    if args.disable_engine_audio and any(name in {"audio", "soundroom", "music-default", "music-default-restore"} for name in args.cases):
         parser.error("Audio cases require the normal engine audio path.")
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     output = ROOT / "Builds/iOS/Simulator/Tests" / stamp
@@ -86,7 +88,7 @@ def main():
                     *(["-AppleLanguages", "(" + args.preferred_language + ")"] if args.preferred_language else []),
                 ], stdout=log, stderr=subprocess.STDOUT)
                 try:
-                    deadline = time.monotonic() + (900 if name == "memory" else 300 if name == "arcade-zh" else 180)
+                    deadline = time.monotonic() + (900 if name == "memory" else 360 if name.startswith("music-default") else 300 if name == "arcade-zh" else 180)
                     while not report_path.exists() and not (text_report and pass_path.exists()) and time.monotonic() < deadline:
                         if failure_path.exists():
                             raise RuntimeError(failure_path.read_text())

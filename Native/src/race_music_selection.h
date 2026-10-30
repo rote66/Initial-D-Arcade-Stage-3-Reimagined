@@ -1,5 +1,6 @@
 #pragma once
 #include "music_catalog.h"
+#include "original_race_music.h"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -18,7 +19,8 @@ namespace idas3 {
 // This host preference never touches the original driver/card profile. IDs,
 // rather than menu order or corrected display titles, are persisted.
 // Index0 remains catalogued for original attract audio, but is not a race option.
-inline bool validRaceMusicMetadata(int index){return index>=-1&&index<int(raceMusicCatalog.size());}
+inline constexpr int originalRaceMusicSelection=-3;
+inline bool validRaceMusicMetadata(int index){return index==originalRaceMusicSelection||(index>=-1&&index<int(raceMusicCatalog.size()));}
 inline bool validRaceMusicSelection(int index){return validRaceMusicMetadata(index)&&index!=0;}
 inline int effectiveRaceMusicSelection(int index){return index==-2?-2:index<=0?1:index;}
 // Presentation-only randomness, separate from the original driving/audio RNG.
@@ -37,6 +39,11 @@ public:
         previous_=choices[std::uniform_int_distribution<std::size_t>(0,count-1)(random_)];
         return previous_;
     }
+    int select(int index,const original::OriginalBattleProfile& profile,bool originalCourse){
+        if(index==originalRaceMusicSelection&&originalCourse)
+            return int(original::originalDefaultRaceMusic(profile))+1;
+        return select(index==originalRaceMusicSelection?-1:index,profile.byte(1184)==2);
+    }
 };
 inline int loadRaceMusicSelection(const std::filesystem::path& directory,int legacyIndex){
     const int legacy=clampMusicTrack(legacyIndex);
@@ -50,6 +57,7 @@ inline int loadRaceMusicSelection(const std::filesystem::path& directory,int leg
     if(!id.empty()&&id.back()=='\r')id.pop_back();
     if(header!="IDAS3_RACE_MUSIC_V1"||std::getline(input,extra))return fallback;
     if(id=="default")return -1;
+    if(id=="original")return originalRaceMusicSelection;
     const int index=findMusicTrack(id);return index==0?-1:index>0?index:fallback;
 }
 inline void saveRaceMusicSelection(const std::filesystem::path& directory,int index){
@@ -62,7 +70,7 @@ inline void saveRaceMusicSelection(const std::filesystem::path& directory,int in
         std::filesystem::create_directories(directory);
         {std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
             if(!output)throw std::runtime_error("Could not save the race music choice");
-            output<<"IDAS3_RACE_MUSIC_V1\n"<<(index<0?"default":raceMusicCatalog[index].id)<<'\n';
+            output<<"IDAS3_RACE_MUSIC_V1\n"<<(index==originalRaceMusicSelection?"original":index<0?"default":raceMusicCatalog[index].id)<<'\n';
             output.flush();if(!output)throw std::runtime_error("Could not write the race music choice");
             output.close();if(!output)throw std::runtime_error("Could not close the race music choice");}
 #if defined(_WIN32)

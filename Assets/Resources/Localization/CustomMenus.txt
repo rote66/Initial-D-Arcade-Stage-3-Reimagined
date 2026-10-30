@@ -372,6 +372,7 @@ INVERT FORCE	フォースを反転	反转力反馈
 Deadzone is saved separately for each response profile.	デッドゾーンは各プロファイルに個別保存されます。	每种响应预设分别保存死区设置。
 Wheel feedback is unavailable.	フォースフィードバックを利用できません。	方向盘力反馈不可用。
 AUTOMATIC	自動	自动
+RESTORE DEFAULT	標準に戻す	恢复默认
 DISCONNECTED DEVICE	未接続のデバイス	设备未连接
 CONTROLLER & KEYBOARD	コントローラー・キーボード	手柄与键盘
 Control bindings are unavailable.	キー割り当てを利用できません。	按键绑定不可用。

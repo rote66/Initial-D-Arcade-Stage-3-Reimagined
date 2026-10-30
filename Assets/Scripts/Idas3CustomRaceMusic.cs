@@ -36,6 +36,10 @@ public sealed class Idas3CustomRaceMusic : MonoBehaviour
             if(File.Exists(path)&&new FileInfo(path).Length<128*1024)library=JsonUtility.FromJson<Library>(File.ReadAllText(path))??new Library();
             if(library.songs==null)library.songs=new List<Song>();
             library.songs.RemoveAll(s=>!Valid(s));if(library.songs.Count>64)library.songs.RemoveRange(64,library.songs.Count-64);
+            // The native restore-default preference wins even if clearing an
+            // older library selection failed during the previous session.
+            if(catalog.State.selectedIndex==Idas3RaceMusicCatalog.OriginalDefaultId)
+                library.selected=library.selectedPackaged=null;
             int selected=library.songs.FindIndex(s=>s.file==library.selected);
             if(selected>=0&&!Select(FirstId+selected,2))Debug.LogWarning("Custom music restore: "+LastError);
         }catch(Exception){library=new Library();LastError="Custom music library could not be opened.";}

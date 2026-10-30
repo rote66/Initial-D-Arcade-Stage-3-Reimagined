@@ -7,6 +7,7 @@ using System.Text;
 // original native stream decoder; the picker never replaces menu/intro music.
 internal sealed class Idas3RaceMusicCatalog
 {
+    internal const int OriginalDefaultId=-3;
     [StructLayout(LayoutKind.Sequential, Pack=8)]
     internal struct MusicState
     {
@@ -30,6 +31,7 @@ internal sealed class Idas3RaceMusicCatalog
         Refresh();if(State.count<1||State.count>256)throw new InvalidOperationException("Invalid race music catalog size.");
         var entries=new List<Idas3RaceMusicMenu.Entry>();
         entries.Add(new Idas3RaceMusicMenu.Entry{id=-1,title="AUTOMATIC",artist="ARCADE STAGE 3",stage=0});
+        entries.Add(new Idas3RaceMusicMenu.Entry{id=OriginalDefaultId,title="RESTORE DEFAULT",artist="ARCADE STAGE 3",stage=0});
         for(int i=0;i<State.count;++i){
             // Keep native IDs stable for existing saves and original audio.
             if(ReadText(i,0)=="stage3.01_gamble_rumble")continue;

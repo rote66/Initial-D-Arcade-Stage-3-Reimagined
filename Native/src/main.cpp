@@ -1418,7 +1418,7 @@ struct App {
         // Dialogue music owns the same resource slot as selection music.
         // Release it before PACK23 is registered for the race.
         audio.endResultMusic();
-        audio.musicTrack=automaticRaceMusic.select(selectedRaceMusic,battleProfile.byte(1184)==2);
+        audio.musicTrack=automaticRaceMusic.select(selectedRaceMusic,battleProfile,!importedCourse);
         // Release the outgoing score before race setup reuses its resource
         // slot2 for PACK23. A late menu unload would remove the new race bank.
         frontend.endSelectionMusic();

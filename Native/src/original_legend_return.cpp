@@ -1,5 +1,6 @@
 #include "original_legend_return.h"
 #include "original_legend_progress.h"
+#include "original_race_music.h"
 #include <array>
 #include <bit>
 #include <stdexcept>
@@ -9,7 +10,6 @@ namespace {
 constexpr std::array<unsigned,9> first{0,3,6,9,18,14,21,24,17};
 constexpr std::array<unsigned,9> count{3,3,3,5,3,3,3,6,1};
 constexpr std::array<unsigned,31> lossMusic{36,36,35,35,35,36,36,35,35,36,35,38,35,35,35,35,35,38,35,35,35,35,35,35,36,35,38,38,35,35,35};
-constexpr std::array<unsigned,31> lastCourse{0,0,0,1,1,1,2,2,2,3,3,3,4,4,5,5,5,4,6,6,6,7,7,7,8,8,9,9,10,10,4};
 std::int32_t si(std::uint32_t x){return std::bit_cast<std::int32_t>(x);}
 void check(const OriginalBattleProfile& p){if(p.u(0)!=0||p.u(4)>8||p.u(24)>30)throw std::invalid_argument("Legend return requires original mode0/course0..8/rival0..30");}
 unsigned wins(const OriginalBattleProfile& p,unsigned e){return p.byte(116+e)>>4;}
@@ -32,7 +32,7 @@ void accept(OriginalLegendReturnState& s,OriginalBattleProfile& p,OriginalLegend
 }
 void finish(OriginalLegendReturnState& s,OriginalBattleProfile& p,OriginalLegendReturnFrame& f){
     //0F0760: 31CE18 -64 +52 = profile1136.
-    if(!(p.u(1180)&0x2000)&&!p.byte(1184))p.setu(1136,lastCourse[s.enemy112]);
+    if(!(p.u(1180)&0x2000)&&!p.byte(1184))p.setu(1136,originalLegendRaceMusic(s.enemy112));
     s.finished=true;f.finished=true;f.destination=originalLegendReturnDestination(s.continue92,s.action96);
     event(f,OriginalLegendReturnCommand::Finish,unsigned(f.destination));
 }
