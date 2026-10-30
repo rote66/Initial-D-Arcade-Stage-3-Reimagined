@@ -4,6 +4,7 @@
 #include "original_gasstand_attract.h"
 #include "original_vs_banner.h"
 #include "original_battle_names.h"
+#include "original_legend_menu.h"
 #include "chinese_arcade_font.h"
 #include "frontend.h"
 #include "unity_ui_capture.h"
@@ -299,6 +300,60 @@ int main(int argc,char** argv)try{
         "Chinese VS names changed a player name or lost the canonical rival name");
     for(unsigned i=0;i<152;++i)banner.tick();
     banner.paint(pixels,640,480);bitmap(output/"versus.bmp",pixels);
+    {
+        const std::string kyoichi="\xe9\xa1\xbb\xe8\x97\xa4\xe4\xba\xac\xe4\xb8\x80";
+        const std::string kyoko="\xe5\xb2\xa9\xe6\xbf\x91\xe6\x81\xad\xe5\xad\x90";
+        OriginalVsBannerSetup setup;setup.course=5;setup.direction=1;setup.night=true;
+        setup.localNameUtf8="CHRIS";setup.drawBackdrop=false;setup.compactHeader=true;
+        std::array<std::vector<std::uint32_t>,3> banners,huds;
+        unsigned index=0;
+        for(unsigned enemy:{11u,15u,24u}){
+            setup.enemy=enemy;banner.begin(setup);
+            require(banner.displayName(1)==(enemy==24?kyoko:kyoichi),
+                "Kyoichi in Akina/Irohazaka was confused with Kyoko");
+            for(unsigned i=0;i<152;++i)banner.tick();
+            banners[index].resize(640*480);banner.paint(banners[index],640,480);
+            huds[index].resize(640*480);
+            chineseNames.paint(huds[index],640,480,enemy,0,0,1,&enteredProfile);
+            if(enemy==15){
+                bitmap(output/"versus-irohazaka-kyoichi.bmp",banners[index]);
+                bitmap(output/"battle-names-irohazaka-kyoichi.bmp",huds[index]);
+            }
+            ++index;
+        }
+        require(banners[0]==banners[1]&&banners[1]!=banners[2],
+            "Kyoichi VS metadata and painted name disagree");
+        require(huds[0]==huds[1]&&huds[1]!=huds[2],
+            "Irohazaka HUD paints Kyoko instead of Kyoichi");
+    }
+    {
+        std::ofstream roster(output/"rival-names.tsv");
+        roster<<"enemy\tcourse\tchoice\tnameChunk\tvsName\n";
+        auto unlocked=makeOriginalFreshBattleProfile();unlocked.setu(1180,0x0800c081);
+        constexpr unsigned expectedNameChunks[]{
+            81,84,94,100,75,87,98,85,83,80,89,96,91,97,93,96,
+            82,88,77,95,99,90,92,101,86,91,78,79,83,97,76};
+        unsigned count=0;
+        for(unsigned course=0;course<9;++course){
+            for(unsigned choice=0;choice<originalLegendChoices(unlocked,course).count;++choice){
+                const auto enemy=originalLegendRivalId(course,choice);
+                unsigned nameChunk=0;
+                for(const auto& draw:originalLegendMenuDraws(unlocked,course,choice,0,0))
+                    if(draw.selector>=0x5004b&&draw.selector<=0x50065){
+                        require(nameChunk==0,"Legend selection has multiple opponent names");
+                        nameChunk=draw.selector&0xffff;
+                    }
+                require(nameChunk!=0,"Legend selection has no opponent name");
+                require(nameChunk==expectedNameChunks[enemy],
+                    "Legend selection name chunk belongs to a different opponent");
+                OriginalVsBannerSetup setup;setup.enemy=enemy;banner.begin(setup);
+                roster<<enemy<<'\t'<<course<<'\t'<<choice<<'\t'<<nameChunk<<'\t'
+                      <<banner.displayName(1)<<'\n';
+                ++count;
+            }
+        }
+        require(count==31,"Full roster audit did not visit every Legend opponent");
+    }
     versus.opponentNameUtf8="LANPLAYER";banner.begin(versus);
     require(banner.displayName(1)=="LANPLAYER","Chinese translated a network player name");
     for(unsigned direction=0;direction<7;++direction){

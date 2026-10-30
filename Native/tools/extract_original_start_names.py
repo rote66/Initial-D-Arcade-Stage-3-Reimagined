@@ -7,14 +7,22 @@ from pathlib import Path
 import struct
 import texture_bank
 
+ROOT = Path(__file__).resolve().parents[2]
 CANONICAL = 'efda831f1212db54cc2e4ba53424fe390f91b2daabb07e93c1e389c3736d0335'
 BASE = 0x0C020000
 # These are transcriptions of the English text painted by the original
 # namekana images, not translations of the Japanese lookup-key bytes.
 LOCALIZED = ['IGGY','KENJI','SHINGO','TORU','KAWAI','MAYA & SIMONE',
     'TWO GUYS FROM TOKYO','DANNY','K.T.','COLE','ZACK','KYLE','RY','TAK',
-    'HAWK','KYLIE','CAINE','MIKI','DICE','SMILEY','TOUCH','NOBU','SID','AKI',
+    'HAWK','KYLE','CAINE','MIKI','DICE','SMILEY','TOUCH','NOBU','SID','AKI',
     'KYLIE','RY','MAN IN EVO.V','MAN IN EVO.VI','K.T.','TAK','BUNTA','BUNTA']
+
+def manifest_reference(path: Path, external='$IDAS3_SOURCE'):
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return f'{external}/{resolved.name}'
 
 def export(image: Path, source: Path, profile: Path, output: Path):
     program = image.read_bytes()
@@ -34,6 +42,11 @@ def export(image: Path, source: Path, profile: Path, output: Path):
             names.append(name.ljust(16, b'\0'))
             lines.append({'address': f'{address:08X}', 'bytes': name.hex(), 'unicode': name.decode('euc_jp')})
         records.append({'enemy': enemy, 'lines': lines, 'rendered_english':LOCALIZED[enemy]})
+    labels = {}
+    for record in records:
+        key = tuple(line["bytes"] for line in record["lines"])
+        if labels.setdefault(key, record["rendered_english"]) != record["rendered_english"]:
+            raise ValueError("Identical source name keys have conflicting English transcriptions")
     indices = (source/'namekana_font.bin.nz').read_bytes()
     if len(indices) != 9216*2: raise ValueError('Invalid namekana index count')
     unicode = []
@@ -59,8 +72,8 @@ def export(image: Path, source: Path, profile: Path, output: Path):
     (output/'start_names.bin').write_bytes(payload)
     sources = [image, source/'namekana_font.bin.nz', source/'namekana_spr.tbl', source/'namekana_spr.bin.nz', profile]
     manifest = {'schema':'idas3-original-start-names-v1', 'private_original_assets':True,
-        'sources':[{'path':str(p.resolve()),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sources],
-        'output':str((output/'start_names.bin').resolve()), 'output_sha256':hashlib.sha256(payload).hexdigest(),
+        'sources':[{'path':manifest_reference(p),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sources],
+        'output':manifest_reference(output/'start_names.bin', '$IDAS3_OUTPUT'), 'output_sha256':hashlib.sha256(payload).hexdigest(),
         'font_count':len(bank['textures']), 'source_rules': '14BEC0 namekana 64px; 191940 table33B780[enemy][line]; 14C1E0 names at (224-32*n,104) and (416-32*n,312), two opponent lines y280/344; 14B700 animation31EE90 with 80 x/y/alpha triplets; VS41..70 after 100 phase ticks.',
         'localization':'Japanese EUC-JP values are texture lookup keys; localized namekana rival textures themselves paint English. rendered_english is a visual transcription. General profile glyphs retain their normal text.',
         'default_player_glyph_ids':default_ids, 'default_player_bytes':default.hex(),

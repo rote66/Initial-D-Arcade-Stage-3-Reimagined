@@ -126,6 +126,35 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
     private IEnumerator Frames(int n){for(int i=0;i<n;++i)yield return null;}
     private IEnumerator Key(int key){pulse=key;yield return null;yield return null;}
     private IEnumerator Until(Func<bool> predicate,int frames,string error){for(int i=0;i<frames&&!predicate();++i)yield return null;Check(predicate(),error);}
+    private IEnumerator RivalNames(){
+        int[] courses={5,7},choices={1,0},enemies={15,24};
+        string[] names={"\u987b\u85e4\u4eac\u4e00","\u5ca9\u6fd1\u606d\u5b50"},labels={"kyoichi","kyoko"};
+        for(int test=0;test<enemies.Length;++test){
+            Check(Idas3Native.Idas3SceneChallenger(2)==1,"Reset for rival-name verification");
+            yield return Frames(30);
+            for(int step=0;Idas3SceneModeFlowValue(30)!=courses[test]&&step<9;++step){
+                yield return Key(39);yield return Frames(8);
+            }
+            Check(Idas3SceneModeFlowValue(30)==courses[test],"Select rival-name course");
+            yield return Key(13);yield return Frames(45);
+            Check(host.Status.frontendStage==10,"Open rival selection");
+            for(int choice=0;choice<choices[test];++choice){yield return Key(39);yield return Frames(20);}
+            yield return Capture(labels[test]+"-selection");
+            yield return Key(13);yield return Until(Dialogue,600,"Rival-name dialogue did not begin");
+            var rival=new RivalStatus{size=(uint)Marshal.SizeOf<RivalStatus>()};
+            Check(Idas3SceneGetRivalStatus(ref rival)==1&&rival.dialogEnemy==enemies[test],"Select the expected rival");
+            for(int frame=0;frame<1200&&Dialogue();++frame){padPulse=0x10;yield return null;}
+            Check(!Dialogue(),"Rival-name dialogue did not close");
+            yield return Until(()=>Read().phase==1,1200,"Rival-name showcase did not begin");
+            yield return Until(()=>Read().phase==2&&Read().reserved>=152,1200,"Readable rival-name VS did not appear");
+            Check(Read().opponentId==enemies[test]&&Name(1)==names[test],"VS uses the canonical opponent name");
+            yield return Capture(labels[test]+"-versus");
+            yield return Until(()=>Read().phase==5,1200,"Rival-name race did not reach driving");
+            yield return Frames(60);
+            Check(Read().opponentId==enemies[test]&&Name(1)==names[test],"Driving retains the canonical opponent identity");
+            yield return Capture(labels[test]+"-hud");
+        }
+    }
     private IEnumerator Guard(IEnumerator routine){var stack=new Stack<IEnumerator>();stack.Push(routine);while(stack.Count>0&&!finished){object value=null;Exception failure=null;try{if(!stack.Peek().MoveNext()){stack.Pop();continue;}value=stack.Peek().Current;}catch(Exception e){failure=e;}if(failure!=null){Finish(false,failure.ToString());yield break;}if(value is IEnumerator child)stack.Push(child);else yield return value;}}
     private void Update(){if(onlineObservation||finished)return;if(host.Failure!=null)Finish(false,host.Failure);else if(Time.realtimeSinceStartupAsDouble-began>180)Finish(false,"Pre-race diagnostic timeout.");}
     public static Idas3PreRaceSmoke ObserveOnline(Idas3SceneGame game,string directory,string role){
@@ -184,6 +213,9 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
         for(int i=0;i<3;++i){yield return Key(37);yield return Frames(6);}Check(host.Status.course==0,"Myogi selection");
         yield return Key(27);yield return Frames(100);Check(host.Status.frontendStage==5,"Mode5 setup");
         yield return Key(13);yield return Frames(180);Check(host.Status.frontendStage==6,"Legend course selection");
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-rival-names-check")>=0){
+            yield return RivalNames();Finish(true,null);yield break;
+        }
         yield return Key(13);yield return Frames(45);Check(host.Status.frontendStage==10,"Rival10 selection");yield return Capture("rival-selection");
         if(host.GameOptions.Current.arcadeTextLanguage==2){
             yield return Key(39);yield return Frames(20);
@@ -347,7 +379,10 @@ public sealed class Idas3PreRaceSmoke : MonoBehaviour
     private void Finish(bool passed,string error){if(finished)return;finished=true;frozen=true;
         bool stopped=false;try{host.DiagnosticFocusOverride=null;host.GetComponent<Camera>().targetTexture=null;if(target!=null){target.Release();Destroy(target);target=null;}host.StopNative();stopped=!host.Ready&&Idas3Native.ReadStatus().state==0;}catch(Exception e){passed=false;error=(error??"")+"\nShutdown: "+e;}
         if(!stopped){passed=false;error=(error??"")+"\nNative shutdown incomplete.";}
-        File.WriteAllText(Path.Combine(root,"report.json"),JsonUtility.ToJson(new Report{passed=passed,error=error,shutdownComplete=stopped,checks=checks,seconds=Time.realtimeSinceStartupAsDouble-began,observations=observations.ToArray(),phases=phases.ToArray(),countdownDigits=digits.ToArray()},true));
+        var report=new Report{passed=passed,error=error,shutdownComplete=stopped,checks=checks,seconds=Time.realtimeSinceStartupAsDouble-began,observations=observations.ToArray(),phases=phases.ToArray(),countdownDigits=digits.ToArray()};
+        if(Array.IndexOf(Idas3LaunchArguments.GetArguments(),"-idas3-rival-names-check")>=0)
+            report.scope="Private CHRIS profile; select Kyoichi in Irohazaka and Kyoko in Tsuchisaka through production menus, skip their actual dialogue, check live rival IDs and canonical VS names, then capture selection, VS and driving HUD. No ordinary saves loaded. UI pixels require visual review.";
+        File.WriteAllText(Path.Combine(root,"report.json"),JsonUtility.ToJson(report,true));
         Debug.Log((passed?"PASS":"FAIL")+" pre-race showcase: "+error);
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying=false;

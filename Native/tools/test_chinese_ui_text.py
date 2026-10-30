@@ -4,7 +4,7 @@ import re
 import struct
 import tempfile
 import unicodedata
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import unittest
 from unittest.mock import patch
 
@@ -19,6 +19,13 @@ from build_chinese_story import independent_rows, read_dialogue, source_catalog
 import build_chinese_story
 
 ROOT = Path(__file__).resolve().parents[2]
+EXPECTED_RIVAL_NAMES = (
+    "武内树", "健二", "庄司慎吾", "末次彻", "川井淳郎", "佐藤真子＆沙雪", "东京二人组",
+    "中村贤太", "高桥启介", "池谷浩一郎", "中里毅", "须藤京一", "高桥凉介", "藤原拓海",
+    "岩城清次", "须藤京一", "小柏海", "御木", "二宫大辉", "酒井", "馆智幸", "秋山延彦",
+    "坂本", "秋山涉", "岩濑恭子", "高桥凉介", "EVO.V 车手", "EVO.VI 车手",
+    "高桥启介", "藤原拓海", "藤原文太", "藤原文太",
+)
 
 
 class TypographyTests(unittest.TestCase):
@@ -36,6 +43,22 @@ class TypographyTests(unittest.TestCase):
         for role, font in story["fonts"].items():
             self.assertEqual(font["file"], font_reference(FONTS[role]))
         self.assertEqual(story["name_label_font"]["file"], font_reference(FONTS["brush"]))
+
+    def test_original_start_name_manifest_has_portable_paths(self):
+        from extract_original_start_names import manifest_reference
+        manifest = json.loads((ROOT/"Native/data/original_assets/hud/start_names/manifest.json").read_text())
+        references = [row["path"] for row in manifest["sources"]] + [manifest["output"]]
+        for reference in references:
+            self.assertFalse(Path(reference).is_absolute())
+            self.assertFalse(PureWindowsPath(reference).is_absolute())
+            self.assertNotIn("\\", reference)
+        profile = ROOT/"Native/data/original_frontend/name_entry.bin"
+        self.assertEqual(manifest_reference(profile), "Native/data/original_frontend/name_entry.bin")
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)/"namekana_font.bin.nz"
+            output = Path(directory)/"start_names.bin"
+            self.assertEqual(manifest_reference(source), "$IDAS3_SOURCE/namekana_font.bin.nz")
+            self.assertEqual(manifest_reference(output, "$IDAS3_OUTPUT"), "$IDAS3_OUTPUT/start_names.bin")
 
     def test_no_copied_ui_images(self):
         source = (ROOT/"Native/tools/make_chinese_arcade.py").read_text()
@@ -161,6 +184,79 @@ class TypographyTests(unittest.TestCase):
         self.assertEqual(rival_names()[16], "小柏海")
         self.assertEqual(data["v3sT02route"]["16"]["text"], "归路")
         self.assertEqual(data["v3sT02route"]["22"]["text"], "去路")
+
+    def test_kyoichi_is_shared_between_akina_and_irohazaka_not_kyoko(self):
+        source = json.loads((ROOT/"Native/data/original_assets/hud/names/manifest.json").read_text())
+        names = source["names"]
+        self.assertEqual(names[11]["name_bytes"], names[15]["name_bytes"])
+        self.assertNotEqual(names[15]["name_bytes"], names[24]["name_bytes"])
+        self.assertEqual(rival_names()[11], "须藤京一")
+        self.assertEqual(rival_names()[15], "须藤京一")
+        self.assertEqual(rival_names()[24], "岩濑恭子")
+        data = specs()
+        for bank, kyoichi, kyoko in (("v3sK02rival", "96", "86"),
+                                     ("v3sK00rivalface", "56", "46")):
+            self.assertEqual(data[bank][kyoichi]["text"], "须藤京一")
+            self.assertEqual(data[bank][kyoko]["text"], "岩濑恭子")
+        header = (ROOT/"Native/src/chinese_arcade_names.inc").read_text()
+        section = header.split("chineseRivalNames[]={", 1)[1].split("};", 1)[0]
+        labels = [bytes.fromhex(raw.replace("\\x", "")).decode()
+                  for raw in re.findall(r'"((?:\\x[0-9a-f]{2})+)"', section)]
+        self.assertEqual(labels[11], "须藤京一")
+        self.assertEqual(labels[15], "须藤京一")
+        self.assertEqual(labels[24], "岩濑恭子")
+
+    def test_complete_rival_roster_and_all_selection_name_slots(self):
+        self.assertEqual(tuple(rival_names()), EXPECTED_RIVAL_NAMES)
+        slots = (4, 30, 18, 26, 27, 9, 0, 16, 8, 1, 7, 24, 5, 17,
+                 10, 21, 12, 22, 14, 2, 19, 11, 13, 6, 20, 3, 23)
+        data = specs()
+        authored = json.loads((ROOT/"Native/localization/zh-Hans/ui.json").read_text())
+        for chunk, enemy in enumerate(slots, 75):
+            for bank, at in (("v3sK02rival", chunk), ("v3sK00rivalface", chunk-40)):
+                self.assertEqual(data[bank][str(at)]["text"], EXPECTED_RIVAL_NAMES[enemy])
+                self.assertEqual(authored[bank][str(at)]["text"], EXPECTED_RIVAL_NAMES[enemy])
+        header = (ROOT/"Native/src/chinese_arcade_names.inc").read_text()
+        section = header.split("chineseRivalNames[]={", 1)[1].split("};", 1)[0]
+        labels = [bytes.fromhex(raw.replace("\\x", "")).decode()
+                  for raw in re.findall(r'"((?:\\x[0-9a-f]{2})+)"', section)]
+        expected = list(EXPECTED_RIVAL_NAMES)
+        expected[5:7] = ["真子与沙雪", "东京来的两人"]
+        self.assertEqual(labels, expected)
+        # The localized source uses Japanese bytes as texture keys, not names
+        # that can be translated literally. Repeated keys must still agree.
+        hud = json.loads((ROOT/"Native/data/original_assets/hud/names/manifest.json").read_text())["names"][:31]
+        vs = json.loads((ROOT/"Native/data/original_assets/hud/start_names/manifest.json").read_text())["names"]
+        for rows, key in ((hud, lambda row: row["name_bytes"]),
+                          (vs, lambda row: tuple(line["bytes"] for line in row["lines"]))):
+            seen = {}
+            for row in rows:
+                enemy = row["enemy"]
+                self.assertEqual(seen.setdefault(key(row), expected[enemy]), expected[enemy])
+        from extract_original_start_names import LOCALIZED
+        english = ("IGGY", "KENJI", "SHINGO", "TORU", "KAWAI", "MAYA & SIMONE",
+                   "TWO GUYS FROM TOKYO", "DANNY", "K.T.", "COLE", "ZACK", "KYLE",
+                   "RY", "TAK", "HAWK", "KYLE", "CAINE", "MIKI", "DICE", "SMILEY",
+                   "TOUCH", "NOBU", "SID", "AKI", "KYLIE", "RY", "MAN IN EVO.V",
+                   "MAN IN EVO.VI", "K.T.", "TAK", "BUNTA", "BUNTA")
+        self.assertEqual(tuple(LOCALIZED), english)
+        self.assertEqual(tuple(row["rendered_english"] for row in vs), english)
+        source = (ROOT/"Native/src/original_vs_banner.cpp").read_text()
+        section = source.split("localizedRivalNames[]{", 1)[1].split("};", 1)[0]
+        self.assertEqual(tuple(re.findall(r'"([^"]+)"', section)), english)
+
+    def test_kyoichi_hud_and_vs_font_labels_match_the_same_person(self):
+        data = (ROOT/"Native/data/localization/zh-Hans/font.bin").read_bytes()
+        _, width, height, _, count = struct.unpack_from("<5I", data, 4)
+        records = dict((struct.unpack_from("<I5f", data, 24+i*24)[0],
+                        struct.unpack_from("<I5f", data, 24+i*24)[1:]) for i in range(count))
+        atlas = Image.frombytes("RGBA", (width, height), data[24+count*24:], "raw", "BGRA")
+        def label(code):
+            x, y, w, h, advance = map(int, records[code])
+            return w, h, advance, atlas.crop((x, y, x+w, y+h)).tobytes()
+        for base in (0xf100, 0xf200):
+            self.assertEqual(label(base+11), label(base+15))
+            self.assertNotEqual(label(base+15), label(base+24))
 
     def test_start_conditions_and_single_separators(self):
         data = specs()["start2d"]

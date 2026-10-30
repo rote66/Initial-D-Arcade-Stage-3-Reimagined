@@ -3,27 +3,27 @@
   "private_original_assets": true,
   "sources": [
     {
-      "path": "C:\\Users\\Developer\\Documents\\Codex\\Initial D Arcade Stage 3 Recompiled - Crash Safe Test\\game files\\idas3_main_0C020000.bin",
+      "path": "$IDAS3_SOURCE/idas3_main_0C020000.bin",
       "sha256": "efda831f1212db54cc2e4ba53424fe390f91b2daabb07e93c1e389c3736d0335"
     },
     {
-      "path": "C:\\Users\\Developer\\Documents\\Codex\\Initial D Arcade Stage 3 Recompiled - Crash Safe Test\\game files\\driveA\\HOSTFS\\font\\namekana\\namekana_font.bin.nz",
+      "path": "$IDAS3_SOURCE/namekana_font.bin.nz",
       "sha256": "20a5dea3e26011ba58e7c11ef6064ca8b0d671aa955c4fecb52f286afbb18dd3"
     },
     {
-      "path": "C:\\Users\\Developer\\Documents\\Codex\\Initial D Arcade Stage 3 Recompiled - Crash Safe Test\\game files\\driveA\\HOSTFS\\font\\namekana\\namekana_spr.tbl",
+      "path": "$IDAS3_SOURCE/namekana_spr.tbl",
       "sha256": "9896df02cd7b38b892959277389a98bb9be2fad63bca1c2ec3ee1dc133486331"
     },
     {
-      "path": "C:\\Users\\Developer\\Documents\\Codex\\Initial D Arcade Stage 3 Recompiled - Crash Safe Test\\game files\\driveA\\HOSTFS\\font\\namekana\\namekana_spr.bin.nz",
+      "path": "$IDAS3_SOURCE/namekana_spr.bin.nz",
       "sha256": "97b6dd92375eb3781a00c4f5f5c08042876b7f796c2a5466951b93d974e6dd14"
     },
     {
-      "path": "C:\\Users\\Developer\\Documents\\Codex\\2026-09-05\\as\\outputs\\InitialDUnity\\Native\\data\\original_frontend\\name_entry.bin",
+      "path": "Native/data/original_frontend/name_entry.bin",
       "sha256": "da9259c2b139c795deb6f6f73aa33d08155bacacf1377cbf972488d2a4a21ac0"
     }
   ],
-  "output": "C:\\Users\\Developer\\Documents\\Codex\\2026-09-05\\as\\outputs\\InitialDUnity\\Native\\data\\original_assets\\hud\\start_names\\start_names.bin",
+  "output": "Native/data/original_assets/hud/start_names/start_names.bin",
   "output_sha256": "b2070b1d8af1b4481f3c8c562e8d8a5c9e09d5c9ed3e3a795490523c93e9d3bc",
   "font_count": 341,
   "source_rules": "14BEC0 namekana 64px; 191940 table33B780[enemy][line]; 14C1E0 names at (224-32*n,104) and (416-32*n,312), two opponent lines y280/344; 14B700 animation31EE90 with 80 x/y/alpha triplets; VS41..70 after 100 phase ticks.",
@@ -294,7 +294,7 @@
           "unicode": ""
         }
       ],
-      "rendered_english": "KYLIE"
+      "rendered_english": "KYLE"
     },
     {
       "enemy": 16,

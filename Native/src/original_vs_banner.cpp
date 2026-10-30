@@ -49,7 +49,7 @@ float battleRecordWidth(std::uint32_t battles,std::uint32_t wins,float labelWidt
 // decoding those keys as Unicode would report a different, unpainted name.
 constexpr const char* localizedRivalNames[]{"IGGY","KENJI","SHINGO","TORU","KAWAI",
     "MAYA & SIMONE","TWO GUYS FROM TOKYO","DANNY","K.T.","COLE","ZACK","KYLE",
-    "RY","TAK","HAWK","KYLIE","CAINE","MIKI","DICE","SMILEY","TOUCH","NOBU",
+    "RY","TAK","HAWK","KYLE","CAINE","MIKI","DICE","SMILEY","TOUCH","NOBU",
     "SID","AKI","KYLIE","RY","MAN IN EVO.V","MAN IN EVO.VI","K.T.","TAK","BUNTA","BUNTA"};
 template<class T> void readValue(std::ifstream& stream,T& value) {
     stream.read(reinterpret_cast<char*>(&value),sizeof(value));

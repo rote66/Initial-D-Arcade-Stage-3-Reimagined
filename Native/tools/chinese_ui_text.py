@@ -55,7 +55,7 @@ def rival_names():
     names = {entry["en"]: entry["zh"] for entry in entries}
     order = ("IGGY", "KENJI", "SHINGO", "TORU", "KAWAI", "MAYA", "OTAKU 1",
              "DANNY", "K.T.", "COLE", "ZACK", "KYLE", "RY", "TAK", "HAWK",
-             "KYLIE", "CAINE", "MIKI", "DICE", "SMILEY", "TOUCH", "NOBU",
+             "KYLE", "CAINE", "MIKI", "DICE", "SMILEY", "TOUCH", "NOBU",
              "SID", "AKI", "KYLIE", "RY", "EVO.V", "EVO.VI", "K.T.", "TAK",
              "BUNTA", "BUNTA")
     result = [names[key] for key in order]
@@ -157,7 +157,7 @@ def specs():
         put("v3sK02rival", chunk, f"第 {number} 战", italic=True)
     put("v3sK02rival", 21, "最终战", italic=True)
     names = rival_names()
-    name_indices = (4, 30, 18, 26, 27, 9, 0, 16, 8, 1, 7, 15, 5, 17,
+    name_indices = (4, 30, 18, 26, 27, 9, 0, 16, 8, 1, 7, 24, 5, 17,
                     10, 21, 12, 22, 14, 2, 19, 11, 13, 6, 20, 3, 23)
     for chunk, index in enumerate(name_indices, 75):
         for bank, at in (("v3sK02rival", chunk), ("v3sK00rivalface", chunk-40)):

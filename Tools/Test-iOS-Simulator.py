@@ -28,6 +28,7 @@ CASES = {
     "arcade-ja": ("-idas3-scene-smoke", ["-idas3-scene-language", "1"]),
     "arcade-zh": ("-idas3-scene-smoke", ["-idas3-scene-language", "2"]),
     "story-zh": ("-idas3-pre-race-smoke", ["-idas3-chinese-arcade"]),
+    "rival-names": ("-idas3-pre-race-smoke", ["-idas3-chinese-arcade", "-idas3-rival-names-check"]),
     "saves": ("-idas3-mode-flow-smoke", ["-idas3-save-change-check"]),
     "save-level": ("-idas3-mode-flow-smoke", ["-idas3-save-level-check"]),
     "fov": ("-idas3-pause-smoke", ["-idas3-fov-check", "-idas3-pause-scene-only-capture"]),
